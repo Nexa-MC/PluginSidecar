@@ -1,9 +1,5 @@
 # Development roadmap
 
-1. Pin upstream protocol/SDK inputs and add an authenticated Host handshake integration test.
-2. Define plugin identity, explicit capabilities and admission; document the external plugin execution model.
-3. Implement cancellable lifecycle supervision and complete resource retirement.
-4. Integrate generated binary command/state/event dispatch and Host-rendered semantic UI.
-5. Add signed packaging, provenance, six-architecture builds and end-to-end launcher acceptance.
+Completed: Bootstrap 1 source contract, ABI 100 method wrappers, preview SDK packaging, sample and CoreCLR in-memory entry adapter.
 
-Only the repository scaffold is complete. These milestones are not implemented features.
+Next: pin/map existing Host binary protocol operations; implement authorization and encrypted package verification; implement dependency planning, hot-conflict Checkup ordering and group rollback; implement Host permission/broker/registry transactions; integrate UI and telemetry; validate all proposal acceptance cases; add signed six-architecture distribution.

@@ -1,11 +1,13 @@
-# Architecture
+# Loading contracts and SDK
 
-This repository owns the future plugin execution process and its experimental lifecycle contracts. NexaCL owns Host supervision, transport/protocol compatibility and renderer integration. No launcher source is copied into this repository.
+Bootstrap 1 is a frozen managed entry contract. ABI 100 is a separate SDK package; future versions must not extend Bootstrap interfaces with version-specific members. The uploaded proposal is preserved under specifications as design input, not an assertion of implemented behavior.
 
-The current CLI has no Host connection and performs no plugin discovery or loading. `IPlugin` is an in-process lifecycle abstraction for statically registered modules, not a serialized object exchange or a stable SDK.
+Decision: Host communication uses the existing NexaCL Sidecar binary ABI, authenticated transport and generated numeric dispatch. The proposal's JSON envelope, transport numbering and JSON framing are NOT adopted. No new wire IDs are allocated by this SDK. A Host adapter must map these logical calls to reviewed upstream operations. Existing Host binaries do not yet implement this new loading contract.
 
-Future Host integration must use upstream versioned binary frames, generated numeric dispatch, asynchronous cancellation and explicit resource retirement. Do not introduce synchronous IPC, JSON hot paths, reflection dispatch or cross-process CLR objects. UI declarations render in Host; plugins never manipulate Host UI objects directly.
+Managed plugin assemblies require CoreCLR. The memory loader is a separate runtime adapter, never linked into the NativeAOT CLI. Only the frozen Bootstrap assembly is shared; plugin dependencies load from verified memory payloads. Native dependency loading is rejected. The loader consumes already verified bytes; it does not itself grant authorization or verify encrypted packages.
 
-NativeAOT excludes arbitrary managed DLL loading from this initial design. External plugin execution, permissions and isolation require a documented design and validation before implementation. Process isolation alone does not restrict filesystem or network access.
+The six normal stages are Checksum (loader only), PreInitialize, Initialize, PostInitialize, Checkup, Finalize. Ready contexts do not mean Active. Registration is staged until a Host-authorized group commit. Required dependency components commit atomically; failure rolls back the group and independent groups continue. Host Checkup failure precedes stopping hot-conflict peers and their required consumers; an earlier-stage failure must not stop old peers. Finalize cannot register new content. Activated is an event after commit, not another load stage.
 
-Upstream reference: [NexaCL Sidecar](https://github.com/Nexa-MC/NexaCL/blob/main/docs/sidecar.md). Pin a reviewed upstream revision before adding protocol dependencies.
+Host owns permission checks, handle/session ownership, final Make decisions, idempotency, staged registry and commit decisions. The SDK never implements a local Make success fallback. Experimental IDs and supported old base combinations are permanent; promotion never removes an adapter. Error codes are authoritative; exceptions do not cross the transport boundary.
+
+Implemented here: public contracts, ABI 100 typed dispatch wrappers, CoreCLR in-memory entry loading, package generation and an example. Package decryption/permits, group scheduler, Host broker/registry, binary transport integration, UI renderer integration and telemetry remain implementation work. No signed installable .nsc is produced by this change.

@@ -1,1 +1,8 @@
-<Solution><Project Path="src/PluginSidecar.Contracts/PluginSidecar.Contracts.csproj"/><Project Path="src/PluginSidecar/PluginSidecar.csproj"/><Project Path="tests/PluginSidecar.Tests/PluginSidecar.Tests.csproj"/></Solution>
+<Solution>
+  <Project Path="src/PluginSidecar/PluginSidecar.csproj"/>
+  <Project Path="src/Nexa.Plugin.Bootstrap.V1/Nexa.Plugin.Bootstrap.V1.csproj"/>
+  <Project Path="src/Nexa.Plugin.Sdk.Abi100/Nexa.Plugin.Sdk.Abi100.csproj"/>
+  <Project Path="src/PluginSidecar.RuntimeAdapter/PluginSidecar.RuntimeAdapter.csproj"/>
+  <Project Path="samples/HelloPlugin/HelloPlugin.csproj"/>
+  <Project Path="tests/PluginSidecar.Tests/PluginSidecar.Tests.csproj"/>
+</Solution>
