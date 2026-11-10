@@ -6,6 +6,7 @@ using PluginSidecar.RuntimeAdapter;
 static void Assert(bool value) { if (!value) throw new InvalidOperationException("Contract assertion failed."); }
 Assert(!AbiVersions.IsStable(0) && !AbiVersions.IsStable(101) && !AbiVersions.IsStable(150));
 Assert(AbiVersions.IsStable(100) && AbiVersions.IsStable(200));
+await MarketOfflineTests.Run();
 var error = new AbiError(AbiErrors.PERMISSION_DENIED, "denied", "PreInitialize", "abi.make", "example.plugin", Guid.NewGuid(), Guid.NewGuid(), false, ImmutableDictionary<string, string>.Empty);
 Assert(AbiReply<AbiContextHandle>.Fail(error).Value.Value == 0);
 var probe = new Probe(error);

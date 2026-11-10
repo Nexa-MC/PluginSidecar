@@ -5,4 +5,5 @@
   <Project Path="src/PluginSidecar.RuntimeAdapter/PluginSidecar.RuntimeAdapter.csproj"/>
   <Project Path="samples/HelloPlugin/HelloPlugin.csproj"/>
   <Project Path="tests/PluginSidecar.Tests/PluginSidecar.Tests.csproj"/>
+  <Project Path="src/Nexa.Plugin.MarketDelivery/Nexa.Plugin.MarketDelivery.csproj"/>
 </Solution>

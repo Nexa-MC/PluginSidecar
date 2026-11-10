@@ -29,3 +29,7 @@ Use `artifacts/packages` as a local NuGet source and reference `Nexa.Plugin.Sdk.
 Managed plugins use CoreCLR, not NativeAOT. The independent CLI remains AOT-publishable; the runtime adapter is not referenced by it. `LoadVerifiedPayloads` assumes caller-verified identity, authorization and digest, takes assembly simple names mapped to copied bytes, and loads no plugin files from disk. Dispose requests collectible-context unloading; it cannot stop plugin threads or guarantee immediate reclamation. Process isolation is not a security sandbox.
 
 See [architecture](docs/architecture.md), [loading contract](docs/loading-contract.md), [roadmap](docs/roadmap.md), [contributing](CONTRIBUTING.md), and [security](SECURITY.md). Apache-2.0.
+
+## Market / offline component
+
+`Nexa.Plugin.MarketDelivery` supplies signed encrypted delivery verification and an atomic offline cache. See [integration status and offline policy](docs/market-offline.md). Live Market/Host routes remain unimplemented.

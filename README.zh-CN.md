@@ -20,3 +20,7 @@ dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 将 `artifacts/packages` 加入本地 NuGet 源即可引用 SDK。权限、阶段、句柄归属和最终 Make/提交必须由 Host 裁决；SDK 不会自行宣布授权成功。内存加载不是安全沙箱，卸载也不能保证插件线程立即退出。
 
 参阅[加载契约](docs/loading-contract.md)、[架构](docs/architecture.md)、[贡献指南](CONTRIBUTING.zh-CN.md)。采用 Apache-2.0。
+
+## Market 与离线
+
+新增 `Nexa.Plugin.MarketDelivery`，提供签名加密交付验证与原子离线缓存。[集成状态与离线策略](docs/market-offline.md)。实际 Market/Host 路由尚未接通。

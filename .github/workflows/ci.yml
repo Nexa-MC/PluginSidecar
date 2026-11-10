@@ -24,6 +24,7 @@ jobs:
       - run: dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
       - run: dotnet pack src/Nexa.Plugin.Bootstrap.V1 -c Release -o artifacts/packages
       - run: dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
+      - run: dotnet pack src/Nexa.Plugin.MarketDelivery -c Release -o artifacts/packages
       - uses: actions/upload-artifact@v4
         with:
           name: plugin-sdk-${{ matrix.rid }}
