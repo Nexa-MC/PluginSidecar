@@ -1,0 +1,1 @@
+<Solution><Project Path="src/PluginSidecar.Contracts/PluginSidecar.Contracts.csproj"/><Project Path="src/PluginSidecar/PluginSidecar.csproj"/><Project Path="tests/PluginSidecar.Tests/PluginSidecar.Tests.csproj"/></Solution>
