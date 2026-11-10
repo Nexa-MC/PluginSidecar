@@ -7,7 +7,7 @@ internal static class MarketOfflineTests
     {
         using var publisher = RSA.Create(2048); using var device = RSA.Create(2048); using var other = RSA.Create(2048);
         var clock = new Clock(); var verifier = new OfflinePluginVerifier(publisher, device, clock);
-        byte[] payload = "verified plugin bytes"u8.ToArray();
+        byte[] payload = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "fixtures", "HelloPlugin.dll"));
         var identity = new PluginEntitlement("example.plugin", "1.0.0", "owner", clock.Now.AddMinutes(-1), null);
         var delivery = MarketDeliveryIssuer.Issue(payload, identity, device, publisher);
         string root = Path.Combine(Path.GetTempPath(), "nexa-offline-" + Guid.NewGuid().ToString("N"));
@@ -16,6 +16,14 @@ internal static class MarketOfflineTests
             var store = new OfflinePluginStore(root, verifier); var market = new Market(delivery);
             await store.AcquireAsync(market, identity.PluginId, identity.Version, identity.Subject, device.ExportSubjectPublicKeyInfo());
             market.Offline = true; clock.Now = clock.Now.AddYears(3);
+            byte[] offlineAssembly = store.OpenOffline(identity.PluginId, identity.Version, identity.Subject);
+            try
+            {
+                using var plugin = PluginSidecar.RuntimeAdapter.MemoryPlugin.LoadVerifiedPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]> { ["HelloPlugin"] = offlineAssembly });
+                if (plugin.Entry.GetType().FullName != "HelloPlugin.Plugin") throw new Exception("Offline plugin entry unavailable.");
+            }
+            finally { CryptographicOperations.ZeroMemory(offlineAssembly); }
+
             Equal(payload, store.OpenOffline(identity.PluginId, identity.Version, identity.Subject));
             Equal(payload, new OfflinePluginStore(root, new(publisher, device, clock)).OpenOffline(identity.PluginId, identity.Version, identity.Subject));
             if (market.Calls != 1) throw new Exception("Offline load contacted Market.");
