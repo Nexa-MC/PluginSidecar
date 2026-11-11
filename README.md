@@ -47,6 +47,10 @@ NuGet package also includes its schemas and C headers. Cross-language tests cove
 all 363 calls and 292 model/collection shapes, including callbacks and malformed
 wire values. These tests exercise SDK semantics against explicit test Host ports.
 
+CI also packs Hosting, WasmRuntime, Packages and the trusted development
+RuntimeAdapter with their versioned dependencies. Host embedders can use those
+packages without a private project reference.
+
 Use `artifacts/packages` as a local NuGet source and reference
 `Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.3`. Edit
 [contracts/abi100.json](contracts/abi100.json), then run the generator without

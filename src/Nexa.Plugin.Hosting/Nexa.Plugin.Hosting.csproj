@@ -1,1 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><Version>0.2.0-alpha.3</Version><IsAotCompatible>true</IsAotCompatible></PropertyGroup><ItemGroup><ProjectReference Include="../Nexa.Plugin.Sdk.Abi100/Nexa.Plugin.Sdk.Abi100.csproj" /></ItemGroup></Project>
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><Version>0.2.0-alpha.3</Version><IsAotCompatible>true</IsAotCompatible></PropertyGroup><ItemGroup><ProjectReference Include="../Nexa.Plugin.Sdk.Abi100/Nexa.Plugin.Sdk.Abi100.csproj" /></ItemGroup>  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/Nexa-MC/PluginSidecar</RepositoryUrl>
+    <Description>Nexa plugin Host runtime component; see the README for execution boundaries.</Description>
+  </PropertyGroup>
+  <ItemGroup><None Include="../../README.md" Pack="true" PackagePath="/" /></ItemGroup>
+</Project>

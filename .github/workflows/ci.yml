@@ -56,6 +56,10 @@ jobs:
       - run: dotnet pack src/Nexa.Plugin.Bootstrap.V1 -c Release -o artifacts/packages
       - run: dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
       - run: dotnet pack src/Nexa.Plugin.MarketDelivery -c Release -o artifacts/packages
+      - run: dotnet pack src/Nexa.Plugin.Hosting -c Release -o artifacts/packages
+      - run: dotnet pack src/PluginSidecar.WasmRuntime -c Release -o artifacts/packages
+      - run: dotnet pack src/PluginSidecar.Packages -c Release -o artifacts/packages
+      - run: dotnet pack src/PluginSidecar.RuntimeAdapter -c Release -o artifacts/packages
       - uses: actions/upload-artifact@v4
         with:
           name: plugin-sdk-${{ matrix.rid }}

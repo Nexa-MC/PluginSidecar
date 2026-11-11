@@ -44,6 +44,8 @@ dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 
 组合运行库现已实现 12 个分组的 69 项操作，包含状态/CAS、有界事件回调、公开服务、动作、条件、任务，以及支持原子检查点和显式重启恢复的工作流。C 示例和跨语言调用经过真实编译及加载验证，CI 在 Windows、Linux、macOS 执行 NativeAOT 测试。Desktop 业务适配、调度器、UI 消费者等剩余项明确记录在[验收状态](docs/roadmap.md)。
 
+CI 同时打包 Hosting、WasmRuntime、Packages 和仅用于可信开发的 RuntimeAdapter，并包含版本化依赖；宿主开发者无需直接引用本仓库源码项目。
+
 SDK 版本为 `0.2.0-alpha.3`。`python eng/package_sdk.py` 生成独立 C/Wasm SDK ZIP；C# NuGet 包也包含契约 schema 和 C 头文件。跨语言测试覆盖全部 363 个调用和 292 类模型/集合，并检查回调生命周期、错误传播及非法编码。测试中的 Host 业务端口是明确的测试端口，SDK 完整不代表启动器所有业务功能已经接通。
 
 完整测试需先运行 `python eng/build_wasm_sample.py --clang /path/to/clang`，再设置 `NEXA_WASM_SAMPLE`、`NEXA_WASM_CONFORMANCE`、`NEXA_WASM_CALLBACK`、`NEXA_WASM_CODEC` 指向 `artifacts/wasm-sample` 中对应的 `plugin.zip`、`conformance.wasm`、`callback.wasm`、`codec.wasm`。CI 自动构建并执行这些测试。
