@@ -16,7 +16,7 @@ public sealed partial class AtomicDefinitionRegistry(CapabilityAuthority authori
     private readonly Dictionary<Guid, Revision> _stagedRevisions = [];
     public Snapshot<DefinitionBatch> Snapshot()
     {
-        lock (authority.PublicationGate) return new(new(_published.Values.OrderBy(e => e.Definition.Id.Value).Select(e => e.Definition).ToImmutableArray()), _revision, 1, DateTimeOffset.UtcNow);
+        lock (authority.PublicationGate) return new(new(_published.Values.OrderBy(e => e.Definition.Id.Value).Select(e => Resolve(ContentCaller(Guid.Empty),e.Definition,null)).OfType<Definition>().ToImmutableArray()), _revision, 1, DateTimeOffset.UtcNow);
     }
     public ImmutableArray<PublishedDefinition> Entries { get { lock (authority.PublicationGate) return _published.Values.ToImmutableArray(); } }
     public ImmutableArray<RegistrationRef> Stage(HostInvocation invocation, ImmutableArray<Definition> definitions)
@@ -60,21 +60,30 @@ public sealed partial class AtomicDefinitionRegistry(CapabilityAuthority authori
     {
         lock (authority.PublicationGate)
         {
+            var affected=AffectedRegistries(groupId);ValidateContent(groupId);
             if (!MissingReferences(groupId).IsEmpty) throw new InvalidOperationException(AbiErrors.DEPENDENCY_MISSING);
             var staged = _staged.GetValueOrDefault(groupId) ?? [];
             if (staged.Keys.Any(_published.ContainsKey)) throw new InvalidOperationException(AbiErrors.CONFLICT);
             _published = _published.AddRange(staged.Select(p => new KeyValuePair<QualifiedId, PublishedDefinition>(p.Key, p.Value with { Registration = p.Value.Registration with { State = RegistrationState.Active } })));
-            _staged.Remove(groupId); _stagedRevisions.Remove(groupId); _revision = new(Guid.NewGuid().ToString("N"));
+            _staged.Remove(groupId); _stagedRevisions.Remove(groupId);PublishContent(groupId,affected);NotifyContent(affected);
         }
     }
-    public void Abort(Guid groupId) { lock (authority.PublicationGate) { if (_staged.Remove(groupId, out var entries)) _storedBytes -= entries.Values.Sum(e => (long)EncodedSize(e.Definition)); _stagedRevisions.Remove(groupId); } }
+    public void Abort(Guid groupId) { lock (authority.PublicationGate) { if (_staged.Remove(groupId, out var entries)) _storedBytes -= entries.Values.Sum(e => (long)EncodedSize(e.Definition)); _stagedRevisions.Remove(groupId);foreach(var item in _content.Where(e=>e.Value.Group==groupId).ToArray()){_storedBytes-=item.Value.Bytes;_content.Remove(item.Key);} } }
     public void Retire(Guid instanceId)
     {
         lock (authority.PublicationGate)
         {
+            var registries=AffectedRegistries(Guid.Empty,instanceId);
+            var retiredRegistries=_content.Values.Where(e=>e.Kind=="registry"&&e.Owner.LoadInstanceId==instanceId).Select(e=>RegistryDescriptor.Read(e.Value)).ToArray();
+            foreach(var item in _content.Where(e=>e.Value.Owner.LoadInstanceId==instanceId).ToArray()){_storedBytes-=item.Value.Bytes;_content.Remove(item.Key);}
             var removed = _published.Where(p => p.Value.Owner.LoadInstanceId == instanceId).ToArray();
             _storedBytes -= removed.Sum(e => (long)EncodedSize(e.Value.Definition));
-            _published = _published.RemoveRange(removed.Select(p => p.Key)); _revision = new(Guid.NewGuid().ToString("N"));
+            _published = _published.RemoveRange(removed.Select(p => p.Key));InvalidateContent(registries);NotifyContent(registries);
+            foreach(var descriptor in retiredRegistries)
+            {
+                try{_consumers[descriptor.Consumer].Publish(descriptor,new(new([]),_revision,1,DateTimeOffset.UtcNow));_consumerFaults.Remove(descriptor.Id);}
+                catch(Exception error)when(error is not OutOfMemoryException and not AccessViolationException){_consumerFaults.Add(descriptor.Id);}
+            }
         }
     }
     private static int EncodedSize(Definition definition) => AbiValueBinary.Encode(Definition.Write(definition)).Length;

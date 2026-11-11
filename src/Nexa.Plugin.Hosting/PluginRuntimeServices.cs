@@ -96,6 +96,7 @@ public sealed partial class PluginRuntimeServices
             foreach(var pair in _entries.Where(p=>p.Value.Group==group).ToArray())
                 _entries[pair.Key]=pair.Value with {Registration=pair.Value.Registration with {State=RegistrationState.Active}};
             _revision=NewRevision();RefreshAvailability();
+            foreach(var sub in _subscriptions.Values.Where(s=>s.Group==group&&s.Kind=="definition-watch"))Enqueue(sub,Snapshot<DefinitionBatch>.Write(ContentRegistry!.RegistrySnapshot(new(sub.Key))));
         }
     }
     internal void Abort(Guid group)

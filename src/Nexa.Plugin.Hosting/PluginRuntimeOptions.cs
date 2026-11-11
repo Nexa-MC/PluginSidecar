@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Nexa.Plugin.Bootstrap.V1;
 using Nexa.Plugin.Sdk.Abi100.Data;
 namespace Nexa.Plugin.Hosting;
@@ -8,6 +9,9 @@ public sealed record PluginRuntimeOptions
     public TimeProvider Clock { get; init; } = TimeProvider.System;
     public bool AutomaticSchedules { get; init; } = true;
     public IWorkflowInteraction? Interaction { get; init; }
+    public ImmutableArray<IRegistryConsumer> RegistryConsumers { get; init; } = [];
+    public Func<PluginIdentity,OverlayDefinition,bool>? ApproveForeignOverlay { get; init; }
+    public Func<QualifiedId,ImmutableArray<QualifiedId>,ImmutableArray<QualifiedId>>? SelectOverlays { get; init; }
 }
 
 public sealed record WorkflowInteractionRequest(Guid RequestId, PluginIdentity Owner, EntityId Run,
@@ -18,4 +22,13 @@ public sealed record WorkflowInteractionRequest(Guid RequestId, PluginIdentity O
 public interface IWorkflowInteraction
 {
     ValueTask<AbiReply<AbiValue>> AskAsync(WorkflowInteractionRequest request, CancellationToken cancellation);
+}
+
+/// <summary>Trusted application-state port. Validate is side-effect-free. Publish
+/// accepts immutable state and must not call guest code or perform business effects.</summary>
+public interface IRegistryConsumer
+{
+    QualifiedId Id { get; }
+    bool Validate(RegistryDescriptor registry, DefinitionBatch definitions);
+    void Publish(RegistryDescriptor registry, Snapshot<DefinitionBatch> snapshot);
 }

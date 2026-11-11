@@ -1,6 +1,6 @@
 # Runtime services
 
-`PluginHostRuntime` installs 77 implemented operations from the ABI catalog. The
+`PluginHostRuntime` installs 86 implemented operations from the ABI catalog. The
 embedding Host still supplies schema policy, verified acquisition, grants and
 launcher business adapters. This is a runnable library kernel, not an installed
 Desktop Sidecar. The CLI remains a scaffold. No production signing key or live
@@ -143,3 +143,34 @@ CapabilityDescription snapshots through Resources.ReadSubscription. They deliver
 an initial snapshot, followed by changes at group publication and retirement.
 Service snapshots honor provider identity and the requested version range; no
 binding silently switches to a new provider. Staged declarations are not exposed.
+
+## Resolved content
+
+All 15 Definitions routes now execute in the kernel. Dynamic registries bind an
+IRegistryConsumer supplied through PluginRuntimeOptions. Its Validate method must
+check the descriptor, declared validation rules and resolved batch without effects;
+Publish accepts an immutable application-state snapshot. This is a real local
+consumer port; the Desktop adapter and plugin-defined consumer bridge are still
+separate integration work. Consumer exceptions are visible in ExplainResolution;
+valid data remains readable so an owner can inspect and repair it.
+
+The built-in merge contract is `nexa:merge/closed-v1`. Add introduces new map keys
+or appends arrays, Merge recursively merges maps, Replace replaces the body, and
+Mask hides an entry. Resolved outputs are schema validated. Registries choose the
+allowed mode and ordering policy. Explicit constraints are topologically sorted;
+RejectAmbiguity rejects an unconstrained choice; UserSelection requires a trusted
+Host selector and still checks declared order constraints. Other merge contracts
+and deletion modes beyond RejectWhileReferenced return CAPABILITY_UNAVAILABLE.
+
+Cross-owner overlays require AuditedOverlay policy and the Host's explicit
+ApproveForeignOverlay decision. Tags include other same-registry tags, add/remove
+members and reject cycles or missing members. Tagged queries intersect requested
+tags; their cursors bind identity, registry, tag filter and revision. Overlay
+publication/retirement invalidates definition CAS revisions. PreviewOverlay returns
+a plan containing the resolved result without publishing it. Definitions.Watch
+uses owned Resources subscriptions and sends Snapshot<DefinitionBatch> values.
+Host Snapshot and consumer publication use the same resolved values as SDK reads.
+
+Content dependencies participate in consumer-first plugin retirement. Dynamic
+registry snapshots are bounded to 1 MiB; the combined definition/metadata store
+retains its 32 MiB limit and at most 1024 registry/tag/overlay declarations.

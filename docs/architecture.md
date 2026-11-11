@@ -204,3 +204,19 @@ is introduced. Callback retries use the existing admitted dispatcher and end at
 subscription release or plugin retirement. Staged replay cannot dispatch before
 successful activation. Availability subscriptions use the same owned resource
 queue and publish snapshots only at atomic publication/retirement boundaries.
+
+## Resolved content registries (2026-11-11)
+
+A dynamic registry must bind a real trusted Host consumer. The consumer validates
+closed data before publication and accepts immutable snapshots through a local
+state-publication port; it cannot be supplied by a plugin manifest. Consumer faults
+are exposed in resolution reports. The built-in `nexa:merge/closed-v1` contract
+implements bounded map/array addition, recursive map merge, replacement and masking.
+Other merge contracts require a Host adapter and cannot be silently interpreted.
+
+Tags resolve same-registry members with cycle detection. Overlays participate in
+explicit topological ordering; ambiguous or cyclic order is rejected according to
+the registry policy. Foreign-owned targets require both AuditedOverlay registry
+policy and trusted Host approval. Resolved reads, CAS revisions, tagged queries,
+previews and watch snapshots share one resolver. Publication/retirement changes
+both the visible data and its revision under the existing authority gate.

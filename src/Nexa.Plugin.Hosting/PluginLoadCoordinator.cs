@@ -153,9 +153,9 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
     private async ValueTask StopClosure(HashSet<string> ids)
     {
         bool changed;
-        do { changed = false; foreach (var entry in _active.Values) if (entry.Source.Manifest.RequiredDependencies.Any(d => ids.Contains(d.PluginId))) changed |= ids.Add(entry.Identity.PluginId); if(services is not null)foreach(var consumer in services.RequiredConsumers(ids))changed |= ids.Add(consumer); } while (changed);
+        do { changed = false; foreach (var entry in _active.Values) if (entry.Source.Manifest.RequiredDependencies.Any(d => ids.Contains(d.PluginId))) changed |= ids.Add(entry.Identity.PluginId); foreach(var consumer in (services?.RequiredConsumers(ids)??[]).Concat(registry.RequiredConsumers(ids)))changed |= ids.Add(consumer); } while (changed);
         var affected = _active.Values.Where(a => ids.Contains(a.Identity.PluginId)).ToArray();
-        var requiredConsumers = affected.ToDictionary(a => a.Identity.PluginId, a => services?.RequiredConsumers(new HashSet<string> {a.Identity.PluginId}) ?? []);
+        var requiredConsumers = affected.ToDictionary(a => a.Identity.PluginId, a => (services?.RequiredConsumers(new HashSet<string> {a.Identity.PluginId}) ?? []).Concat(registry.RequiredConsumers(new HashSet<string> {a.Identity.PluginId})).Distinct().ToImmutableArray());
         // Seal every affected instance before any callback; cycles cannot keep a provider reachable.
         lock (authority.PublicationGate)
         {

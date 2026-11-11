@@ -5,7 +5,18 @@ namespace Nexa.Plugin.Hosting;
 
 public sealed partial class PluginRuntimeServices
 {
+    internal AtomicDefinitionRegistry? ContentRegistry;
+    internal void ContentPublished(QualifiedId registry,Snapshot<DefinitionBatch> snapshot)=>Notify("definition-watch",registry.Value,Snapshot<DefinitionBatch>.Write(snapshot));
     private IEnumerable<HostCapabilityRoute> AvailabilityRoutes => [
+        HostRoutes.Typed<QualifiedRequest,SubscriptionRef>("Definitions","Watch",(c,v)=>
+        {
+            lock(_gate)
+            {
+                ContentRegistry!.CheckRegistryOperation(c,v.Id,"Watch");
+                var snapshot=c.Phase=="Active"?Snapshot<DefinitionBatch>.Write(ContentRegistry.RegistrySnapshot(v.Id)):null;
+                var reference=Subscribe(c,"definition-watch",v.Id.Value);if(snapshot is not null)Enqueue(_subscriptions[reference.Token],snapshot);return ValueTask.FromResult(reference);
+            }
+        }),
         HostRoutes.Typed<QualifiedRequest,SubscriptionRef>("Contracts","WatchAvailability",(c,v)=>
         {
             lock(_gate){var reference=Subscribe(c,"contract-availability",v.Id.Value);RefreshAvailability(_subscriptions[reference.Token]);return ValueTask.FromResult(reference);}
