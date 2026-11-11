@@ -2,7 +2,7 @@ using Nexa.Plugin.Bootstrap.V1;
 using static Nexa.Plugin.Sdk.Abi100.Values;
 namespace Nexa.Plugin.Sdk.Abi100;
 
-public sealed class Ui100(UiAbility ability)
+public sealed class Ui100(IAbilityV1 ability)
 {
     public const string ContractId = "nexa.ui/100";
     public ValueTask<AbiReply<AbiValue>> DeclareSurface(SurfaceSpec value, InvocationOptions options) => ability.Invoke(ContractId, 1, M(("localId", S(value.LocalId)), ("nodes", value.Nodes), ("resourceIds", A(value.ResourceIds))), options);

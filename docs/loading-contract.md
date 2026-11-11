@@ -1,22 +1,103 @@
-# Loading contract v0.1
+# Loading contract v0.1 — 2026-11-11 revision
 
-Authoritative design input: [proposal](specifications/loading-abi-v0.1.proposal.zh-CN.md). User correction: Host traffic MUST use the existing NexaCL binary Sidecar ABI. Proposal sections 1.2 and 11 do not authorize a JSON transport. These libraries define logical managed contracts, not wire format or newly assigned Host message IDs.
+Design input: [revised proposal](specifications/loading-abi-v0.1.proposal.zh-CN.md).
+Host traffic continues to use the existing NexaCL binary Sidecar ABI. Proposal
+sections 1.2 and 11 do not authorize JSON framing or new transport message IDs.
+Local managed facades never cross that boundary; adapters send opaque handles
+and explicit bounded data through reviewed upstream operations.
 
-Bootstrap 1 and ABI 100 have separate assemblies and package versions. `GetExpermentABI` deliberately preserves the requested spelling. Stable version requests must be positive multiples of 100, with no implicit fallback. Zero handles are ABI_FALSE; `AbiReply<T>.Fail` returns the default value plus a structured error. Get produces Draft, Host-confirmed Make produces Ready, and only a group commit produces Active. Interface implementations must enforce these states; SDK dispatch is not an authorization boundary.
+## Preview compatibility
 
-All method slots from proposal section 8 are represented. Contract IDs are `nexa.events/100`, `nexa.ui/100`, `nexa.interplugin/100`; diagnostics/resources use Bootstrap ports. No experiment IDs are invented. Permanent compatibility requires future implementations and retained fixtures, not just ID constants.
+Bootstrap and SDK packages are now `0.1.0-alpha.2`. The requested revision changes
+managed signatures and moves a preview method: **rebuild alpha.1 plugins**. These
+unpublished previews are not binary-compatible. Bootstrap assembly identity remains
+`1.0.0.0`; that identity alone does not make old preview binaries compatible.
+After formal freezing, equivalent changes require an explicit new compatibility
+version. Stable ABI and package versions remain separate axes.
 
-The manifest is a logical DTO with explicit required/optional dependencies and runtime target. It is not an encrypted package parser or a wire JSON schema. Version bounds are structured; the future planner must validate canonical SemVer. Make/Prepare/Commit operations carry idempotency identities; Host implementations must bind actual connection/session identity and reject reused IDs with changed contents. Host ports do not grant authority by being called.
+## Unified context
 
-Stage restrictions, atomic groups, dependency cycles, rollback, cleanup budgets, authorization-at-load-only and hot-conflict Checkup ordering follow the preserved proposal. They are implementation obligations for the coordinator/Host, not behaviors already provided by this SDK. An incomplete integration must fail closed rather than activate a plugin.
+`GetABIContext` returns a Draft `ABIContext`; Host-confirmed `MakeABIContext`
+returns the final facade. `GetExpermentABI` retains its intentional spelling.
+Requests must be positive multiples of 100 and never implicitly fall back.
+`AbiReply<T>.Fail` carries a structured error and default value (null for local
+facades, zero for opaque handles). Ready does not mean Active.
 
-## Verified in this repository
+Bootstrap freezes only the generic context facade:
 
-- Invalid stable version detection and zero failure handles.
-- Exact 16 ABI 100 dispatch IDs, context facade use and preservation of operation options.
-- UInt64 data without narrowing; Host error propagation through SDK and sample negotiation.
-- Actual sample DLL loaded from memory in a collectible CoreCLR context sharing Bootstrap type identity.
-- Missing payload/type rejection and entry invalidation after disposal.
-- Preview NuGet generation; CLI NativeAOT smoke across three operating systems.
+- `Info`: immutable identity, opaque handle, stable version, confirmed experiment
+  and capability descriptions, permissions and session/permit information.
+- `GetAbility(contractId)`: access an already confirmed capability.
+- `GetExperiment(expId, contractId)`: access an interface belonging to an already
+  confirmed experiment. Neither accessor negotiates, grants permission or calls Make.
 
-The proposal's remaining acceptance matrix requires an implemented coordinator, authenticated Host adapter and registry. No end-to-end launcher integration is claimed.
+Initialize, PostInitialize, Checkup and Finalize receive **the same final
+ABIContext**, plus an independently issued StageContext. StageContext owns the
+StageInvocationId, cancellation, budget and optional read-only CheckupInfo.
+Its monotonic remaining budget starts when the local callback context is created;
+creating another SDK view does not reset it. Abort can carry a null final context
+when negotiation failed. Stop carries the original final context.
+
+## ABI 100 SDK views
+
+Use `abi.AsAbi100()` for runtime views and `abi.ForStage100(stage)` inside a load
+callback. Both expose `Events`, `UI`, `Plugins`, `Diagnostics` and `Resources`.
+Views lazily request exact contract IDs and preserve structured Host errors.
+A different stable ABI is rejected, never silently upgraded. `GetExperiment<T>`
+uses the static `IExperimentView<T>` ContractId/Create mapping; no reflection is
+used. Saved experiment proxies recheck access before dispatch.
+
+| Contract | Callable methods | Notes |
+| --- | --- | --- |
+| `nexa.events/100` | 1, 2, 4, 5 | Slot 3 reserved; no service export |
+| `nexa.ui/100` | 1–6 | Existing UI methods |
+| `nexa.interplugin/100` | 1–7 | ExportService = 6; Probe = 7 |
+| `nexa.diagnostics/100` | 1–4 | Report, ReportFinding, QueryRegistrations, QueryBindingStatus |
+| `nexa.resources/100` | 1 | RegisterCleanup |
+
+There are 22 callable methods. Inputs are typed; outputs use the closed AbiValue
+union pending Host integration. Diagnostic source/ownership is assigned by Host.
+The pre-Make `PreInitContext.Resources` port and post-Make `api.Resources` MUST
+map to one instance resource table, preserving operation IDs and avoiding duplicate
+cleanup. This SDK does not create another cleanup registry.
+
+```csharp
+public async ValueTask<AbiReply<CheckupResult>> OnCheckup(ABIContext abi, StageContext stage)
+{
+    using var api = abi.ForStage100(stage);
+    var result = await api.Diagnostics.QueryBindingStatus(
+        new(Guid.NewGuid(), stage.Budget, stage.Cancellation));
+    return result.Success
+        ? AbiReply<CheckupResult>.Ok(new(CheckupStatus.Passed, [], []))
+        : AbiReply<CheckupResult>.Fail(result.Error!);
+}
+```
+
+Dispose the stage view before returning. It attaches the stage invocation ID,
+links cancellation and forwards the smaller remaining/caller budget. Saved proxies
+from a disposed view fail with STAGE_FROZEN. Runtime views do not inherit stage IDs
+or deadlines. This convenience is **not authorization**: callers can retain or
+recreate StageContext and can call Bootstrap facades directly. The coordinator must
+retire invocation IDs on callback completion; Host must reject stale IDs, wrong
+phases, cross-instance access, expired contexts and missing permissions on every
+call. It must also reject unconfirmed experiments through either accessor.
+
+ExportService is valid in Initialize, Bind in PostInitialize, Probe in Checkup,
+and ordinary Call in Active. Finalize cannot add registrations. Abort/Stop only
+allow corresponding cleanup, unbinding and diagnostic operations. Merely retaining
+`api.Plugins` must never broaden the allowed methods.
+
+## Verification and remaining integration
+
+Tests cover all 22 dispatch slots, reserved event slot exclusion, exact UInt64,
+structured error propagation, lazy views, draft/unconfirmed experiment errors,
+stage-ID forwarding and conflict rejection, disposed proxies, runtime budgets,
+and a real in-memory sample using a private SDK against shared Bootstrap types.
+Host-phase responses in these tests come from explicit **test authority ports**;
+they are not a production Host implementation.
+
+The coordinator, authenticated Host adapter, staged registry, permission checks,
+atomic groups, shared cleanup execution and hot-conflict Checkup ordering still
+require implementation. The remaining proposal acceptance matrix is not claimed
+complete. Manifest/version validation and permanent experimental compatibility
+likewise require Host implementations and retained compatibility fixtures.

@@ -2,6 +2,9 @@ namespace Nexa.Plugin.Bootstrap.V1;
 
 public static class AbiErrors
 {
+    public const string ABI_CONTRACT_NOT_NEGOTIATED = "ABI_CONTRACT_NOT_NEGOTIATED";
+    public const string EXP_NOT_NEGOTIATED = "EXP_NOT_NEGOTIATED";
+    public const string CANCELLED = "CANCELLED";
     public const string ABI_CONTRACT_MISMATCH = "ABI_CONTRACT_MISMATCH";
     public const string ABI_VERSION_INVALID = "ABI_VERSION_INVALID";
     public const string ABI_VERSION_UNSUPPORTED = "ABI_VERSION_UNSUPPORTED";

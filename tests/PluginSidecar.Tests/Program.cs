@@ -7,6 +7,7 @@ static void Assert(bool value) { if (!value) throw new InvalidOperationException
 Assert(!AbiVersions.IsStable(0) && !AbiVersions.IsStable(101) && !AbiVersions.IsStable(150));
 Assert(AbiVersions.IsStable(100) && AbiVersions.IsStable(200));
 await MarketOfflineTests.Run();
+await ContextTests.Run();
 var error = new AbiError(AbiErrors.PERMISSION_DENIED, "denied", "PreInitialize", "abi.make", "example.plugin", Guid.NewGuid(), Guid.NewGuid(), false, ImmutableDictionary<string, string>.Empty);
 Assert(AbiReply<AbiContextHandle>.Fail(error).Value.Value == 0);
 var probe = new Probe(error);
@@ -14,7 +15,6 @@ var options = new InvocationOptions(Guid.NewGuid(), TimeSpan.FromSeconds(5), def
 var events = new Events100(probe);
 await events.DeclareEvent(new("event", "schema", "digest", 1024, 16), options);
 await events.Subscribe(new("provider", "event", "schema", new(9), true, 1, 16), options);
-await events.ExportService(new("svc", "contract", 1, "digest", [], new AbiValue.Null()), new(9), options);
 await events.Publish(new(ulong.MaxValue), new AbiValue.Null(), options);
 Assert(((AbiValue.UInt64)((AbiValue.Map)probe.Arguments!).Value["handle"]).Value == ulong.MaxValue);
 await events.Unsubscribe(new(1), options);
@@ -32,7 +32,15 @@ await plugins.Call(new(1), 42, new AbiValue.Null(), options);
 await plugins.Release(new(1), options);
 var failed = await plugins.RebindOptional(new("provider", "svc", 1, 2, false), options);
 Assert(ReferenceEquals(failed.Error, error));
-Assert(probe.Calls.SequenceEqual(Enumerable.Range(1, 5).Select(i => ("nexa.events/100", (uint)i)).Concat(Enumerable.Range(1, 6).Select(i => ("nexa.ui/100", (uint)i))).Concat(Enumerable.Range(1, 5).Select(i => ("nexa.interplugin/100", (uint)i)))));
+await plugins.ExportService(new("svc", "contract", 1, "digest", [], new AbiValue.Null()), new(9), options);
+await plugins.Probe(new(1), 3, new AbiValue.Null(), options);
+var diagnostics = new Diagnostics100(probe);
+await diagnostics.Report(new("test", "test", "info"), options);
+await diagnostics.ReportFinding(new("test", "test", false), options);
+await diagnostics.QueryRegistrations(options);
+await diagnostics.QueryBindingStatus(options);
+await new Resources100(probe).RegisterCleanup(new(9), options);
+Assert(probe.Calls.SequenceEqual(new[] {1, 2, 4, 5}.Select(i => ("nexa.events/100", (uint)i)).Concat(Enumerable.Range(1, 6).Select(i => ("nexa.ui/100", (uint)i))).Concat(Enumerable.Range(1, 7).Select(i => ("nexa.interplugin/100", (uint)i))).Concat(Enumerable.Range(1, 4).Select(i => ("nexa.diagnostics/100", (uint)i))).Append(("nexa.resources/100", 1u))));
 Assert(probe.LastOptions == options);
 var bytes = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "fixtures", "HelloPlugin.dll"));
 using var loaded = MemoryPlugin.LoadVerifiedPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]> { ["HelloPlugin"] = bytes });
@@ -47,19 +55,22 @@ bool missing = false; try { using var bad = MemoryPlugin.LoadVerifiedPayloads("M
 Assert(missing);
 bool entry = false; try { using var bad = MemoryPlugin.LoadVerifiedPayloads("HelloPlugin", "Does.Not.Exist", new Dictionary<string, byte[]> { ["HelloPlugin"] = bytes }); } catch (TypeLoadException) { entry = true; }
 Assert(entry);
-Console.WriteLine("PASS: stable versions, failure handles, all 16 ABI 100 dispatch slots, exact UInt64, Host failure propagation, CoreCLR memory loading and Bootstrap identity.");
+Console.WriteLine("PASS: stable versions, failure handles, all 22 callable ABI 100 dispatch slots, exact UInt64, Host failure propagation, CoreCLR memory loading and Bootstrap identity.");
 
-sealed class Probe(AbiError error) : EventAbility, UiAbility, InterPluginAbility, IAbiNegotiatorV1, IDiagnosticsV1, IResourcesV1, ICallbacksV1
+sealed class Probe(AbiError error) : EventAbility, UiAbility, InterPluginAbility, IAbiNegotiatorV1, IDiagnosticsV1, IResourcesV1, ICallbacksV1, ABIContext
 {
     public AbiContextHandle Context => new(1);
+    public AbiContextInfo Info { get; } = new(new(1), Guid.NewGuid(), new("example.plugin", "1.0.0", Guid.NewGuid()), 100, [], [], Guid.NewGuid(), "digest", "test", []);
+    public AbiReply<IAbilityV1> GetAbility(string contractId) => AbiReply<IAbilityV1>.Fail(error);
+    public AbiReply<IAbilityV1> GetExperiment(Guid expId, string contractId) => AbiReply<IAbilityV1>.Fail(error);
     public List<(string, uint)> Calls { get; } = [];
     public AbiValue? Arguments; public InvocationOptions? LastOptions; public int MakeCalls;
     public ValueTask<AbiReply<AbiValue>> Invoke(string contractId, uint methodId, AbiValue arguments, InvocationOptions options)
     { Calls.Add((contractId, methodId)); Arguments = arguments; LastOptions = options; return ValueTask.FromResult(AbiReply<AbiValue>.Fail(error)); }
-    public ValueTask<AbiReply<AbiContextHandle>> GetABIContext(uint version, InvocationOptions options) => ValueTask.FromResult(AbiReply<AbiContextHandle>.Ok(new(2)));
+    public ValueTask<AbiReply<ABIContext>> GetABIContext(uint version, InvocationOptions options) => ValueTask.FromResult(AbiReply<ABIContext>.Ok(this));
     public ValueTask<AbiReply<ExperimentRef>> GetExpermentABI(Guid id, InvocationOptions options) => ValueTask.FromResult(AbiReply<ExperimentRef>.Fail(error));
-    public ValueTask<AbiReply<AbiContextHandle>> MakeABIContext(AbiContextHandle draft, ImmutableArray<ExperimentRef> experiments, MakeOptions options, CancellationToken cancellation)
-    { MakeCalls++; return ValueTask.FromResult(AbiReply<AbiContextHandle>.Fail(error)); }
+    public ValueTask<AbiReply<ABIContext>> MakeABIContext(ABIContext draft, ImmutableArray<ExperimentRef> experiments, MakeOptions options, CancellationToken cancellation)
+    { MakeCalls++; return ValueTask.FromResult(AbiReply<ABIContext>.Fail(error)); }
     public ValueTask<AbiReply<Unit>> ReportDiagnostic(Finding finding, InvocationOptions options) => ValueTask.FromResult(AbiReply<Unit>.Ok(new()));
     public ValueTask<AbiReply<RegistrationHandle>> RegisterCleanup(CallbackHandle callback, InvocationOptions options) => ValueTask.FromResult(AbiReply<RegistrationHandle>.Fail(error));
     public CallbackHandle Register(string contractId, Func<AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>> callback) => new(9);

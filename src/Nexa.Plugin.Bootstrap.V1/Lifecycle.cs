@@ -3,9 +3,16 @@ namespace Nexa.Plugin.Bootstrap.V1;
 
 public interface IAbiNegotiatorV1
 {
-    ValueTask<AbiReply<AbiContextHandle>> GetABIContext(uint version, InvocationOptions options);
+    ValueTask<AbiReply<ABIContext>> GetABIContext(uint version, InvocationOptions options);
     ValueTask<AbiReply<ExperimentRef>> GetExpermentABI(Guid expId, InvocationOptions options);
-    ValueTask<AbiReply<AbiContextHandle>> MakeABIContext(AbiContextHandle draft, ImmutableArray<ExperimentRef> experiments, MakeOptions options, CancellationToken cancellation);
+    ValueTask<AbiReply<ABIContext>> MakeABIContext(ABIContext draft, ImmutableArray<ExperimentRef> experiments, MakeOptions options, CancellationToken cancellation);
+}
+/// <summary>Local facade; only Info.Handle and explicit data may cross the existing Host ABI.</summary>
+public interface ABIContext
+{
+    AbiContextInfo Info { get; }
+    AbiReply<IAbilityV1> GetAbility(string contractId);
+    AbiReply<IAbilityV1> GetExperiment(Guid expId, string contractId);
 }
 public interface IAbilityV1
 {
@@ -23,25 +30,24 @@ public interface ICallbacksV1
     void Release(CallbackHandle callback);
 }
 public sealed record PreInitContext(PluginIdentity Identity, uint BootstrapVersion, IAbiNegotiatorV1 Negotiator, IDiagnosticsV1 Diagnostics, IResourcesV1 Resources, ICallbacksV1 Callbacks, CancellationToken Cancellation, TimeSpan Budget);
-public sealed record StageContext(PluginIdentity Identity, LoadStage Stage, AbiContextHandle FinalABIContext, Guid LoadGroupId, IDiagnosticsV1 Diagnostics, IResourcesV1 Resources, CancellationToken Cancellation, TimeSpan Budget);
-public sealed record PreInitResult(AbiContextHandle FinalContext, ImmutableArray<PluginDependency> RequiredDependencies, ImmutableArray<PluginDependency> OptionalDependencies, ImmutableArray<PluginConflict> Conflicts, ImmutableArray<string> DeclaredDegradationModes);
-public sealed record CheckupResult(CheckupStatus Status, ImmutableArray<Finding> Findings, ImmutableArray<string> EnabledDegradationModes);
-public interface CheckupContext
+public sealed record CheckupInfo(Guid BatchId, AbiValue Inputs, AbiValue PolicySnapshot);
+public sealed record StageContext(PluginIdentity Identity, LoadStage Stage, Guid StageInvocationId, Guid LoadGroupId, CancellationToken Cancellation, TimeSpan Budget, CheckupInfo? CheckupInfo = null)
 {
-    ValueTask<AbiReply<Unit>> ReportFinding(Finding finding, InvocationOptions options);
-    ValueTask<AbiReply<AbiValue>> ProbeService(ServiceHandle service, uint probeId, AbiValue arguments, InvocationOptions options);
-    ValueTask<AbiReply<AbiValue>> QueryRegistrations(InvocationOptions options);
-    ValueTask<AbiReply<AbiValue>> QueryBindingStatus(InvocationOptions options);
+    private readonly long _started = System.Diagnostics.Stopwatch.GetTimestamp();
+    // Local callback lifetime. Creating another SDK view cannot reset this deadline.
+    public TimeSpan RemainingBudget => Budget - System.Diagnostics.Stopwatch.GetElapsedTime(_started);
 }
-public sealed record AbortContext(PluginIdentity Identity, LoadStage FailedStage, AbiError RootCause, ImmutableArray<LoadStage> CompletedStages, AbiValue Resources, CancellationToken Cancellation, TimeSpan Budget);
-public sealed record StopContext(PluginIdentity Identity, string ReasonCode, CancellationToken Cancellation, TimeSpan Budget);
+public sealed record PreInitResult(ABIContext FinalContext, ImmutableArray<PluginDependency> RequiredDependencies, ImmutableArray<PluginDependency> OptionalDependencies, ImmutableArray<PluginConflict> Conflicts, ImmutableArray<string> DeclaredDegradationModes);
+public sealed record CheckupResult(CheckupStatus Status, ImmutableArray<Finding> Findings, ImmutableArray<string> EnabledDegradationModes);
+public sealed record AbortContext(PluginIdentity Identity, LoadStage FailedStage, AbiError RootCause, ImmutableArray<LoadStage> CompletedStages, AbiValue Resources, CancellationToken Cancellation, TimeSpan Budget, ABIContext? ABI = null);
+public sealed record StopContext(PluginIdentity Identity, ABIContext ABI, string ReasonCode, CancellationToken Cancellation, TimeSpan Budget);
 public interface IPluginBootstrapV1
 {
     ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext context);
-    ValueTask<AbiReply<Unit>> OnInitialize(StageContext stage, EventAbility events, UiAbility ui);
-    ValueTask<AbiReply<Unit>> OnPostInitialize(StageContext stage, InterPluginAbility plugins);
-    ValueTask<AbiReply<CheckupResult>> OnCheckup(StageContext stage, CheckupContext checks);
-    ValueTask<AbiReply<Unit>> OnFinalize(StageContext stage);
+    ValueTask<AbiReply<Unit>> OnInitialize(ABIContext abi, StageContext stage);
+    ValueTask<AbiReply<Unit>> OnPostInitialize(ABIContext abi, StageContext stage);
+    ValueTask<AbiReply<CheckupResult>> OnCheckup(ABIContext abi, StageContext stage);
+    ValueTask<AbiReply<Unit>> OnFinalize(ABIContext abi, StageContext stage);
     ValueTask<AbiReply<Unit>> OnAbort(AbortContext context);
     ValueTask<AbiReply<Unit>> OnStop(StopContext context);
 }

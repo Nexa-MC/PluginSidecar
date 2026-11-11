@@ -1,4 +1,5 @@
 using Nexa.Plugin.Bootstrap.V1;
+using Nexa.Plugin.Sdk.Abi100;
 namespace HelloPlugin;
 
 public sealed class Plugin : IPluginBootstrapV1
@@ -11,10 +12,17 @@ public sealed class Plugin : IPluginBootstrapV1
         var ready = await context.Negotiator.MakeABIContext(draft.Value, [], new(Guid.NewGuid(), []), context.Cancellation);
         return ready.Success ? AbiReply<PreInitResult>.Ok(new(ready.Value, [], [], [], [])) : AbiReply<PreInitResult>.Fail(ready.Error!);
     }
-    public ValueTask<AbiReply<Unit>> OnInitialize(StageContext stage, EventAbility events, UiAbility ui) => Ok();
-    public ValueTask<AbiReply<Unit>> OnPostInitialize(StageContext stage, InterPluginAbility plugins) => Ok();
-    public ValueTask<AbiReply<CheckupResult>> OnCheckup(StageContext stage, CheckupContext checks) => ValueTask.FromResult(AbiReply<CheckupResult>.Ok(new(CheckupStatus.Passed, [], [])));
-    public ValueTask<AbiReply<Unit>> OnFinalize(StageContext stage) => Ok();
+    public ValueTask<AbiReply<Unit>> OnInitialize(ABIContext abi, StageContext stage) => Ok();
+    public ValueTask<AbiReply<Unit>> OnPostInitialize(ABIContext abi, StageContext stage) => Ok();
+    public async ValueTask<AbiReply<CheckupResult>> OnCheckup(ABIContext abi, StageContext stage)
+    {
+        using var api = abi.ForStage100(stage);
+        var registrations = await api.Diagnostics.QueryRegistrations(new(Guid.NewGuid(), stage.Budget, stage.Cancellation));
+        return registrations.Success
+            ? AbiReply<CheckupResult>.Ok(new(CheckupStatus.Passed, [], []))
+            : AbiReply<CheckupResult>.Fail(registrations.Error!);
+    }
+    public ValueTask<AbiReply<Unit>> OnFinalize(ABIContext abi, StageContext stage) => Ok();
     public ValueTask<AbiReply<Unit>> OnAbort(AbortContext context) => Ok();
     public ValueTask<AbiReply<Unit>> OnStop(StopContext context) => Ok();
     private static ValueTask<AbiReply<Unit>> Ok() => ValueTask.FromResult(AbiReply<Unit>.Ok(new()));

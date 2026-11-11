@@ -2,6 +2,7 @@
 
 日期：2026-11-10（Asia/Shanghai）
 修订：2026-11-10，确认热加载冲突在 Checkup 判失败后执行停用。
+修订：2026-11-11，确认已协商能力统一由 ABIContext 提供入口，生命周期保留独立 StageContext。
 范围：插件加载、ABI 协商、能力注册、插件间绑定、检查、提交、失败回滚及卸载。
 性质：设计提案，可作为实现规格；未读取或修改现有仓库，不代表现有实现已经符合本文。
 本文中的“必须”定义这份提案内部的协议要求；用户已确认项与本次补充设计在第 1 节区分。
@@ -20,9 +21,10 @@
 8. 实验 ABI 通过 GetExpermentABI(EXP_ID) 请求，新能力分配唯一 EXP_ID，下个大版本合入稳定 ABI。
 9. 实验 ABI 永久保留兼容支持，不因转正删除旧 EXP_ID 或改变原契约。
 10. MakeABIContext 最终请求 Host 确认兼容性；成功返回最终 ABIContext，失败返回 ABI_FALSE，并提供结构化失败原因。
-11. Initialize 接收 EventAbility、UiAbility；PostInitialize 接收 InterPluginAbility。
+11. 全部已协商能力按组统一放入 ABIContext。Initialize、PostInitialize、Checkup、Finalize 接收同一个最终 ABIContext 与独立 StageContext，不再分别传入 EventAbility、UiAbility、InterPluginAbility。
 12. Checkup 执行插件自检、统计错误并发送遥测；Finalize 执行加载收尾。
 13. 热加载与已 Active 插件发生冲突时，先由宿主将本次 Checkup 判为失败，再停用已运行的冲突插件及直接、间接必需依赖它们的运行中插件；新加载组不提交。
+14. 能力入口统一不改变阶段约束：服务通过 abi.Plugins 在 Initialize 声明，在 PostInitialize 绑定；普通业务在 Active 调用。实验访问器仅返回 Make 已确认的实验能力，不再次协商或授权。
 
 ### 1.2 本次补充设计
 
@@ -166,7 +168,7 @@ Checksum 是宿主控制阶段，不设 OnChecksum 插件回调。
 
 ## 5. 冻结的 Bootstrap 1 契约
 
-Bootstrap 只含：基础结果、有限数据记录、回调、取消/截止时间、协商入口、生命周期结果与诊断。
+Bootstrap 只含：基础结果、有限数据记录、回调、取消/截止时间、协商入口、ABIContext 的稳定能力查询门面、生命周期结果与最小引导诊断/清理能力。
 不能引用业务 ABI 200 才存在的类型，否则旧插件可能在协商前就加载失败。
 
 ```csharp
@@ -176,19 +178,19 @@ interface IPluginBootstrapV1
         PreInitContext context);
 
     ValueTask<AbiReply<Unit>> OnInitialize(
-        StageContext stage,
-        EventAbility events,
-        UiAbility ui);
+        ABIContext abi,
+        StageContext stage);
 
     ValueTask<AbiReply<Unit>> OnPostInitialize(
-        StageContext stage,
-        InterPluginAbility plugins);
+        ABIContext abi,
+        StageContext stage);
 
     ValueTask<AbiReply<CheckupResult>> OnCheckup(
-        StageContext stage,
-        CheckupContext checks);
+        ABIContext abi,
+        StageContext stage);
 
     ValueTask<AbiReply<Unit>> OnFinalize(
+        ABIContext abi,
         StageContext stage);
 
     ValueTask<AbiReply<Unit>> OnAbort(
@@ -199,9 +201,19 @@ interface IPluginBootstrapV1
 }
 ```
 
-此处 EventAbility、UiAbility、InterPluginAbility 是 Bootstrap 层冻结的通用能力门面，不是会随业务 ABI 增减成员的 CLR 大接口。门面只提供带版本契约 ID 的 Invoke、元信息和句柄；SDK 在其上提供 ABI 100、ABI 200 等独立的强类型扩展。
+ABIContext 是同一实例持有的本地上下文封装；底层标识仍是不透明 ABIContext 句柄，不能通过 IPC 传递本地封装对象。Bootstrap 仅冻结 Info、GetAbility 和 GetExperiment 等基础入口，不把所有业务方法固定到一个会不断增长的 CLR 接口中。
+
+EventAbility、UiAbility、InterPluginAbility 等能力由 ABIContext 查询获得；SDK 提供 abi.Events、abi.UI、abi.Plugins、abi.Diagnostics、abi.Resources 强类型视图。其契约版本严格匹配 Make 确认的集合，不能默认绑定 Host 最新版本。
 
 ```csharp
+// 稳定基础门面；业务属性是 SDK 包装，不要求向此接口增加成员。
+interface ABIContext
+{
+    AbiContextInfo Info { get; }
+    AbiReply<IAbilityV1> GetAbility(string contractId);
+    AbiReply<IAbilityV1> GetExperiment(ExpId id, string contractId);
+}
+
 interface IAbilityV1
 {
     AbiContextHandle Context { get; }
@@ -227,20 +239,27 @@ PreInitContext
   Bootstrap: BootstrapVersion
   Negotiator: GetABIContext / GetExpermentABI / MakeABIContext
   Diagnostics: ReportDiagnostic
+  Resources: 最小清理登记能力
   Cancellation: 取消信号
   Deadline: 宿主定义的剩余执行预算
 
 StageContext
   Identity
   Stage
-  FinalABIContext
+  StageInvocationId
   LoadGroupId
-  Diagnostics
+  CheckupInfo: 仅 Checkup 提供的只读检查输入，可空
   Cancellation
   Deadline
 ```
 
-Bootstrap 诊断能力在 Make 之前可用；不因此开放 EventAbility/UiAbility。阶段上下文调用权限随回调结束失效，避免插件保存句柄后在其他阶段补注册。
+Bootstrap 的最小诊断和清理能力在 Make 之前可用；这是获得最终 ABIContext 前的引导入口，不因此提前开放业务能力。Make 后的能力统一从 ABIContext 获取。
+
+ABIContext 的版本、实验集合、权限和身份不可变，并存活至本次加载实例结束。当前阶段由 Host/Sidecar 的生命周期状态机维护，不通过修改上下文来切换能力。每次生命周期调用分别创建 StageContext；其中取消信号、截止时间及 StageInvocationId 只对应本次回调，不保存在长期 ABIContext 中。
+
+阶段限定操作除校验当前实例状态外，还绑定有效的 StageInvocationId。SDK 在阶段调用作用域内携带它；回调返回即失效，插件保存旧 StageContext 不能在稍后补注册。运行期操作使用运行期调用预算，不复用已经结束的加载阶段期限。Info 中的版本与权限描述是只读信息，不能代替宿主侧授权检查。
+
+OnAbort 仍接收 AbortContext，其中可带已经确认的 ABIContext；协商失败时允许为空。OnStop 的 StopContext 包含原实例 ABIContext。退出阶段仅允许清理、解绑和诊断等对应操作，不能通过保存的上下文继续正常业务。
 
 ### 5.2 生命周期结果
 
@@ -357,6 +376,25 @@ EXP_ID 永久保留不仅是目录保留。对于曾受支持的“基础 ABI + 
 永久兼容不表示所有未来实验组合都必须兼容，也不消除平台条件、权限、实际资源和授权失败。
 安全修复可保留兼容语义更新实现；若未来必须禁用某契约，那是对本承诺的显式产品策略变更，不能伪装成普通版本不支持。
 
+### 6.5 最终上下文的能力访问
+
+| SDK 入口 | 返回内容 | 访问规则 |
+| --- | --- | --- |
+| abi.Info | 版本、身份、确认的实验集合和能力描述 | 只读；Draft 仅可查看协商描述 |
+| abi.Events | EventAbility 视图 | 仅包含当前稳定 ABI 的事件契约 |
+| abi.UI | UiAbility 视图 | 仅包含当前稳定 ABI 的 UI 契约 |
+| abi.Plugins | InterPluginAbility 视图 | 同一入口用于声明、绑定、探测和调用，按方法检查阶段 |
+| abi.Diagnostics | DiagnosticAbility 视图 | 报告和查询方法各自遵守阶段限制 |
+| abi.Resources | ResourceAbility 视图 | 统一的资源登记与清理归属 |
+| abi.GetAbility(contractId) | 已确认的能力门面 | 不授予额外版本、扩展或权限 |
+| abi.GetExperiment<T>(EXP_ID) | 已确认实验接口的强类型视图 | SDK 从 T 映射契约 ID，再调用稳定的 GetExperiment(id, contractId) |
+
+GetAbility/GetExperiment 是读取最终上下文能力集合的访问器，不再次执行 Make，也不修改权限或扩展集合。Draft 查询业务能力返回 CONTEXT_NOT_READY；未确认的契约返回 ABI_CONTRACT_NOT_NEGOTIATED，未确认的实验 ID 返回 EXP_NOT_NEGOTIATED。实验 ID 已确认但请求的接口不属于它，或强类型包装模式不匹配，返回 ABI_CONTRACT_MISMATCH。
+
+所有扩展契约必须经过同一检查，不能用 GetAbility 绕过 GetExperiment 的实验确认条件。能力可以按需建立本地代理，无须在 Make 时创建所有实现对象。代理可随实例保存，但每次调用仍检查上下文有效性、权限和当前阶段；不能以“已经拿到代理”绕过检查。
+
+尚未正式发布的当前设计稿将服务导出由 EventAbility 移至 InterPluginAbility。冻结正式 ABI 100 后不得再用这种方式修改已有契约；未来变更需按实验/新稳定版本流程处理。
+
 ## 7. 六阶段加载与阶段屏障
 
 ```mermaid
@@ -440,17 +478,17 @@ flowchart TD
 
 新增能力先通过实验 ContractId + EXP_ID 暴露，下个稳定版合入相应新版本契约。仅透传扩展字段不能被当成增加稳定 ABI 行为的后门。
 
-### 8.2 EventAbility
+### 8.2 EventAbility（abi.Events）
 
 | MethodId | SDK 方法 | 阶段 | 作用 |
 | --- | --- | --- | --- |
 | 1 | DeclareEvent(EventDeclaration) | Initialize | 声明插件发布的事件及负载模式 |
 | 2 | Subscribe(EventSubscription) | Initialize | 暂存订阅，Active 后分发 |
-| 3 | ExportService(ServiceDeclaration, CallbackHandle) | Initialize | 声明跨插件服务及处理入口，供下一阶段绑定 |
+| 3 | 保留，不可调用 | — | 此槽位不再提供服务导出 |
 | 4 | Publish(EventHandle, Payload, Options) | Active | 发布业务事件 |
 | 5 | Unsubscribe(RegistrationHandle) | Active / Stop | 撤销本插件订阅 |
 
-将 ExportService 放在 EventAbility 是为了在 Initialize 完成全部内容声明；InterPluginAbility 留给发现、绑定和调用。若未来拆出 ServiceAbility，需要显式新增 ABI，不悄悄改变现有回调参数。
+服务统一通过 abi.Plugins.ExportService 声明。EventAbility 仅负责事件，不再承担服务导出。
 
 EventDeclaration：
 - name：PluginId 命名空间内唯一。
@@ -466,13 +504,7 @@ EventSubscription：
 
 单个订阅默认串行 FIFO（以接收顺序为准），不同发布者无全局顺序；队列满返回 BACKPRESSURE，不无限堆积。初始化阶段发生的普通外部事件不缓存补发给尚未 Active 的插件；需要状态的插件在启用后显式查询快照。
 
-ServiceDeclaration：
-- serviceId、contractId、contractVersion、schemaDigest。
-- methods[]：methodId、输入/输出模式、可取消性、幂等说明。
-- healthProbe：可选独立只读诊断入口。
-- provider 是当前插件，不允许伪造其他 PluginId。
-
-### 8.3 UiAbility
+### 8.3 UiAbility（abi.UI）
 
 | MethodId | SDK 方法 | 阶段 | 作用 |
 | --- | --- | --- | --- |
@@ -487,7 +519,7 @@ UI 采用声明数据，经 Host 的 R 层渲染。插件不传 HWND、原生控
 
 注册标识键为 (PluginId, localId)。相同请求 operationId 重放返回原句柄；同一 localId 携带不同内容返回 REGISTRATION_DUPLICATE。运行中的状态更新不能新增未声明入口或突破获批能力。
 
-### 8.4 InterPluginAbility
+### 8.4 InterPluginAbility（abi.Plugins）
 
 | MethodId | SDK 方法 | 阶段 | 作用 |
 | --- | --- | --- | --- |
@@ -496,6 +528,16 @@ UI 采用声明数据，经 Host 的 R 层渲染。插件不传 HWND、原生控
 | 3 | Call(ServiceHandle, MethodId, Payload, Options) | Active | 普通服务调用 |
 | 4 | Release(ServiceHandle) | PostInitialize / Active / Stop | 释放绑定 |
 | 5 | RebindOptional(ServiceRequirement) | Active | 绑定先前声明的可选依赖，不新增必需依赖 |
+| 6 | ExportService(ServiceDeclaration, CallbackHandle) | Initialize | 暂存服务契约与处理入口，供 PostInitialize 绑定 |
+| 7 | Probe(ServiceHandle, ProbeId, Payload, Options) | Checkup | 仅调用服务显式声明的只读诊断入口 |
+
+ServiceDeclaration：
+- serviceId、contractId、contractVersion、schemaDigest。
+- methods[]：methodId、输入/输出模式、可取消性、幂等说明。
+- healthProbe：可选独立只读诊断入口。
+- provider 是当前插件，不允许伪造其他 PluginId。
+
+入口从 Initialize 起可获取，但各方法分别检查阶段：Initialize 只能 ExportService；PostInitialize 可 Describe/Bind/Release；Checkup 可 Probe；Active 可 Describe/Call/Release/RebindOptional。持有同一 abi.Plugins 不会提前开放其他阶段的方法。
 
 ServiceRequirement 必须指定 providerPluginId、serviceId、可接受契约版本范围和 required 属性。可发现不意味着可调用；服务发布、消费授权和依赖声明都要检查。
 
@@ -503,19 +545,22 @@ Bind 不执行服务方法。目标处于同组 Staged 时可绑定，但调用�
 
 跨插件传递值使用 AbiValue 和有界序列化；不交换对方实例对象或直接委托。运行期互相调用可以成环，但每个调用有截止时间、最大调用深度，禁止用同步等待堵塞接收循环。
 
-### 8.5 CheckupContext
+### 8.5 DiagnosticAbility（abi.Diagnostics）与 Checkup 输入
 
-仅 Checkup 可用：
-- ReportFinding(Finding)。
-- ProbeService(已绑定服务, probeId, 参数)：仅明确声明的诊断入口。
-- QueryRegistrations()：本实例暂存注册只读视图。
-- QueryBindingStatus()：绑定状态快照。
+| MethodId | SDK 方法 | 阶段 | 作用 |
+| --- | --- | --- | --- |
+| 1 | Report(Diagnostic) | Ready 上下文的有效加载阶段 / Active / Abort / Stop | 追加带来源的诊断，不改变宿主判定 |
+| 2 | ReportFinding(Finding) | Checkup | 追加自检发现 |
+| 3 | QueryRegistrations() | Checkup | 只读查询本实例的暂存注册 |
+| 4 | QueryBindingStatus() | Checkup | 查询绑定状态快照 |
+
+不再向 OnCheckup 另传可执行的 CheckupContext。原检查操作统一归入 abi.Diagnostics 与 abi.Plugins.Probe；本次检查的只读输入、检查批次标识及策略快照放入 stage.CheckupInfo。
 
 普通业务服务不因 Checkup 而提前开放。诊断入口应只读、可取消、有界；宿主仍不把插件的只读声明当成安全隔离保证。
 
-### 8.6 宿主管理的资源
+### 8.6 ResourceAbility（abi.Resources）
 
-Bootstrap Resources.RegisterCleanup(CallbackHandle) 可在 PreInitialize 至 Finalize 登记清理动作，按逆序尝试执行；采用独立清理期限，不使用已经取消的加载令牌。句柄在提交后随实例存活，卸载时释放。
+RegisterCleanup(CallbackHandle)，MethodId = 1，可在 PreInitialize 至 Finalize 登记清理动作，按逆序尝试执行；采用独立清理期限，不使用已经取消的加载令牌。Make 前使用 PreInitContext.Resources 的最小引导入口；Make 后使用 abi.Resources，两者归属同一实例资源表，不重复登记或重复执行。句柄在提交后随实例存活，卸载时释放。
 
 插件必须自行追踪通过自身代码创建的文件、线程、网络连接等。宿主只能保证自己管理的注册、队列、代理、UI 和能力句柄被撤销，不能宣称任意外部副作用原子回滚。
 
@@ -697,7 +742,7 @@ Sidecar 内部 Scheduler 负责推进阶段，Host 的 lifecycle.invoke 用于�
 | --- | --- |
 | 包与校验 | PACKAGE_INVALID、DECRYPT_FAILED、HASH_MISMATCH、ENTRY_INVALID、BOOTSTRAP_UNSUPPORTED、PAYLOAD_KIND_UNSUPPORTED |
 | 授权 | AUTHORIZATION_MISSING、AUTHORIZATION_EXPIRED、AUTHORIZATION_NOT_YET_VALID、AUTHORIZATION_UNAVAILABLE、AUTHORIZATION_MISMATCH |
-| ABI | ABI_VERSION_INVALID、ABI_VERSION_UNSUPPORTED、EXP_UNKNOWN、EXP_BASE_MISMATCH、EXP_DEPENDENCY_MISSING、EXP_CONFLICT、ABI_CONTRACT_MISMATCH、CONTEXT_ALREADY_CONFIRMED |
+| ABI | ABI_VERSION_INVALID、ABI_VERSION_UNSUPPORTED、EXP_UNKNOWN、EXP_BASE_MISMATCH、EXP_DEPENDENCY_MISSING、EXP_CONFLICT、ABI_CONTRACT_MISMATCH、ABI_CONTRACT_NOT_NEGOTIATED、EXP_NOT_NEGOTIATED、CONTEXT_ALREADY_CONFIRMED |
 | 权限与句柄 | PERMISSION_DENIED、HANDLE_INVALID、HANDLE_TYPE_MISMATCH、HANDLE_EXPIRED、HANDLE_OWNER_MISMATCH、CONTEXT_NOT_READY |
 | 阶段 | STAGE_INVALID、STAGE_FROZEN、STAGE_TIMEOUT、CANCELLED、PLUGIN_EXCEPTION |
 | 依赖 | PLUGIN_CONFLICT、DEPENDENCY_MISSING、DEPENDENCY_VERSION_MISMATCH、DEPENDENCY_FAILED、CONFLICT_STOP_FAILED |
@@ -749,7 +794,25 @@ async ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext c)
 
 示例中的 Success、Fail、Ok 和 NewOperationId 是 SDK 便利表示。线上的句柄失败仍严格为 ABI_FALSE + error。一个 Get 成功、Make 失败的可选扩展不会自动丢弃；插件要以新的 operationId 明确重新 Make。
 
-Initialize 注册表面、命令、事件与服务，不调用其他插件。PostInitialize 保存 Bind 返回的服务代理。Checkup 查询注册与诊断入口。Finalize 只完成收尾。PluginActivated 到达后才运行实际业务。
+Initialize 通过 abi.UI、abi.Events 注册表面、命令、事件，通过 abi.Plugins.ExportService 声明服务，不调用其他插件。PostInitialize 保存 abi.Plugins.Bind 返回的服务代理。Checkup 使用 abi.Diagnostics 查询注册和绑定，并通过 abi.Plugins.Probe 调用诊断入口。Finalize 只完成收尾。四个阶段接收同一 ABIContext 和各自的 StageContext。PluginActivated 到达后才运行实际业务。
+
+```csharp
+// 使用示意；所有操作仍返回 AbiReply，实际插件必须检查错误。
+OnInitialize(abi, stage):
+    abi.Events.Subscribe(...);
+    abi.UI.DeclareSurface(...);
+    abi.Plugins.ExportService(...);
+
+OnPostInitialize(abi, stage):
+    service = abi.Plugins.Bind(...);
+
+OnCheckup(abi, stage):
+    bindings = abi.Diagnostics.QueryBindingStatus();
+    probe = abi.Plugins.Probe(service, ...);
+
+// 以下只读取 Make 已确认的实验接口，不再次协商。
+feature = abi.GetExperiment<IFeature>(EXP_FEATURE);
+```
 
 ## 14. 可选原生 Bootstrap 入口
 
@@ -796,6 +859,13 @@ EXP 永久兼容需要在仓库保留不可变契约快照及旧插件测试样�
 | Host 支持 100，插件请求 200 | ABI_FALSE + ABI_VERSION_UNSUPPORTED，无隐式回退 |
 | 请求 100，Host 内部用新实现兼容 | 暴露仍为 100 的完整契约 |
 | Draft 用于注册/调用 | CONTEXT_NOT_READY |
+| Draft 通过 GetAbility/GetExperiment 获取业务能力 | CONTEXT_NOT_READY |
+| 四个后续生命周期回调 | 复用同一最终 ABIContext，StageContext 与 StageInvocationId 各自独立 |
+| 已持有 abi.Plugins，在错误阶段 ExportService/Bind/Probe/Call | STAGE_INVALID 或 STAGE_FROZEN，不因代理存在而放行 |
+| Host 支持实验接口但本实例未在 Make 确认 | EXP_NOT_NEGOTIATED；GetAbility 也不能绕过确认 |
+| 通过稳定入口请求未协商契约 | ABI_CONTRACT_NOT_NEGOTIATED，不隐式升级 ABI |
+| 插件保存过期 StageContext 后补发声明 | 拒绝过期调用作用域，不修改注册 |
+| Make 前后通过两种清理入口访问同一资源登记 | 归属同一实例资源表，不重复释放 |
 | 已合入 EXP_X，旧插件请求 100 + EXP_X | 永久兼容通过，既有行为不变 |
 | 实验组合互斥 | Make 原子失败，不部分启用 |
 | 实验缺少依赖 | EXP_DEPENDENCY_MISSING，明确列出缺项 |
@@ -829,7 +899,9 @@ EXP 永久兼容需要在仓库保留不可变契约快照及旧插件测试样�
 
 ## 17. 决策状态
 
-热加载冲突处理时点与停用范围已确认：Checkup 失败后，停用已运行的冲突插件及受影响的直接、间接必需依赖方。此前列出的产品行为待决策项已关闭，无新增待决策项。
+热加载冲突处理时点与停用范围已确认：Checkup 失败后，停用已运行的冲突插件及受影响的直接、间接必需依赖方。
+
+2026-11-11 已确认全部已协商能力统一由 ABIContext 按能力组提供入口；生命周期保留独立 StageContext，方法仍受阶段限制。服务声明归入 abi.Plugins.ExportService。此前列出的产品行为待决策项已关闭，无新增待决策项。
 
 其余本文新增签名、数据类型、默认预算及接口归属仍作为完整设计提案供实现评审，不代表已经改动产品。
 

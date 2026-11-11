@@ -42,14 +42,19 @@ public abstract record AbiValue
     public sealed record Array(ImmutableArray<AbiValue> Value) : AbiValue;
     public sealed record Map(ImmutableDictionary<string, AbiValue> Value) : AbiValue;
 }
-public sealed record InvocationOptions(Guid OperationId, TimeSpan Budget, CancellationToken Cancellation);
+public sealed record InvocationOptions(Guid OperationId, TimeSpan Budget, CancellationToken Cancellation)
+{
+    // Empty for runtime calls; a Host-issued identity for phase-limited operations.
+    public Guid StageInvocationId { get; init; }
+}
 public sealed record VersionRange(string? Minimum, bool MinimumInclusive, string? Maximum, bool MaximumInclusive);
 public sealed record PluginDependency(string PluginId, VersionRange Version);
 public sealed record PluginConflict(string PluginId, VersionRange Version, string? ReasonCode);
 public sealed record Finding(string Code, string Message, bool Fatal);
 public sealed record MakeOptions(Guid OperationId, ImmutableArray<string> RequestedPermissions);
 public sealed record ExperimentDescriptor(Guid ExpId, string ContractDigest, ImmutableArray<uint> SupportedBaseAbis, ImmutableArray<Guid> RequiredExperiments, ImmutableArray<Guid> ConflictingExperiments, ImmutableArray<string> RequiredPermissions, ImmutableArray<string> SupportedPlatforms, uint? PromotedStableAbi);
-public sealed record AbiContextInfo(Guid SessionId, PluginIdentity Identity, uint StableAbiVersion, ImmutableArray<ExperimentDescriptor> Experiments, ImmutableArray<string> Permissions, Guid LoadPermitId, string ProtocolDigest, string AdapterId);
+public sealed record CapabilityDescriptor(string ContractId, Guid? ExperimentId = null);
+public sealed record AbiContextInfo(AbiContextHandle Handle, Guid SessionId, PluginIdentity Identity, uint StableAbiVersion, ImmutableArray<ExperimentDescriptor> Experiments, ImmutableArray<string> Permissions, Guid LoadPermitId, string ProtocolDigest, string AdapterId, ImmutableArray<CapabilityDescriptor> Capabilities);
 public static class AbiVersions
 {
     public const uint Bootstrap = 1;
