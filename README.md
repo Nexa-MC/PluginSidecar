@@ -56,8 +56,9 @@ Use `artifacts/packages` as a local NuGet source and reference
 [contracts/abi100.json](contracts/abi100.json), then run the generator without
 `--verify`; do not edit generated sources. CI checks reproducibility on all three
 supported operating systems. The managed sample demonstrates Get/Make negotiation and
-separate stage/activation contexts. The C sample compiles to an import-free Wasm
-module and runs through the actual package loader and Host kernel. CI publishes
+separate stage/activation contexts. The C examples compile to import-free Wasm modules and run through the actual
+package loader and Host kernel. The workflow example covers registration
+continuations, action callbacks, scheduled execution and cleanup. CI publishes
 and executes the runtime tests using NativeAOT on Windows, Linux and macOS.
 
 Use `abi.ForStage100(stage)` inside lifecycle callbacks and `abi.AsAbi100()` in

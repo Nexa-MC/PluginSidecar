@@ -43,3 +43,23 @@ for source, output in [('tests/wasm/conformance.c', 'conformance.wasm'), ('tests
                     '-ffreestanding', '-fno-builtin', '-nostdlib', '-I', str(root / 'sdk/wasm/include'), str(root / source),
                     '-Wl,--no-entry', '-Wl,--export-memory', '-Wl,-z,stack-size=131072',
                     '-Wl,--initial-memory=1048576', '-Wl,--max-memory=1048576', '-o', str(args.out / output)], check=True)
+
+# Runnable workflow authoring example: all registrations use the generated SDK.
+workflow = args.out / 'workflow.wasm'
+subprocess.run([args.clang, '--target=wasm32-unknown-unknown', '-std=c11', '-O2',
+                '-Wall', '-Wextra', '-Werror', '-ffreestanding', '-fno-builtin', '-nostdlib',
+                '-I', str(root / 'sdk/wasm/include'), str(root / 'samples/WasmWorkflow/plugin.c'),
+                '-Wl,--no-entry', '-Wl,--export-memory', '-Wl,-z,stack-size=131072',
+                '-Wl,--initial-memory=1048576', '-Wl,--max-memory=1048576', '-o', str(workflow)], check=True)
+payload = workflow.read_bytes()
+manifest.update(pluginId='example.workflow', webAssemblyEntryPath='workflow.wasm',
+    requestedPermissions=['nexa.actions.write', 'nexa.workflows.write', 'nexa.workflows.read',
+        'nexa.schedules.write', 'nexa.schedules.read', 'nexa.resources.write'],
+    requiredCapabilities=[{'contractId': contract, 'minimumVersion': 1} for contract in
+        ['nexa.actions', 'nexa.workflows', 'nexa.schedules', 'nexa.resources']],
+    payloads=[{'path': 'workflow.wasm', 'size': len(payload), 'sha256': hashlib.sha256(payload).hexdigest()}])
+with zipfile.ZipFile(args.out / 'workflow.zip', 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+    for name, data in [('plugin.json', json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode()), ('workflow.wasm', payload)]:
+        entry = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0)); entry.external_attr = 0o100644 << 16
+        archive.writestr(entry, data)
+print(args.out / 'workflow.zip')

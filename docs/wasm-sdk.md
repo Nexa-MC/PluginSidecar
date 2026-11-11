@@ -149,3 +149,18 @@ with file digests. It is a developer SDK artifact, not a signed plugin package.
 The C# NuGet package also contains the schemas and C headers. The additive
 `IPluginInvocationV1` interface preserves existing Bootstrap assembly identity;
 older entries can still implement only the original Bootstrap interface.
+
+## Runnable workflow example
+
+`samples/WasmWorkflow/plugin.c` uses generated schema fingerprints and builders to
+register an action, a persistent queued workflow, an interval schedule and cleanup.
+Its Initialize callback chains four asynchronous Host replies; Activated starts a
+workflow, and handler 1 returns a typed TextResult. Handler 2 is the cleanup path.
+Borrowed model views are never retained across a Host continuation.
+
+`eng/build_wasm_sample.py` builds `workflow.wasm` and a deterministic developer
+`workflow.zip` alongside the simple definition example. These unsigned ZIPs are
+explicit test/development input, not Market grants. Both managed and NativeAOT
+suites load the real package, wait for the activation run, manually trigger the
+schedule and verify the compiled cleanup after business callbacks are stopped.
+The standalone C/Wasm SDK archive includes both example sources.

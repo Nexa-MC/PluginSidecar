@@ -8,7 +8,7 @@ import zipfile
 root = Path(__file__).resolve().parents[1]
 version = ET.parse(root/'src/Nexa.Plugin.Sdk.Abi100/Nexa.Plugin.Sdk.Abi100.csproj').findtext('.//Version')
 files = [(p, 'include/nexa/'+p.name) for p in sorted((root/'sdk/wasm/include/nexa').glob('*.h'))]
-files += [(root/p, p) for p in ['contracts/abi100.json', 'contracts/abi100-legacy.json', 'samples/WasmHello/plugin.c', 'docs/wasm-sdk.md', 'LICENSE']]
+files += [(root/p, p) for p in ['contracts/abi100.json', 'contracts/abi100-legacy.json', 'samples/WasmHello/plugin.c', 'samples/WasmWorkflow/plugin.c', 'docs/wasm-sdk.md', 'LICENSE']]
 files += [(root/'sdk/wasm/README.md', 'README.md')]
 output = root/'artifacts/packages'/f'Nexa.Plugin.WasmSdk.{version}.zip'
 output.parent.mkdir(parents=True, exist_ok=True)

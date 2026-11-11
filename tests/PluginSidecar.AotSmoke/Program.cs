@@ -6,6 +6,7 @@ await ScheduleWorkflowTests.Run();
 await DurableEventTests.Run();
 await ContentRuntimeTests.Run();
 await ResourceRuntimeTests.Run();
+await WasmWorkflowTests.Run();
 await GuestSdkTests.Run();
 await GuestConformanceTests.Run();
 await CallbackSdkTests.Run();
