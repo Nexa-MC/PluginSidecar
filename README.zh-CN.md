@@ -42,7 +42,13 @@ dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 
 参阅[架构](docs/architecture.md)、[验收状态](docs/roadmap.md)、[Market 与离线](docs/market-offline.md)、[贡献指南](CONTRIBUTING.zh-CN.md)。Apache-2.0。
 
-组合运行库现已实现 13 个分组的 90 项操作，包含内容注册表、标签、覆盖解析与订阅、状态/CAS、持久事件回调、公开服务、动作、条件、任务，以及支持原子检查点、显式重启恢复、调度、并发策略与等待节点的工作流。C 示例和跨语言调用经过真实编译及加载验证；新增工作流示例串起连续注册、动作回调、定时触发和停用清理，CI 在 Windows、Linux、macOS 执行 NativeAOT 测试。Desktop 业务适配、UI 消费者等剩余项明确记录在[验收状态](docs/roadmap.md)。
+组合运行库现已实现 13 个分组的 90 项操作，包含内容注册表、标签、覆盖解析与订阅、状态/CAS、持久事件回调、公开服务、动作确认、条件、任务，以及支持原子检查点、显式重启恢复、调度、并发策略与等待节点的工作流。服务支持 Checkup 只读自检和自身加载报告。C 示例和跨语言调用经过真实编译及加载验证；新增工作流示例串起连续注册、动作回调、定时触发和停用清理，CI 在 Windows、Linux、macOS 执行 NativeAOT 测试。Desktop 业务适配、UI 消费者等剩余项明确记录在[验收状态](docs/roadmap.md)。
+
+运行 `dotnet pack PluginSidecar.slnx -c Release -o artifacts/packages` 和
+`python eng/package_sdk.py` 后，可通过 `python eng/verify_packages.py` 验证
+独立工程仅引用 NuGet 包即可加载实际编译的 Wasm 示例。验证使用隔离包缓存，
+不会借用仓库内项目引用。`python eng/bundle_sdk.py` 将 NuGet 包、C SDK、文档与
+SHA-256 清单打入 `artifacts/packages`；三平台 CI 会执行验证并上传开发包。
 
 CI 同时打包 Hosting、WasmRuntime、Packages 和仅用于可信开发的 RuntimeAdapter，并包含版本化依赖；宿主开发者无需直接引用本仓库源码项目。
 

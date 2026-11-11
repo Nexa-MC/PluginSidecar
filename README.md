@@ -29,6 +29,13 @@ binaries compatible. See [loading and migration](docs/loading-contract.md).
 
 Runtime behavior and remaining limits are documented in [runtime services](docs/runtime-services.md) and [acceptance status](docs/roadmap.md).
 
+After `dotnet pack PluginSidecar.slnx -c Release -o artifacts/packages` and
+`python eng/package_sdk.py`, run `python eng/verify_packages.py` to restore and
+execute an independent NuGet-only consumer. It uses an isolated package cache,
+the compiled Wasm sample and no repository project references.
+`python eng/bundle_sdk.py` creates a checksummed SDK bundle in `artifacts/packages`.
+CI runs these checks and uploads the bundle on Windows, Linux and macOS.
+
 ## Build and validate
 
 Requires .NET 10 and Python 3.12+:

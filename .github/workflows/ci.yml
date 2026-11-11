@@ -60,6 +60,8 @@ jobs:
       - run: dotnet pack src/PluginSidecar.WasmRuntime -c Release -o artifacts/packages
       - run: dotnet pack src/PluginSidecar.Packages -c Release -o artifacts/packages
       - run: dotnet pack src/PluginSidecar.RuntimeAdapter -c Release -o artifacts/packages
+      - run: python eng/verify_packages.py
+      - run: python eng/bundle_sdk.py
       - uses: actions/upload-artifact@v4
         with:
           name: plugin-sdk-${{ matrix.rid }}

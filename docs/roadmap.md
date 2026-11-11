@@ -15,7 +15,7 @@ working launcher integration are distinct acceptance milestones.
 | Market/offline | Signed encrypted delivery, device binding, atomic cache and offline-restart package loading | Real acquisition endpoint/UI, protected key custody and final Host admission |
 | Controlled execution | Import-free Wasmtime runner, fuel/memory/request limits, async continuations, native/WASI import rejection | Business effect policies and deployed integration |
 | Guest authoring | Full C/Wasm model/build/result bindings for 363 calls; compiled cross-language conformance and lifecycle callback tests | Additional language SDKs are outside the current C#/C SDK scope |
-| Distribution | SDK packaging, C sample build and three-OS NativeAOT runtime CI | Published signed `.nsc`, product integration and architecture certification |
+| Distribution | SDK packaging, C sample build, independent NuGet-only consumer, checksummed bundles and three-OS NativeAOT runtime CI | Published signed `.nsc`, product integration and architecture certification |
 
 The default kernel exposes 90 implemented routes across 13 groups, including
 state/CAS, durable/resumable event callbacks, subscription read/release, owned tasks,
