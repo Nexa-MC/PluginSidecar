@@ -10,7 +10,6 @@ public sealed partial class AtomicDefinitionRegistry(CapabilityAuthority authori
 {
     private readonly Dictionary<Guid, Dictionary<QualifiedId, PublishedDefinition>> _staged = [];
     private ImmutableDictionary<QualifiedId, PublishedDefinition> _published = ImmutableDictionary<QualifiedId, PublishedDefinition>.Empty;
-    private ulong _nextHandle;
     private long _storedBytes;
     private Revision _revision = new(Guid.NewGuid().ToString("N"));
     private readonly Dictionary<Guid, Revision> _stagedRevisions = [];
@@ -40,7 +39,7 @@ public sealed partial class AtomicDefinitionRegistry(CapabilityAuthority authori
             foreach (var definition in definitions)
             {
                 if (_published.ContainsKey(definition.Id) || next.ContainsKey(definition.Id)) throw new AbiHostException(AbiErrors.REGISTRATION_DUPLICATE);
-                next.Add(definition.Id, new(invocation.Identity, definition, new(Guid.NewGuid().ToString("N")), new(++_nextHandle, invocation.Identity.PluginId, invocation.Identity.LoadInstanceId, definition.Id, RegistrationState.Staged)));
+                next.Add(definition.Id, new(invocation.Identity, definition, new(Guid.NewGuid().ToString("N")), new(authority.AllocateRegistrationHandle(), invocation.Identity.PluginId, invocation.Identity.LoadInstanceId, definition.Id, RegistrationState.Staged)));
             }
             _staged[invocation.GroupId] = next;
             _storedBytes += addedBytes;

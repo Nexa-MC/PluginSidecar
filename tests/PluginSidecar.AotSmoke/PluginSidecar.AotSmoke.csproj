@@ -5,6 +5,7 @@
     <Compile Include="../PluginSidecar.Tests/EndToEndTests.cs" Link="EndToEndTests.cs" />
     <Compile Include="../PluginSidecar.Tests/StorageTests.cs" Link="StorageTests.cs" />
     <Compile Include="../PluginSidecar.Tests/WasmTests.cs" Link="WasmTests.cs" />
+    <Compile Include="../PluginSidecar.Tests/ResourceRuntimeTests.cs" Link="ResourceRuntimeTests.cs" />
     <Compile Include="../PluginSidecar.Tests/ContentRuntimeTests.cs" Link="ContentRuntimeTests.cs" />
     <Compile Include="../PluginSidecar.Tests/DurableEventTests.cs" Link="DurableEventTests.cs" />
     <Compile Include="../PluginSidecar.Tests/ScheduleWorkflowTests.cs" Link="ScheduleWorkflowTests.cs" />

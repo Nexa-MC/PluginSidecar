@@ -71,3 +71,10 @@ public static class StageBudgets
     });
     public static TimeSpan Cleanup => TimeSpan.FromSeconds(5);
 }
+
+/// <summary>Optional local execution adapter for bounded cleanup after business
+/// dispatch has been sealed. Only the trusted lifecycle coordinator invokes it.</summary>
+public interface IPluginCleanupInvocationV1
+{
+    ValueTask<AbiReply<AbiValue>> InvokeCleanup(ABIContext abi, ulong handler, string phase, InvocationOptions options);
+}

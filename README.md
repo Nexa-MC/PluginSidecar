@@ -5,7 +5,7 @@ English | [简体中文](README.zh-CN.md)
 NexaCL plugin contracts and SDK for derivative developers and contributors.
 The current design is [Plugin ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md).
 
-## SDK 0.2.0-alpha.3
+## SDK 0.2.0-alpha.4
 
 - `Nexa.Plugin.Bootstrap.V1`: unified ABIContext, required/optional capability negotiation, six loading stages, activation/cleanup callbacks, errors and Host commit ports.
 - `Nexa.Plugin.Sdk.Abi100`: 33 capability groups, 341 new typed operations, 238 data models, bounded codecs, opaque IDs/revisions, and the 22 previous preview dispatch slots.
@@ -52,7 +52,7 @@ RuntimeAdapter with their versioned dependencies. Host embedders can use those
 packages without a private project reference.
 
 Use `artifacts/packages` as a local NuGet source and reference
-`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.3`. Edit
+`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.4`. Edit
 [contracts/abi100.json](contracts/abi100.json), then run the generator without
 `--verify`; do not edit generated sources. CI checks reproducibility on all three
 supported operating systems. The managed sample demonstrates Get/Make negotiation and
@@ -70,7 +70,7 @@ See [architecture](docs/architecture.md), [acceptance status](docs/roadmap.md),
 [Market/offline](docs/market-offline.md), [contributing](CONTRIBUTING.md), and
 [security](SECURITY.md). Apache-2.0.
 
-The composed kernel implements 86 operations across 13 capability groups, including
+The composed kernel implements 88 operations across 13 capability groups, including
 resolved content registries/tags/overlays, state/CAS, durable event callbacks, public services, actions, predicates, tasks and
 workflows with atomic persistent checkpoints, scheduling and suspended nodes. It runs the same lifecycle tests in
 NativeAOT. Desktop business adapters, UI consumers and other remaining

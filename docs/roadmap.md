@@ -17,7 +17,7 @@ working launcher integration are distinct acceptance milestones.
 | Guest authoring | Full C/Wasm model/build/result bindings for 363 calls; compiled cross-language conformance and lifecycle callback tests | Additional language SDKs are outside the current C#/C SDK scope |
 | Distribution | SDK packaging, C sample build and three-OS NativeAOT runtime CI | Published signed `.nsc`, product integration and architecture certification |
 
-The default kernel exposes 86 implemented routes across 13 groups, including
+The default kernel exposes 88 implemented routes across 13 groups, including
 state/CAS, durable/resumable event callbacks, subscription read/release, owned tasks,
 diagnostics, contracts, services, actions, predicates and workflows in addition to
 definitions/storage. See [runtime behavior and limits](runtime-services.md).

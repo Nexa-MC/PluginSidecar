@@ -28,7 +28,7 @@ public sealed partial class AtomicDefinitionRegistry
         OwnContent(c,id);var data=T.Write(value);int bytes=AbiValueBinary.Encode(data).Length;
         if(_content.ContainsKey(id))throw new AbiHostException(AbiErrors.REGISTRATION_DUPLICATE);
         if(_content.Count>=1024||_storedBytes+bytes>32*1024*1024)throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
-        var registration=new RegistrationRef(++_nextHandle,c.Identity.PluginId,c.Identity.LoadInstanceId,id,RegistrationState.Staged);
+        var registration=new RegistrationRef(authority.AllocateRegistrationHandle(),c.Identity.PluginId,c.Identity.LoadInstanceId,id,RegistrationState.Staged);
         _content.Add(id,new(c.Identity,c.GroupId,registration,kind,data,bytes));_storedBytes+=bytes;
         _stagedRevisions[c.GroupId]=new(Guid.NewGuid().ToString("N"));return registration;
     }

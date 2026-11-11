@@ -220,3 +220,23 @@ the registry policy. Foreign-owned targets require both AuditedOverlay registry
 policy and trusted Host approval. Resolved reads, CAS revisions, tagged queries,
 previews and watch snapshots share one resolver. Publication/retirement changes
 both the visible data and its revision under the existing authority gate.
+
+## Cleanup and registration release (2026-11-11)
+
+Bootstrap cleanup and SDK Resources.RegisterCleanup share the same instance-owned
+cleanup table and reverse registration order. Explicit release takes a cleanup
+registration before invoking it, so cancellation/failure cannot replay it during
+stop. Cleanup callback execution is bounded and remains permitted after business
+callbacks are sealed. Wasm uses the existing handler envelope with the current
+lifecycle phase; no transport opcode is added. An optional local cleanup adapter
+interface separates this path from ordinary active-only business dispatch.
+
+Registration handles use one Host allocator across definitions, runtime services
+and cleanup tables. Release validates the full owner/load/definition identity,
+rejects in-use definitions and invalidates relevant snapshots. A numeric handle
+from one registration family cannot collide with another family's handle.
+
+The optional cleanup adapter and new Host composition ports advance the SDK
+packages to 0.2.0-alpha.4. Package dependencies require the matching preview so
+a new runtime cannot accidentally bind an older Bootstrap without the cleanup
+interface. Bootstrap assembly identity and existing numeric ABI slots are retained.

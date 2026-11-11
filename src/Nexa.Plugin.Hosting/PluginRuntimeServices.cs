@@ -9,6 +9,9 @@ namespace Nexa.Plugin.Hosting;
 public sealed partial class PluginRuntimeServices
 {
     private readonly object _gate;
+    internal Func<ulong> AllocateRegistrationHandle=null!;
+    internal Func<HostInvocation,ulong,RegistrationRef> RegisterCleanup=null!;
+    internal Func<HostInvocation,RegistrationRef,ValueTask<bool>> ReleaseCleanup=null!;
     private readonly string _workflowStore;
     private readonly PluginRuntimeOptions _options;
     private readonly Func<PluginIdentity,string,bool> _authorize;
@@ -48,7 +51,7 @@ public sealed partial class PluginRuntimeServices
             c.Options.Cancellation.ThrowIfCancellationRequested();
             if (_entries.ContainsKey((kind,id))) throw new AbiHostException(AbiErrors.REGISTRATION_DUPLICATE);
             if (_entries.Count >= 8192 || _bytes + size > 32*1024*1024) throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
-            var registration = new RegistrationRef(++_next,c.Identity.PluginId,c.Identity.LoadInstanceId,id,RegistrationState.Staged);
+            var registration = new RegistrationRef(AllocateRegistrationHandle(),c.Identity.PluginId,c.Identity.LoadInstanceId,id,RegistrationState.Staged);
             _entries.Add((kind,id), new(c.Identity,c.GroupId,registration,encoded,size)); _bytes+=size;
             if (!_lifetimes.ContainsKey(c.Identity.LoadInstanceId)) _lifetimes.Add(c.Identity.LoadInstanceId,new());
             _revision=NewRevision(); return registration;
@@ -187,5 +190,5 @@ public sealed partial class PluginRuntimeServices
             Notify("state",request.Id.Value,StateSnapshot.Write(updated));return updated;
         }
     }
-    public IEnumerable<HostCapabilityRoute> Routes => BasicRoutes.Concat(ServiceRoutes).Concat(EventRoutes).Concat(TaskRoutes).Concat(ActionRoutes).Concat(WorkflowRoutes).Concat(ScheduleRoutes).Concat(AvailabilityRoutes);
+    public IEnumerable<HostCapabilityRoute> Routes => BasicRoutes.Concat(ServiceRoutes).Concat(EventRoutes).Concat(TaskRoutes).Concat(ActionRoutes).Concat(WorkflowRoutes).Concat(ScheduleRoutes).Concat(AvailabilityRoutes).Concat(ResourceRoutes);
 }

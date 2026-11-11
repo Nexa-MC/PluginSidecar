@@ -24,6 +24,7 @@ public sealed class CapabilityAuthority
     private int _inflight, _memoEntries;
     private long _cachedBytes, _reservedBytes;
     internal object PublicationGate => _gate;
+    internal ulong AllocateRegistrationHandle(){lock(_gate)return checked(++_nextHandle);}
 
     public CapabilityAuthority(IEnumerable<HostCapabilityRoute> routes) : this(_ => routes) { }
 
@@ -91,6 +92,8 @@ public sealed class CapabilityAuthority
         internal Admission(Context context) => _context = context;
         public IAbiNegotiatorV1 Negotiator => _context;
         public ABIContext Context => _context;
+        internal void FreezePreInitialize()
+        {lock(_context.Gate){_context.PreInitializeOpen=false;_context.StageLifetime?.Cancel();_context.StageLifetime?.Dispose();_context.StageLifetime=null;}}
         public void Enter(StageContext stage)
         {
             lock (_context.Gate)
@@ -142,6 +145,7 @@ public sealed class CapabilityAuthority
         internal Guid GroupId { get; } = groupId;
         internal CancellationTokenSource Lifetime { get; } = new();
         internal bool Ready;
+        internal bool PreInitializeOpen=true;
         internal StageContext? Stage;
         internal string Phase = "PreInitialize";
         private readonly Dictionary<Guid, (string Digest, AbiReply<ABIContext> Result)> _makes = [];
@@ -234,8 +238,9 @@ public sealed class CapabilityAuthority
                 }
                 else
                 {
-                    if (Phase is not ("Active" or "Stop" or "Abort") || options.StageInvocationId != Guid.Empty) return Fail<AbiValue>(AbiErrors.STAGE_FROZEN, options);
-                    stageCancellation = Phase == "Active" ? Lifetime.Token : default;
+                    if (Phase is not ("PreInitialize" or "Active" or "Stop" or "Abort") || Phase=="PreInitialize"&&!PreInitializeOpen || options.StageInvocationId != Guid.Empty) return Fail<AbiValue>(AbiErrors.STAGE_FROZEN, options);
+                    if(Phase=="PreInitialize"){StageLifetime??=CancellationTokenSource.CreateLinkedTokenSource(Lifetime.Token);stageCancellation=StageLifetime.Token;}
+                    else stageCancellation = Phase == "Active" ? Lifetime.Token : default;
                 }
                 if (options.Cancellation.IsCancellationRequested || stageCancellation.IsCancellationRequested) return Fail<AbiValue>(AbiErrors.CANCELLED, options);
                 if (route.Descriptor.Idempotency != "ReadOnly")

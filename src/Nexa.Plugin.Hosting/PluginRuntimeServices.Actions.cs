@@ -11,7 +11,7 @@ public sealed partial class PluginRuntimeServices
         {if(v.Handler is null or 0)throw new AbiHostException(AbiErrors.HANDLE_INVALID);return ValueTask.FromResult(Stage(c,"action",v.Id,v));}),
         HostRoutes.Typed<QualifiedRequest,ActionDescriptor>("Actions","Describe",(c,v)=>ValueTask.FromResult(ActionDescriptor.Read(Find(c,"action",v.Id).Value))),
         HostRoutes.Typed<ActionRequest,OperationRef>("Actions","Invoke",(c,v)=>
-        {var entry=Find(c,"action",v.Action);var action=ActionDescriptor.Read(entry.Value);AdmitAction(c,action,v);return ValueTask.FromResult(StartOperation(c,action.Output,token=>InvokeAction(c,entry,action,v,token)));}),
+        {var entry=Find(c,"action",v.Action);var action=ActionDescriptor.Read(entry.Value);AdmitAction(c,action,v);return ValueTask.FromResult(StartOperation(c,action.Output,token=>InvokeAction(c,entry,action,v,token),_=>HoldRegistration(entry),exit:()=>DropRegistration(entry)));}),
         HostRoutes.Typed<PredicateDefinition,RegistrationRef>("Predicates","Register",(c,v)=>
         {if(v.Handler==0)throw new AbiHostException(AbiErrors.HANDLE_INVALID);if(v.Handler is null)Expression(v.Expression,new AbiValue.Null(),0,true);return ValueTask.FromResult(Stage(c,"predicate",v.Id,v));}),
         HostRoutes.Typed<QualifiedRequest,PredicateDefinition>("Predicates","Describe",(c,v)=>ValueTask.FromResult(PredicateDefinition.Read(Find(c,"predicate",v.Id).Value))),
@@ -66,11 +66,16 @@ public sealed partial class PluginRuntimeServices
             return new(DataCodec.ReadBoolean(Expression(predicate.Expression,request.Inputs,0,false))?PredicateOutcome.True:PredicateOutcome.False,request.Consistency,[]);
         // Runtime callback effects are not available before atomic activation.
         if(c.Phase!="Active")throw new AbiHostException(AbiErrors.SERVICE_NOT_READY);
-        var reply=await _dispatch(entry.Owner,predicate.Handler.Value,PredicateRequest.Write(request),c.Options).ConfigureAwait(false);
-        if(!reply.Success)throw new AbiHostException(reply.Error!.Code);
-        var result=PredicateResult.Read(reply.Value);
-        if(result.InputRevision!=request.Consistency)throw new AbiHostException(AbiErrors.STALE_REVISION);
-        return result;
+        HoldRegistration(entry);
+        try
+        {
+            var reply=await _dispatch(entry.Owner,predicate.Handler.Value,PredicateRequest.Write(request),c.Options).ConfigureAwait(false);
+            if(!reply.Success)throw new AbiHostException(reply.Error!.Code);
+            var result=PredicateResult.Read(reply.Value);
+            if(result.InputRevision!=request.Consistency)throw new AbiHostException(AbiErrors.STALE_REVISION);
+            return result;
+        }
+        finally{DropRegistration(entry);}
     }
     private static AbiValue Expression(AbiValue expression,AbiValue input,int depth,bool validateOnly)
     {

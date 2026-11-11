@@ -56,7 +56,9 @@ internal static class CallbackSdkTests
         var errorInput = DataCodec.Map(("code", DataCodec.WriteString("CUSTOM")), ("pluginId", DataCodec.WriteString("forged")), ("messageKey", DataCodec.WriteString("custom.message")));
         var failed = await entry.InvokeHandler(abi, 3, errorInput, invocation);
         Check(failed.Error is { Code: "CUSTOM", MessageKey: "custom.message" } && failed.Error.PluginId == identity.PluginId && failed.Error.CorrelationId == correlation);
-        admission.Retire(false); Check((await entry.OnStop(new(identity, abi, "test", default, TimeSpan.FromSeconds(5)))).Success); admission.CompleteStop();
+        admission.Retire(false); Check((await entry.OnStop(new(identity, abi, "test", default, TimeSpan.FromSeconds(5)))).Success);
+        Check((await entry.InvokeCleanup(abi,1,"Stop",new(Guid.NewGuid(),TimeSpan.FromSeconds(5),default))).Success);
+        admission.CompleteStop();
         Check((await entry.InvokeHandler(abi, 1, input, invocation)).Error?.Code == AbiErrors.PLUGIN_STOPPED);
         Console.WriteLine("PASS: typed managed callbacks, compiled Wasm handlers, context metadata, Host continuations, causation, owner checks and activation/stop fencing.");
     }

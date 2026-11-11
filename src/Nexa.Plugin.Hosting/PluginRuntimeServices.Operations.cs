@@ -148,7 +148,7 @@ public sealed partial class PluginRuntimeServices
             Validate(method.Input,v.Input);
             var input=ServiceCall.Write(v with {CallChain=v.CallChain.Add(c.Identity.LoadInstanceId)});
             return ValueTask.FromResult(StartOperation(c,method.Output,token=>_dispatch(binding.Provider.Owner,definition.Handler,input,
-                c.Options with {OperationId=Guid.NewGuid(),CausationId=c.Options.OperationId,Cancellation=token})));
+                c.Options with {OperationId=Guid.NewGuid(),CausationId=c.Options.OperationId,Cancellation=token}),_=>HoldRegistration(binding.Provider),exit:()=>DropRegistration(binding.Provider)));
         })
     ];
 }

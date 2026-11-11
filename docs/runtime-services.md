@@ -1,6 +1,6 @@
 # Runtime services
 
-`PluginHostRuntime` installs 86 implemented operations from the ABI catalog. The
+`PluginHostRuntime` installs 88 implemented operations from the ABI catalog. The
 embedding Host still supplies schema policy, verified acquisition, grants and
 launcher business adapters. This is a runnable library kernel, not an installed
 Desktop Sidecar. The CLI remains a scaffold. No production signing key or live
@@ -174,3 +174,22 @@ Host Snapshot and consumer publication use the same resolved values as SDK reads
 Content dependencies participate in consumer-first plugin retirement. Dynamic
 registry snapshots are bounded to 1 MiB; the combined definition/metadata store
 retains its 32 MiB limit and at most 1024 registry/tag/overlay declarations.
+
+## Cleanup and release
+
+Resources.RegisterCleanup and Bootstrap IResourcesV1 share one instance-owned
+cleanup registration table. The same callback yields the same registration.
+Resources.Release removes a cleanup registration before invoking it, so an
+unknown result cannot cause a second cleanup during stop. Remaining callbacks run
+in reverse registration order under one bounded cleanup budget. A cleanup may
+release another cleanup without double execution. The optional local
+IPluginCleanupInvocationV1 adapter lets compiled Wasm handlers run after normal
+business dispatch is sealed, using the existing handler envelope/lifecycle phase.
+
+All registration families allocate handles from one Host counter. Generic release
+checks owner/load/definition identity and rejects required references, live service
+bindings and running callback leases. Releasing declarations updates the resolved
+content or availability state. PreInitialize routes declared by the catalog are
+callable after Make; returning from PreInitialize freezes that call scope.
+Synchronous lifecycle/cleanup callbacks run behind the same deadline as async
+callbacks. A timed-out effect remains an unknown outcome and is not re-executed.

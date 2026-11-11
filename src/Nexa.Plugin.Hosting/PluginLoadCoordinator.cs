@@ -13,6 +13,7 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
     Func<PluginIdentity, ValueTask>? retireResources = null, PluginRuntimeServices? services = null) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Dictionary<Guid,Attempt> _instances=[];
     private readonly Dictionary<string, Attempt> _active = new(StringComparer.Ordinal);
     private bool _disposed;
     public ImmutableArray<PluginIdentity> Active { get { lock (authority.PublicationGate) return _active.Values.Select(a => a.Identity).ToImmutableArray(); } }
@@ -49,8 +50,11 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
                         cancellation.ThrowIfCancellationRequested();
                         member.Entry = await member.Source.CreateVerifiedEntry(cancellation).ConfigureAwait(false);
                         member.Stage = LoadStage.PreInitialize;
-                        var bootstrap = new BootstrapServices(member);
-                        var pre = await Bound(member, token => member.Entry.OnPreInitialize(new(member.Identity, 1, member.Admission!.Negotiator, bootstrap, bootstrap, bootstrap, token, StageBudgets.For(LoadStage.PreInitialize))), cancellation).ConfigureAwait(false);
+                        lock(authority.PublicationGate)_instances.Add(member.Identity.LoadInstanceId,member);
+                        var bootstrap = new BootstrapServices(member,authority);
+                        AbiReply<PreInitResult> pre;
+                        try { pre = await Bound(member, token => member.Entry.OnPreInitialize(new(member.Identity, 1, member.Admission!.Negotiator, bootstrap, bootstrap, bootstrap, token, StageBudgets.For(LoadStage.PreInitialize))), cancellation).ConfigureAwait(false); }
+                        finally { member.Admission!.FreezePreInitialize(); }
                         if (!pre.Success) { failure = pre.Error; break; }
                         if (!member.Admission!.IsReady || !ReferenceEquals(pre.Value.FinalContext, member.Admission.Context) || !SameDeclarations(member.Source.Manifest, pre.Value))
                         { failure = Error(member, AbiErrors.ABI_CONTRACT_MISMATCH); break; }
@@ -228,38 +232,34 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
     private static async ValueTask<AbiReply<T>> Bound<T>(Attempt member, Func<CancellationToken, ValueTask<AbiReply<T>>> callback, CancellationToken cancellation)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation); deadline.CancelAfter(StageBudgets.For(member.Stage));
-        var task = callback(deadline.Token).AsTask();
+        var task = Task.Run(async()=>await callback(deadline.Token).ConfigureAwait(false),deadline.Token);
         try { return await task.WaitAsync(deadline.Token).ConfigureAwait(false); }
         catch { _ = Observe(task); throw; }
     }
     private static async Task Observe(Task task) { try { await task.ConfigureAwait(false); } catch (Exception e) when (Recoverable(e)) { } }
     private static async ValueTask<AbiError?> CleanupCall(Attempt member, Func<ValueTask<AbiReply<Unit>>> callback)
     {
-        try { var task = callback().AsTask(); _ = Observe(task); var result = await task.WaitAsync(StageBudgets.Cleanup).ConfigureAwait(false); return result.Error; }
+        try { var task = Task.Run(async()=>await callback().ConfigureAwait(false)); _ = Observe(task); var result = await task.WaitAsync(StageBudgets.Cleanup).ConfigureAwait(false); return result.Error; }
         catch (Exception e) when (Recoverable(e)) { return Error(member, AbiErrors.PLUGIN_EXCEPTION); }
     }
     private static async ValueTask RunRegisteredCleanup(Attempt member)
     {
         CallbackHandle[] cleanupHandles;
         lock(member.Callbacks) cleanupHandles=member.CleanupCallbacks.AsEnumerable().Reverse().ToArray();
+        using var deadline = new CancellationTokenSource(StageBudgets.Cleanup);
+        long started=System.Diagnostics.Stopwatch.GetTimestamp();
         foreach (var handle in cleanupHandles)
         {
-            Func<AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>>? callback;
-            lock (member.Callbacks) member.Callbacks.TryGetValue(handle.Value, out callback);
-            if (callback is null) continue;
-            using var deadline = new CancellationTokenSource(StageBudgets.Cleanup);
-            try
-            {
-                var task = callback(new AbiValue.Null(), new(Guid.NewGuid(), StageBudgets.Cleanup, deadline.Token)).AsTask();
-                _ = Observe(task); var result = await task.WaitAsync(deadline.Token).ConfigureAwait(false);
-                if (!result.Success) member.Cleanup.Add(result.Error!);
-            }
-            catch (Exception e) when (Recoverable(e)) { member.Cleanup.Add(Error(member, AbiErrors.PLUGIN_EXCEPTION)); }
+            var remaining=StageBudgets.Cleanup-System.Diagnostics.Stopwatch.GetElapsedTime(started);
+            if(remaining<=TimeSpan.Zero){member.Cleanup.Add(Error(member,AbiErrors.DEADLINE_EXCEEDED));break;}
+            lock(member.Callbacks){if(!member.CleanupRegistrations.Remove(handle.Value))continue;member.CleanupCallbacks.Remove(handle);}
+            var result=await InvokeCleanup(member,handle.Value,member.State==LoadState.Active?"Stop":"Abort",new(Guid.NewGuid(),remaining,deadline.Token)).ConfigureAwait(false);
+            if(!result.Success)member.Cleanup.Add(result.Error!);
         }
-        lock(member.Callbacks) { member.CleanupCallbacks.Clear(); member.Callbacks.Clear(); }
+        lock(member.Callbacks) { member.CleanupCallbacks.Clear();member.CleanupRegistrations.Clear(); member.Callbacks.Clear(); }
     }
-    private static async ValueTask Release(Attempt member)
-    { try { var task = member.Source.Release().AsTask(); _ = Observe(task); await task.WaitAsync(StageBudgets.Cleanup).ConfigureAwait(false); } catch (Exception e) when (Recoverable(e)) { member.Cleanup.Add(Error(member, AbiErrors.PLUGIN_EXCEPTION)); } }
+    private async ValueTask Release(Attempt member)
+    { lock(authority.PublicationGate)_instances.Remove(member.Identity.LoadInstanceId);try { var task = Task.Run(async()=>await member.Source.Release().ConfigureAwait(false)); _ = Observe(task); await task.WaitAsync(StageBudgets.Cleanup).ConfigureAwait(false); } catch (Exception e) when (Recoverable(e)) { member.Cleanup.Add(Error(member, AbiErrors.PLUGIN_EXCEPTION)); } }
     private async ValueTask RetireResources(Attempt member)
     {
         if (retireResources is null) return;
@@ -299,30 +299,26 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
         internal List<Finding> Diagnostics = [];
         internal Dictionary<ulong, Func<AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>>> Callbacks = [];
         internal List<CallbackHandle> CleanupCallbacks = [];
+        internal Dictionary<ulong,Nexa.Plugin.Sdk.Abi100.Data.RegistrationRef> CleanupRegistrations=[];
         internal ulong NextCallback;
     }
-    private sealed class BootstrapServices(Attempt member) : IDiagnosticsV1, IResourcesV1, ICallbacksV1
+    private sealed class BootstrapServices(Attempt member,CapabilityAuthority authority) : IDiagnosticsV1, IResourcesV1, ICallbacksV1
     {
         public ValueTask<AbiReply<Unit>> ReportDiagnostic(Finding finding, InvocationOptions options)
         {
             if (member.Diagnostics.Count >= 1024) return ValueTask.FromResult(AbiReply<Unit>.Fail(Error(member, AbiErrors.MESSAGE_TOO_LARGE)));
             member.Diagnostics.Add(finding); return ValueTask.FromResult(AbiReply<Unit>.Ok(new()));
         }
-        public ValueTask<AbiReply<RegistrationHandle>> RegisterCleanup(CallbackHandle callback, InvocationOptions options)
+        public ValueTask<AbiReply<RegistrationHandle>> RegisterCleanup(CallbackHandle callback,InvocationOptions options)
         {
-            lock(member.Callbacks)
-            {
-                if(member.Invocations.IsCancellationRequested)return ValueTask.FromResult(AbiReply<RegistrationHandle>.Fail(Error(member,AbiErrors.PLUGIN_STOPPED)));
-                if (!member.Callbacks.ContainsKey(callback.Value)) return ValueTask.FromResult(AbiReply<RegistrationHandle>.Fail(Error(member, AbiErrors.HANDLE_INVALID)));
-                if (!member.CleanupCallbacks.Contains(callback)) member.CleanupCallbacks.Add(callback);
-                return ValueTask.FromResult(AbiReply<RegistrationHandle>.Ok(new(callback.Value)));
-            }
+            try{options.Cancellation.ThrowIfCancellationRequested();var reference=RegisterCleanupCore(member,authority,callback.Value);return ValueTask.FromResult(AbiReply<RegistrationHandle>.Ok(new(reference.Handle)));}
+            catch(Exception error)when(Recoverable(error)){return ValueTask.FromResult(AbiReply<RegistrationHandle>.Fail(Error(member,error is AbiHostException known?known.Code:error is OperationCanceledException?AbiErrors.CANCELLED:AbiErrors.PLUGIN_EXCEPTION)));}
         }
         public CallbackHandle Register(string contractId, Func<AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>> callback)
         {
             ArgumentNullException.ThrowIfNull(callback);
             lock (member.Callbacks) { if(member.Invocations.IsCancellationRequested)throw new InvalidOperationException(AbiErrors.PLUGIN_STOPPED);if (member.Callbacks.Count >= 256) throw new InvalidOperationException(AbiErrors.MESSAGE_TOO_LARGE);var handle = new CallbackHandle(++member.NextCallback); member.Callbacks.Add(handle.Value, callback); return handle; }
         }
-        public void Release(CallbackHandle callback) { lock (member.Callbacks) { member.Callbacks.Remove(callback.Value); member.CleanupCallbacks.Remove(callback); } }
+        public void Release(CallbackHandle callback) { lock (member.Callbacks) { member.Callbacks.Remove(callback.Value); member.CleanupCallbacks.Remove(callback);member.CleanupRegistrations.Remove(callback.Value); } }
     }
 }
