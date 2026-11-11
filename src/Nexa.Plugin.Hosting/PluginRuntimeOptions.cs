@@ -9,9 +9,20 @@ public sealed record PluginRuntimeOptions
     public TimeProvider Clock { get; init; } = TimeProvider.System;
     public bool AutomaticSchedules { get; init; } = true;
     public IWorkflowInteraction? Interaction { get; init; }
+    public IActionConfirmation? ActionConfirmation { get; init; }
     public ImmutableArray<IRegistryConsumer> RegistryConsumers { get; init; } = [];
     public Func<PluginIdentity,OverlayDefinition,bool>? ApproveForeignOverlay { get; init; }
     public Func<QualifiedId,ImmutableArray<QualifiedId>,ImmutableArray<QualifiedId>>? SelectOverlays { get; init; }
+}
+
+public sealed record ActionConfirmationRequest(Guid RequestId, PluginIdentity Caller,
+    PluginIdentity Provider, ActionDescriptor Action, ActionRequest Request, Guid CorrelationId);
+
+/// <summary>Trusted Host confirmation UI. Approval applies only to this immutable request.
+/// Implementations must honour cancellation and never execute the action themselves.</summary>
+public interface IActionConfirmation
+{
+    ValueTask<bool> ConfirmAsync(ActionConfirmationRequest request, CancellationToken cancellation);
 }
 
 public sealed record WorkflowInteractionRequest(Guid RequestId, PluginIdentity Owner, EntityId Run,

@@ -148,8 +148,8 @@ public sealed partial class PluginRuntimeServices
                     var entry=Find(c,"action",node.Target!);var action=ActionDescriptor.Read(entry.Value);
                     var request=new ActionRequest(node.Target!,new(new("nexa:workflow"),run.Id,c.Identity.PluginId),input,null,run.Id.Value+"/"+path);
                     AdmitAction(c,action,request);
-                    if(action.Idempotency!=IdempotencyMode.ReadOnly)lock(_gate){run.PendingEffects.Add(path);PersistRun(run.Operation!);}
-                    var reply=await InvokeAction(c,entry,action,request,token).ConfigureAwait(false);
+                    var reply=await InvokeAction(c,entry,action,request,token,()=>
+                    {if(action.Idempotency!=IdempotencyMode.ReadOnly){run.PendingEffects.Add(path);PersistRun(run.Operation!);}}).ConfigureAwait(false);
                     if(!reply.Success)throw new AbiHostException(reply.Error!.Code);return reply.Value;
                 case WorkflowNodeKind.If:
                     var condition=await EvaluatePredicate(c,new(node.Target!,input,new(run.Definition.DefinitionDigest))).ConfigureAwait(false);

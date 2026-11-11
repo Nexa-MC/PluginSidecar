@@ -20,9 +20,17 @@ cancellation and causal metadata. Nested callback cycles are rejected. Host serv
 calls return an owned operation whose typed result is read through Tasks.Read.
 Native-execution service methods and unapproved cross-service delegation are denied.
 Actions validate input/output schemas and declared capability/scope requirements.
-Actions requiring confirmation remain denied until a trusted UI confirmation port
-is integrated. Non-read-only action idempotency keys bind inputs within a load;
+Actions requiring confirmation use the trusted `IActionConfirmation` port supplied
+through `PluginRuntimeOptions`; missing UI fails with `CAPABILITY_UNAVAILABLE`.
+The Host receives the actual caller/provider, descriptor, input and target.
+Concurrent retries coalesce both the prompt and effect. Decline or cancellation
+never dispatches the handler; late answers are ignored. Confirmation is bounded
+by the invocation budget even if the UI adapter blocks synchronously. Caller or
+provider retirement cancels a pending confirmation. After approval, permissions
+and registration identity are checked again. Non-read-only action idempotency keys bind inputs within a load;
 a reused key with different arguments fails instead of invoking the handler again.
+An unvalidated result or interrupted effect is `OUTCOME_UNKNOWN` and is not replayed.
+The real Desktop confirmation UI remains an embedding integration task.
 
 ## State, events and subscriptions
 
@@ -76,6 +84,8 @@ Resume requires the current revision and unchanged full workflow definition/inpu
 completed outputs and early-return markers are reused. An effect is recorded
 before dispatch and cleared only after a validated result. If that result is
 unknown after interruption, the run becomes OUTCOME_UNKNOWN and cannot be replayed.
+Confirmation precedes this effect marker, so a declined dialog remains a known
+failed step across restart rather than an uncertain effect.
 There is no invented successful recovery and no automatic retry after restart.
 RetryStep only resumes a known failed step/run when these same checks allow it.
 Read/ListRuns load the current owner's saved runs; Tasks.Dismiss removes a terminal

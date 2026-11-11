@@ -240,3 +240,16 @@ The optional cleanup adapter and new Host composition ports advance the SDK
 packages to 0.2.0-alpha.4. Package dependencies require the matching preview so
 a new runtime cannot accidentally bind an older Bootstrap without the cleanup
 interface. Bootstrap assembly identity and existing numeric ABI slots are retained.
+
+## Action confirmation (2026-11-11)
+
+Actions requiring user confirmation use a trusted, optional Host interaction port.
+The immutable request identifies the admitted caller, actual provider, descriptor
+and exact input/target. Plugins cannot supply an approval. Confirmation runs outside
+the publication lock, has a bounded deadline and is cancelled on caller/provider
+retirement. A late answer cannot execute an action. Execution rechecks permissions
+and registration identity after approval. The per-load action idempotency table
+coalesces concurrent confirmations as well as execution; a declined request needs
+a new key to prompt again. Persistent workflow effect markers are flushed only
+after approval, immediately before dispatch, so declining a prompt does not leave
+an uncertain business effect. Desktop still supplies the actual state/intent UI.

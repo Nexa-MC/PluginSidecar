@@ -21,18 +21,18 @@ public sealed partial class PluginRuntimeServices
     {
         Validate(action.Input,request.Inputs);
         if(!_capabilities(c,action.RequiredCapabilities)||action.Scopes.Length!=0&&!action.Scopes.Contains(request.Target.Scope))throw new AbiHostException(AbiErrors.CAPABILITY_DENIED);
-        if(action.Confirmation!=ConfirmationRequirement.None)throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
+        if(action.Confirmation!=ConfirmationRequirement.None&&_options.ActionConfirmation is null)throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
         if(action.Idempotency==IdempotencyMode.RequiredKey&&string.IsNullOrWhiteSpace(request.IdempotencyKey))throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
     }
     private readonly Dictionary<(Guid, QualifiedId, string), (string Digest, TaskCompletionSource<AbiReply<AbiValue>> Completion)> _actionMemo=[];
-    private async ValueTask<AbiReply<AbiValue>> InvokeAction(HostInvocation c,Entry entry,ActionDescriptor action,ActionRequest request,CancellationToken token)
+    private async ValueTask<AbiReply<AbiValue>> InvokeAction(HostInvocation c,Entry entry,ActionDescriptor action,ActionRequest request,CancellationToken token,Action? beforeDispatch=null)
     {
         TaskCompletionSource<AbiReply<AbiValue>>? completion=null;
         Task<AbiReply<AbiValue>>? replay=null;
-        if(action.Idempotency!=IdempotencyMode.ReadOnly)
+        if(action.Idempotency!=IdempotencyMode.ReadOnly||action.Confirmation!=ConfirmationRequirement.None)
         {
             string digest=Convert.ToHexString(SHA256.HashData(AbiValueBinary.Encode(ActionRequest.Write(request))));
-            var key=(c.Identity.LoadInstanceId,action.Id,request.IdempotencyKey);
+            var key=(c.Identity.LoadInstanceId,action.Id,string.IsNullOrEmpty(request.IdempotencyKey)?c.Options.OperationId.ToString("N"):request.IdempotencyKey);
             lock(_gate)
             {
                 if(_actionMemo.TryGetValue(key,out var prior))
@@ -45,19 +45,53 @@ public sealed partial class PluginRuntimeServices
             }
         }
         if(replay is not null)return await replay.WaitAsync(token).ConfigureAwait(false);
-        AbiReply<AbiValue> reply;
+        AbiReply<AbiValue> reply;bool dispatched=false;
         try
         {
+            await ConfirmAction(c,entry,action,request,token).ConfigureAwait(false);
+            token.ThrowIfCancellationRequested();
+            AdmitAction(c,action,request);
+            if(!_authorize(c.Identity,"nexa.actions.write"))throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
+            lock(_gate)
+            {
+                if(!_entries.TryGetValue(("action",action.Id),out var current)||current.Owner!=entry.Owner||
+                    current.Registration.Handle!=entry.Registration.Handle||current.Registration.State!=RegistrationState.Active)
+                    throw new AbiHostException(AbiErrors.PROVIDER_GONE);
+                beforeDispatch?.Invoke();
+            }
+            dispatched=true;
             reply=await _dispatch(entry.Owner,action.Handler!.Value,ActionRequest.Write(request),c.Options with
             {OperationId=Guid.NewGuid(),CausationId=c.Options.OperationId,Cancellation=token,IdempotencyKey=request.IdempotencyKey}).ConfigureAwait(false);
             if(reply.Success){Validate(action.Output,reply.Value);if(AbiValueBinary.Encode(reply.Value).Length>65536)throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);}
+            else if(action.Idempotency!=IdempotencyMode.ReadOnly&&reply.Error!.Code is AbiErrors.CANCELLED or AbiErrors.DEADLINE_EXCEEDED or AbiErrors.PLUGIN_STOPPED or AbiErrors.PLUGIN_EXCEPTION)
+                reply=AbiReply<AbiValue>.Fail(reply.Error with {Code=AbiErrors.OUTCOME_UNKNOWN,MessageKey=AbiErrors.OUTCOME_UNKNOWN,Retryable=false});
         }
         catch(Exception error) when(error is not OutOfMemoryException and not AccessViolationException)
         {
-            string code=error is AbiHostException known?known.Code:error is OperationCanceledException?AbiErrors.OUTCOME_UNKNOWN:AbiErrors.PLUGIN_EXCEPTION;
+            string code=dispatched&&action.Idempotency!=IdempotencyMode.ReadOnly?AbiErrors.OUTCOME_UNKNOWN:
+                error is AbiHostException known?known.Code:error is OperationCanceledException?AbiErrors.CANCELLED:AbiErrors.PLUGIN_EXCEPTION;
             reply=AbiReply<AbiValue>.Fail(new(code,code,"Active","action.invoke",c.Identity.PluginId,c.Identity.LoadInstanceId,c.Options.CorrelationId,false,ImmutableDictionary<string,string>.Empty));
         }
         completion?.TrySetResult(reply);return reply;
+    }
+    private async ValueTask ConfirmAction(HostInvocation caller,Entry provider,ActionDescriptor action,ActionRequest request,CancellationToken token)
+    {
+        if(action.Confirmation==ConfirmationRequirement.None)return;
+        var confirmation=_options.ActionConfirmation??throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
+        var providerLifetime=Lifetime(provider.Owner);
+        using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token,providerLifetime);
+        timeout.CancelAfter(caller.Options.Budget);
+        var cancellation=timeout.Token;
+        var question=new ActionConfirmationRequest(Guid.NewGuid(),caller.Identity,provider.Owner,action,request,caller.Options.CorrelationId);
+        // A synchronous UI adapter must not defeat the operation deadline.
+        var pending=Task.Run(async()=>await confirmation.ConfirmAsync(question,cancellation).ConfigureAwait(false),cancellation);
+        _=ObserveInteraction(pending);
+        bool approved;
+        try{approved=await pending.WaitAsync(timeout.Token).ConfigureAwait(false);}
+        catch(OperationCanceledException) when(!token.IsCancellationRequested&&!providerLifetime.IsCancellationRequested)
+        {throw new AbiHostException(AbiErrors.DEADLINE_EXCEEDED);}
+        timeout.Token.ThrowIfCancellationRequested();
+        if(!approved)throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
     }
     private async ValueTask<PredicateResult> EvaluatePredicate(HostInvocation c,PredicateRequest request)
     {

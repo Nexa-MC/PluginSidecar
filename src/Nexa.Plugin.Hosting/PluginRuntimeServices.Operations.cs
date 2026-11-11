@@ -68,7 +68,7 @@ public sealed partial class PluginRuntimeServices
                 Change(operation,operation.Record with {State=OperationState.Running,Stage="running"});
                 var result=await execute(operation.Lifetime.Token).ConfigureAwait(false);
                 if(result.Success) { Validate(operation.Record.ResultSchema,result.Value); Change(operation,operation.Record with {State=OperationState.Completed,Progress=1,Stage="completed",Result=result.Value}); }
-                else Change(operation,operation.Record with {State=result.Error!.Code==AbiErrors.CANCELLED?OperationState.Cancelled:OperationState.Failed,Stage="failed",
+                else Change(operation,operation.Record with {State=result.Error!.Code switch{AbiErrors.CANCELLED=>OperationState.Cancelled,AbiErrors.OUTCOME_UNKNOWN=>OperationState.OutcomeUnknown,_=>OperationState.Failed},Stage="failed",
                     Failure=new(result.Error.Code,Text(result.Error.MessageKey),result.Error.CorrelationId,result.Error.Retryable,[])});
             }
             catch(OperationCanceledException) { Change(operation,operation.Record with {State=OperationState.Cancelled,Stage="cancelled"}); }
