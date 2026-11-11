@@ -26,7 +26,14 @@ internal static class DurableEventTests
     {using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(8));while(!condition())await Task.Delay(5,timeout.Token);}
     private static async Task<string> Receive(Entry entry)=>await entry.Received.Reader.ReadAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(8));
     private static void Checkpoint(string root,string cursor,long sequence)=>Check(ReadCheckpoint(root,cursor)==sequence);
-    private static long ReadCheckpoint(string root,string cursor)=>DataCodec.ReadInt64(DataCodec.Field(DataCodec.ReadMap(AbiValueBinary.Decode(File.ReadAllBytes(Path.Combine(root,"events",cursor+".cursor")))),"sequence"));
+    private static long ReadCheckpoint(string root,string cursor)
+    {
+        // The writer atomically replaces the checkpoint. A concurrent observer must
+        // allow delete/rename sharing on Windows and read one opened file snapshot.
+        using var file=new FileStream(Path.Combine(root,"events",cursor+".cursor"),FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete);
+        using var bytes=new MemoryStream();file.CopyTo(bytes);
+        return DataCodec.ReadInt64(DataCodec.Field(DataCodec.ReadMap(AbiValueBinary.Decode(bytes.ToArray())),"sequence"));
+    }
     private static async Task Recovery()
     {
         string root=Temp();string cursor;
