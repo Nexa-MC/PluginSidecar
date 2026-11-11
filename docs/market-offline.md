@@ -33,7 +33,7 @@ Offline operation requires prior successful acquisition, an intact cache, a trus
 1. Backend: a reviewed plugin delivery endpoint, a provisioned package-signing key, ownership/security checks and immutable plugin manifest/package format. Current `/store/items/{id}/artifact` rejects plugins; do not silently repurpose theme delivery.
 2. Market Sidecar: authenticated online acquisition adapter and explicit install/update UI. Never send bearer tokens or signer keys across Host IPC.
 3. Host: existing binary ABI capability routing, protected device-key custody, offline subject selection, load permits and cache ownership/quota policy.
-4. Loader: verified package manifest/dependency parsing before `MemoryPlugin.LoadVerifiedPayloads`, followed by six-stage group loading.
+4. Loader: the local verified ZIP parser, Wasm/declarative entries and six-stage coordinator are implemented and tested. Connect that composition to the authenticated Host session and protected device-key owner. The CoreCLR `MemoryPlugin.LoadTrustedDevelopmentPayloads` helper remains trusted development only.
 
 No production service, publisher key or launcher route is deployed by this component.
 

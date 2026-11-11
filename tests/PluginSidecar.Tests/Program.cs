@@ -8,16 +8,24 @@ Assert(!AbiVersions.IsStable(0) && !AbiVersions.IsStable(101) && !AbiVersions.Is
 Assert(AbiVersions.IsStable(100) && AbiVersions.IsStable(200));
 await MarketOfflineTests.Run();
 await ContextTests.Run();
+await SurfaceTests.Run();
+await AuthorityTests.Run();
+await LoadingTests.Run();
+await WasmTests.Run();
+await EndToEndTests.Run();
+await DefinitionTests.Run();
+await GuestSdkTests.Run();
+await PluginSidecar.Tests.StorageTests.Run();
 var error = new AbiError(AbiErrors.PERMISSION_DENIED, "denied", "PreInitialize", "abi.make", "example.plugin", Guid.NewGuid(), Guid.NewGuid(), false, ImmutableDictionary<string, string>.Empty);
 Assert(AbiReply<AbiContextHandle>.Fail(error).Value.Value == 0);
 var probe = new Probe(error);
 var options = new InvocationOptions(Guid.NewGuid(), TimeSpan.FromSeconds(5), default);
 var events = new Events100(probe);
 await events.DeclareEvent(new("event", "schema", "digest", 1024, 16), options);
-await events.Subscribe(new("provider", "event", "schema", new(9), true, 1, 16), options);
+await events.Subscribe(new EventSubscription("provider", "event", "schema", new(9), true, 1, 16), options);
 await events.Publish(new(ulong.MaxValue), new AbiValue.Null(), options);
 Assert(((AbiValue.UInt64)((AbiValue.Map)probe.Arguments!).Value["handle"]).Value == ulong.MaxValue);
-await events.Unsubscribe(new(1), options);
+await events.Unsubscribe(new RegistrationHandle(1), options);
 var ui = new Ui100(probe);
 await ui.DeclareSurface(new("surface", new AbiValue.Null(), []), options);
 await ui.DeclareCommand(new("command", "title"), new(9), options);
@@ -35,15 +43,15 @@ Assert(ReferenceEquals(failed.Error, error));
 await plugins.ExportService(new("svc", "contract", 1, "digest", [], new AbiValue.Null()), new(9), options);
 await plugins.Probe(new(1), 3, new AbiValue.Null(), options);
 var diagnostics = new Diagnostics100(probe);
-await diagnostics.Report(new("test", "test", "info"), options);
+await diagnostics.Report(new Diagnostic("test", "test", "info"), options);
 await diagnostics.ReportFinding(new("test", "test", false), options);
 await diagnostics.QueryRegistrations(options);
 await diagnostics.QueryBindingStatus(options);
-await new Resources100(probe).RegisterCleanup(new(9), options);
+await new Resources100(probe).RegisterCleanup(new CallbackHandle(9), options);
 Assert(probe.Calls.SequenceEqual(new[] {1, 2, 4, 5}.Select(i => ("nexa.events/100", (uint)i)).Concat(Enumerable.Range(1, 6).Select(i => ("nexa.ui/100", (uint)i))).Concat(Enumerable.Range(1, 7).Select(i => ("nexa.interplugin/100", (uint)i))).Concat(Enumerable.Range(1, 4).Select(i => ("nexa.diagnostics/100", (uint)i))).Append(("nexa.resources/100", 1u))));
 Assert(probe.LastOptions == options);
 var bytes = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "fixtures", "HelloPlugin.dll"));
-using var loaded = MemoryPlugin.LoadVerifiedPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]> { ["HelloPlugin"] = bytes });
+using var loaded = MemoryPlugin.LoadTrustedDevelopmentPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]> { ["HelloPlugin"] = bytes, ["Nexa.Plugin.Sdk.Abi100"] = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Nexa.Plugin.Sdk.Abi100.dll")) });
 var context = new PreInitContext(new("example.plugin", "1.0.0", Guid.NewGuid()), 1, probe, probe, probe, probe, default, TimeSpan.FromSeconds(15));
 var negotiation = await loaded.Entry.OnPreInitialize(context);
 Assert(!negotiation.Success && ReferenceEquals(negotiation.Error, error) && probe.MakeCalls == 1);
@@ -51,9 +59,9 @@ Assert(loaded.Entry is IPluginBootstrapV1); // Bootstrap type identity is shared
 loaded.Dispose();
 bool disposed = false; try { _ = loaded.Entry; } catch (ObjectDisposedException) { disposed = true; }
 Assert(disposed);
-bool missing = false; try { using var bad = MemoryPlugin.LoadVerifiedPayloads("Missing", "Plugin", new Dictionary<string, byte[]>()); } catch (FileNotFoundException) { missing = true; }
+bool missing = false; try { using var bad = MemoryPlugin.LoadTrustedDevelopmentPayloads("Missing", "Plugin", new Dictionary<string, byte[]>()); } catch (FileNotFoundException) { missing = true; }
 Assert(missing);
-bool entry = false; try { using var bad = MemoryPlugin.LoadVerifiedPayloads("HelloPlugin", "Does.Not.Exist", new Dictionary<string, byte[]> { ["HelloPlugin"] = bytes }); } catch (TypeLoadException) { entry = true; }
+bool entry = false; try { using var bad = MemoryPlugin.LoadTrustedDevelopmentPayloads("HelloPlugin", "Does.Not.Exist", new Dictionary<string, byte[]> { ["HelloPlugin"] = bytes, ["Nexa.Plugin.Sdk.Abi100"] = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Nexa.Plugin.Sdk.Abi100.dll")) }); } catch (TypeLoadException) { entry = true; }
 Assert(entry);
 Console.WriteLine("PASS: stable versions, failure handles, all 22 callable ABI 100 dispatch slots, exact UInt64, Host failure propagation, CoreCLR memory loading and Bootstrap identity.");
 

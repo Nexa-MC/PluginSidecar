@@ -56,14 +56,14 @@ internal static class ContextTests
             Error(await checkup.Plugins.Call(new(1), 1, new AbiValue.Null(), options), AbiErrors.STAGE_INVALID);
         }
         using (var zero = host.ForStage100(Stage(host, LoadStage.Finalize) with { Budget = TimeSpan.Zero }))
-            Error(await zero.Diagnostics.Report(new("test", "test", "info"), options), AbiErrors.STAGE_TIMEOUT);
+            Error(await zero.Diagnostics.Report(new Diagnostic("test", "test", "info"), options), AbiErrors.STAGE_TIMEOUT);
         using (var other = host.ForStage100(stage with { Identity = stage.Identity with { LoadInstanceId = Guid.NewGuid() } }))
             Error(await other.Diagnostics.QueryRegistrations(options), AbiErrors.HANDLE_OWNER_MISMATCH);
         using (var canceled = new CancellationTokenSource())
         {
             canceled.Cancel();
             using var view = host.ForStage100(stage with { Cancellation = canceled.Token });
-            Error(await view.Diagnostics.Report(new("test", "test", "info"), options), AbiErrors.CANCELLED);
+            Error(await view.Diagnostics.Report(new Diagnostic("test", "test", "info"), options), AbiErrors.CANCELLED);
         }
         var elapsedStage = Stage(host, LoadStage.Checkup) with { Budget = TimeSpan.FromMilliseconds(1) };
         while (elapsedStage.RemainingBudget > TimeSpan.Zero) await Task.Delay(1);
@@ -97,7 +97,7 @@ internal static class ContextTests
     private static async Task SampleLifecycle()
     {
         var host = new ContextPort(); var bootstrap = new BootstrapPort(host);
-        using var loaded = PluginSidecar.RuntimeAdapter.MemoryPlugin.LoadVerifiedPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]>
+        using var loaded = PluginSidecar.RuntimeAdapter.MemoryPlugin.LoadTrustedDevelopmentPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]>
         {
             ["HelloPlugin"] = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "fixtures", "HelloPlugin.dll")),
             ["Nexa.Plugin.Sdk.Abi100"] = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Nexa.Plugin.Sdk.Abi100.dll"))
@@ -112,6 +112,7 @@ internal static class ContextTests
         Check((await loaded.Entry.OnCheckup(negotiated.Value.FinalContext, stages[2])).Success);
         Check(host.Last!.StageInvocationId == stages[2].StageInvocationId);
         Check((await loaded.Entry.OnFinalize(negotiated.Value.FinalContext, stages[3])).Success);
+        Check((await loaded.Entry.OnActivated(negotiated.Value.FinalContext, new(host.Info.Identity, Guid.NewGuid(), Guid.NewGuid(), null, default, TimeSpan.FromSeconds(3)))).Success);
         Check((await loaded.Entry.OnStop(new(host.Info.Identity, host, "test.stop", default, StageBudgets.Cleanup))).Success);
         Console.WriteLine("PASS: real in-memory sample negotiates one final context and uses its private SDK across the revised lifecycle.");
     }

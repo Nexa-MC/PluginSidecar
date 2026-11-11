@@ -3,14 +3,14 @@ using System.Runtime.Loader;
 using Nexa.Plugin.Bootstrap.V1;
 namespace PluginSidecar.RuntimeAdapter;
 
-/// <summary>CoreCLR-only adapter. The caller must authenticate, authorize and hash all payloads first.</summary>
+/// <summary>Trusted development only. Raw CoreCLR is NOT a controlled plugin runtime or native-execution sandbox.</summary>
 public sealed class MemoryPlugin : IDisposable
 {
     private Context? _context;
     private IPluginBootstrapV1? _entry;
     public IPluginBootstrapV1 Entry => _entry ?? throw new ObjectDisposedException(nameof(MemoryPlugin));
     private MemoryPlugin(Context context, IPluginBootstrapV1 entry) { _context = context; _entry = entry; }
-    public static MemoryPlugin LoadVerifiedPayloads(string assemblyName, string typeName, IReadOnlyDictionary<string, byte[]> payloads)
+    public static MemoryPlugin LoadTrustedDevelopmentPayloads(string assemblyName, string typeName, IReadOnlyDictionary<string, byte[]> payloads)
     {
         var context = new Context(payloads);
         try

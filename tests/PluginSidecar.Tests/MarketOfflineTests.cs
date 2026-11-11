@@ -19,7 +19,7 @@ internal static class MarketOfflineTests
             byte[] offlineAssembly = store.OpenOffline(identity.PluginId, identity.Version, identity.Subject);
             try
             {
-                using var plugin = PluginSidecar.RuntimeAdapter.MemoryPlugin.LoadVerifiedPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]> { ["HelloPlugin"] = offlineAssembly });
+                using var plugin = PluginSidecar.RuntimeAdapter.MemoryPlugin.LoadTrustedDevelopmentPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]> { ["HelloPlugin"] = offlineAssembly });
                 if (plugin.Entry.GetType().FullName != "HelloPlugin.Plugin") throw new Exception("Offline plugin entry unavailable.");
             }
             finally { CryptographicOperations.ZeroMemory(offlineAssembly); }

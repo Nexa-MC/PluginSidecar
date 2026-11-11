@@ -2,6 +2,21 @@ namespace Nexa.Plugin.Bootstrap.V1;
 
 public static class AbiErrors
 {
+    public const string ABI_UNSUPPORTED = "ABI_UNSUPPORTED";
+    public const string EXPERIMENT_UNAVAILABLE = "EXPERIMENT_UNAVAILABLE";
+    public const string CAPABILITY_UNAVAILABLE = "CAPABILITY_UNAVAILABLE";
+    public const string CAPABILITY_DENIED = "CAPABILITY_DENIED";
+    public const string STAGE_DENIED = "STAGE_DENIED";
+    public const string NOT_FOUND = "NOT_FOUND";
+    public const string STALE_REVISION = "STALE_REVISION";
+    public const string PLAN_STALE = "PLAN_STALE";
+    public const string CONFLICT = "CONFLICT";
+    public const string DEADLINE_EXCEEDED = "DEADLINE_EXCEEDED";
+    public const string PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE";
+    public const string PLUGIN_STOPPED = "PLUGIN_STOPPED";
+    public const string RESYNC_REQUIRED = "RESYNC_REQUIRED";
+    public const string OUTCOME_UNKNOWN = "OUTCOME_UNKNOWN";
+
     public const string ABI_CONTRACT_NOT_NEGOTIATED = "ABI_CONTRACT_NOT_NEGOTIATED";
     public const string EXP_NOT_NEGOTIATED = "EXP_NOT_NEGOTIATED";
     public const string CANCELLED = "CANCELLED";

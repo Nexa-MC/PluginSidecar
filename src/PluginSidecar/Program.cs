@@ -1,6 +1,6 @@
 if (args is ["--version"])
 {
-    Console.WriteLine("PluginSidecar 0.1.0-dev");
+    Console.WriteLine("PluginSidecar 0.2.0-alpha.1");
     return 0;
 }
 Console.WriteLine("PluginSidecar development scaffold. NexaCL Host integration is not implemented yet.");

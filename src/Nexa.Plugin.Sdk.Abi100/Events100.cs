@@ -2,7 +2,7 @@ using Nexa.Plugin.Bootstrap.V1;
 using static Nexa.Plugin.Sdk.Abi100.Values;
 namespace Nexa.Plugin.Sdk.Abi100;
 
-public sealed class Events100(IAbilityV1 ability)
+public sealed partial class Events100(IAbilityV1 ability)
 {
     public const string ContractId = "nexa.events/100";
     public ValueTask<AbiReply<AbiValue>> DeclareEvent(EventDeclaration value, InvocationOptions options) => ability.Invoke(ContractId, 1, M(("name", S(value.Name)), ("payloadSchemaId", S(value.PayloadSchemaId)), ("payloadSchemaDigest", S(value.PayloadSchemaDigest)), ("delivery", S("BestEffortAtMostOnce")), ("maxPayloadBytes", I(value.MaxPayloadBytes)), ("queueLimit", I(value.QueueLimit))), options);

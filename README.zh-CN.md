@@ -2,29 +2,42 @@
 
 [English](README.md) | 简体中文
 
-面向衍生开发者和贡献者的 NexaCL 插件加载契约及 SDK。
+面向衍生开发者和贡献者的 NexaCL 插件契约与 SDK。当前设计依据为
+[插件 ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md)。
 
-当前提供两个可打包的预览 SDK：`Nexa.Plugin.Bootstrap.V1` 与 `Nexa.Plugin.Sdk.Abi100`，版本为 `0.1.0-alpha.2`。包括六阶段定义、协商与生命周期入口、类型化句柄、错误码、Host 提交接口，以及事件/UI/插件间/诊断/资源能力的 22 个可调用方法封装。方法采用类型化输入和封闭 `AbiValue` 输出，具体负载映射仍需随 Host 适配器联调后冻结。
+## SDK 0.2.0-alpha.1
 
-宿主通信以现有 NexaCL 二进制 Sidecar ABI 为准，不采用附件中的 JSON 封套。当前未实现 Host broker、传输接入、实际 Market/Host 授权接线、组调度及原子注册；不能作为可安装的 `.nsc` 使用，也未上传 NuGet.org。
+- `Nexa.Plugin.Bootstrap.V1`：统一 ABIContext、必需/可选能力协商、六阶段加载、激活/清理回调、结构化错误和 Host 提交接口。
+- `Nexa.Plugin.Sdk.Abi100`：33 个能力分组、339 个新增类型化操作、236 个数据模型、有界编解码、不透明 ID/版本，并保留之前 22 个预览调用槽位。
+- `Nexa.Plugin.MarketDelivery`：签名加密交付验证及离线缓存，独立包版本仍为 `0.1.0-alpha.1`。
+- `Nexa.Plugin.Hosting`：能力授权、依赖组加载、定义原子发布和私有持久存储。
+- `PluginSidecar.WasmRuntime` / `PluginSidecar.Packages`：无导入的 Wasm 执行、已认证包解析和声明式内容入口。
+- `sdk/wasm`：无需标准库的 C 续体 SDK 与生成的调用编号，参阅 [Wasm 开发说明](docs/wasm-sdk.md)。
+- `PluginSidecar.RuntimeAdapter`：**仅用于可信开发测试**的 CoreCLR 内存加载器，不是 v0.2 要求的受控执行环境。
 
-2026-11-11 修订改变了未正式发布的预览版签名，**alpha.1 插件需要重新编译**。Initialize、PostInitialize、Checkup、Finalize 接收同一个最终 `ABIContext` 和各自的 `StageContext`。使用 `abi.ForStage100(stage)` 获取阶段 SDK 视图，使用 `abi.AsAbi100()` 获取运行期视图；能力分为 `Events`、`UI`、`Plugins`、`Diagnostics`、`Resources`。服务导出移到 `Plugins.ExportService`（方法 6），事件槽位 3 保留不可调用。实验访问器只读取已确认能力，不会再次协商或授权。
+当前类型化目录属于 **SDK 草案接口**，不代表 339 项宿主能力已完成接入。
+新增操作均标记为 `HostMappingPending`。宿主通信继续使用现有 NexaCL 二进制 Sidecar ABI；目录编号是 SDK 内部调用槽位，不是新传输消息编号。CLI 尚不是可安装的 `.nsc`，SDK 尚未上传 NuGet.org。
 
-阶段视图传递调用标识、取消信号和剩余预算；释放后，其旧代理拒绝调用。Host 仍必须检查实际阶段、已失效标识、权限和实验集合，不能仅凭 SDK 检查授权。[迁移与完整边界说明](docs/loading-contract.md)。
+旧预览插件需重新编译：新增 `OnActivated`，协商支持必需/可选能力，部分新重载要求显式写出请求类型，不能继续使用简写 `new(...)`。ABI 代际仍为 100；Bootstrap 程序集标识保持 1.0.0.0，不代表旧预览二进制兼容。[加载与迁移说明](docs/loading-contract.md)。
 
-`PluginSidecar.RuntimeAdapter` 使用 CoreCLR，从调用方已校验的内存负载加载托管插件，共享 Bootstrap 程序集并拒绝原生依赖。NativeAOT CLI 与此适配器分离。示例位于 `samples/HelloPlugin`。
+## 构建与验证
+
+需要 .NET 10 与 Python 3.10+：
 
 ```sh
+python eng/generate_abi100.py --verify
 dotnet build PluginSidecar.slnx -c Release
 dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
 dotnet pack src/Nexa.Plugin.Bootstrap.V1 -c Release -o artifacts/packages
 dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 ```
 
-将 `artifacts/packages` 加入本地 NuGet 源即可引用 SDK。权限、阶段、句柄归属和最终 Make/提交必须由 Host 裁决；SDK 不会自行宣布授权成功。内存加载不是安全沙箱，卸载也不能保证插件线程立即退出。
+修改 `contracts/abi100.json` 后运行生成器，不直接修改生成文件；CI 会检查生成结果一致性。将 `artifacts/packages` 加入本地 NuGet 源，即可引用 `0.2.0-alpha.1` SDK。
 
-参阅[加载契约](docs/loading-contract.md)、[架构](docs/architecture.md)、[贡献指南](CONTRIBUTING.zh-CN.md)。采用 Apache-2.0。
+生命周期回调使用 `abi.ForStage100(stage)`；运行期使用 `abi.AsAbi100()`。
+`api.TryGet<Network100>()` 返回能力或结构化错误；`IsAvailable` 提供便捷检查。
+访问器不协商、不授权，旧代理每次调用仍需检查宿主许可。权限、并发版本、幂等、原子提交和引用归属均由 Host 裁决。
 
-## Market 与离线
+参阅[架构](docs/architecture.md)、[验收状态](docs/roadmap.md)、[Market 与离线](docs/market-offline.md)、[贡献指南](CONTRIBUTING.zh-CN.md)。Apache-2.0。
 
-新增 `Nexa.Plugin.MarketDelivery`，提供签名加密交付验证与原子离线缓存。[集成状态与离线策略](docs/market-offline.md)。实际 Market/Host 路由尚未接通。
+组合运行库已实现 13 项操作：6 项定义操作（注册、批量注册、读取、查询、按版本更新、移除）与 7 项私有存储操作。C 示例已通过真实编译和加载测试；CI 会在 Windows、Linux、macOS 发布并执行 NativeAOT 运行库测试。这些进展不代表桌面业务接入已完成：动态注册表、标签/覆盖、工作流、Provider、完整页面替换与启动器业务适配仍见[验收状态](docs/roadmap.md)。

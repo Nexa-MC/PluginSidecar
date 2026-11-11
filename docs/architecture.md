@@ -4,13 +4,13 @@ Bootstrap 1 is a preview managed entry contract intended to freeze at formal pub
 
 Decision: Host communication uses the existing NexaCL Sidecar binary ABI, authenticated transport and generated numeric dispatch. The proposal's JSON envelope, transport numbering and JSON framing are NOT adopted. No new wire IDs are allocated by this SDK. A Host adapter must map these logical calls to reviewed upstream operations. Existing Host binaries do not yet implement this new loading contract.
 
-Managed plugin assemblies require CoreCLR. The memory loader is a separate runtime adapter, never linked into the NativeAOT CLI. Only the frozen Bootstrap assembly is shared; plugin dependencies load from verified memory payloads. Native dependency loading is rejected. The loader consumes already verified bytes; it does not itself grant authorization or verify encrypted packages.
+The trusted development fixture for managed plugin assemblies uses CoreCLR. The memory loader is a separate runtime adapter, never linked into the NativeAOT CLI. Only the frozen Bootstrap assembly is shared; plugin dependencies load from verified memory payloads. Native dependency loading is rejected. The loader consumes already verified bytes; it does not itself grant authorization or verify encrypted packages.
 
 The six normal stages are Checksum (loader only), PreInitialize, Initialize, PostInitialize, Checkup, Finalize. Ready contexts do not mean Active. Registration is staged until a Host-authorized group commit. Required dependency components commit atomically; failure rolls back the group and independent groups continue. Host Checkup failure precedes stopping hot-conflict peers and their required consumers; an earlier-stage failure must not stop old peers. Finalize cannot register new content. Activated is an event after commit, not another load stage.
 
 Host owns permission checks, handle/session ownership, final Make decisions, idempotency, staged registry and commit decisions. The SDK never implements a local Make success fallback. Experimental IDs and supported old base combinations are permanent; promotion never removes an adapter. Error codes are authoritative; exceptions do not cross the transport boundary.
 
-Implemented here: public contracts, ABI 100 typed dispatch wrappers, CoreCLR in-memory entry loading, package generation and an example. Package decryption/permits, group scheduler, Host broker/registry, binary transport integration, UI renderer integration and telemetry remain implementation work. No signed installable .nsc is produced by this change.
+Implemented here: public contracts, ABI 100 typed dispatch wrappers, CoreCLR in-memory entry loading, package generation and an example. Host permits, group scheduler, Host broker/registry, binary transport integration, UI renderer integration and telemetry remain implementation work. No signed installable .nsc is produced by this change.
 
 ## Market delivery and offline authorization
 
@@ -48,3 +48,94 @@ Host-owned instance resource table. Bootstrap and SDK packages advance to
 0.1.0-alpha.2; old alpha.1 plugin binaries must be rebuilt. This is an explicitly
 requested correction to the unpublished preview, not binary compatibility with
 alpha.1 or permission to change a formally frozen ABI later.
+
+## v0.2 public surface (2026-11-11)
+
+The v0.2 proposal is the current authoring-surface design. v0.1 remains historical
+loading detail where it does not conflict. ABI generation stays 100; preview
+packages advance to 0.2.0-alpha.1. Public non-native capabilities have identical
+contracts for plugins and Sidecars. There is no plugin function patch, private
+object resolver, arbitrary shell/native-library/address executor, or fallback
+that assigns new business types exclusively to Sidecars.
+
+The SDK gains a machine-readable ContractCatalog and generated typed group APIs,
+with explicit data schemas, phase/permission/idempotency metadata and bounded
+AbiValue codecs. Catalog method numbers are SDK-local draft dispatch contracts,
+NOT new NexaCL transport opcodes or proof of an implemented Host route. Every
+catalog entry is marked HostMappingPending until a reviewed adapter and actual
+consumer exist. Existing binary transport and generated numeric routing remain
+authoritative. No direct project references to launcher-private implementations
+are introduced.
+
+Definitions shared by code and declarative packs, workflow nodes, view contracts,
+Provider/consumer contracts and public business plans are data. Registration is
+inert; a library returning successful registration cannot imply execution or
+atomic Host publication. Dynamic schema values remain explicit AbiValue fields;
+ordinary public operations have typed request/result models, scoped refs and
+opaque revisions. Raw credentials, private launch objects and private controls are not
+part of these models; public launch profiles remain validated data. Host still owns permissions, expected revisions, idempotency,
+plan revalidation, operation completion and recovery.
+
+Raw CoreCLR loading cannot enforce v0.2's prohibition on native execution: denial
+of LoadUnmanagedDll alone does not cover framework process/interop/dynamic paths.
+The existing loader is therefore explicitly a TRUSTED DEVELOPMENT fixture. Its
+API is renamed accordingly; it is not admitted as a production plugin runtime.
+The import-free Wasm profile below is the controlled runtime implementation.
+Desktop enablement still requires authenticated Host composition and business
+policy adapters; a permission boolean is not proof of that integration. Market verification authenticates bytes, not their runtime isolation.
+
+## Controlled execution profile: WebAssembly continuation ABI 1
+
+The production execution profile is a Wasmtime WebAssembly module with **zero
+imports**, no WASI, no CLR exposure and no host function callbacks. Its linear
+memory, tables, instruction fuel and callback/request counts are bounded. The
+module exports `memory`, `nexa_alloc(i32)->i32` and
+`nexa_resume(i32,i32)->i64`; the latter packs an unsigned output address in the
+high 32 bits and length in the low 32 bits. The runtime copies bounded closed
+binary values in/out. This is an in-process guest adapter, not a replacement IPC
+protocol or a new Host transport message.
+
+A guest returns a continuation request for a previously negotiated public
+capability, and the runner awaits that call asynchronously before resuming the
+guest. Host identity, phase, cancellation and deadlines are supplied by the runner,
+never by guest memory. Arbitrary algorithms can execute in WebAssembly, while
+network/files/UI/business effects go through the same public capability authority.
+Native libraries, process execution and private Host references have no guest
+entry point. Verified packages are compiled from Wasm bytes, never deserialized
+native compiler artifacts. The managed SDK remains the Host/adapter contract;
+language-specific Wasm bindings use the same schema and numeric catalog.
+
+## Composed kernel and definition access
+
+`PluginHostRuntime` composes the capability authority, atomic definition registry,
+private storage and coordinator. Its route table contains actual implementations
+only; unknown methods remain unavailable. The trusted embedding Host supplies
+schema and registry admission policies and additional business routes. Package
+requests cannot install those policies or grant themselves permissions.
+
+Definition reads include the caller's own loading group before commit, and only
+published definitions otherwise. Writes require ownership, matching revision and
+valid references. Deletion cannot strand a required reference. Pagination binds
+the registry revision and filter. Both abort and stop retire storage leases after
+sealing the instance; persistent bytes survive. This kernel does not by itself
+register a Desktop Sidecar or expose launcher business handlers.
+
+## Declarative package profile
+
+`nexa-content-1` packages contain a closed-binary `DeclarativeContentPack` named by
+`declarativeEntryPath`, with no code entry. `nexa-wasm-1` may include the same entry
+alongside its Wasm module. Both use `Definitions.RegisterBatch` during Initialize,
+with the same schema policy, permission checks and group commit as code. Static
+packs request the definitions capability and write permission in their signed
+manifest. Their bytes are authenticated and hashed by the same delivery path;
+loading never executes registration effects early. Binary content uses the
+versioned AbiValue codec, not a new Sidecar message format.
+
+## Guest authoring SDK
+
+The freestanding C SDK uses bounded byte views and writers for the same closed
+value format. It emits asynchronous continuation requests; it has no system
+imports, host object handles, ambient filesystem or network access. Its generated
+contract/method constants come from `contracts/abi100.json`. The compiled example
+is loaded by the same package/runtime path used in the end-to-end tests. NativeAOT
+validation runs the kernel and Wasmtime, not only the version-printing CLI.

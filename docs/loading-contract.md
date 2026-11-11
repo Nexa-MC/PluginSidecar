@@ -1,15 +1,16 @@
-# Loading contract v0.1 — 2026-11-11 revision
+# Plugin loading contract — ABI v0.2
 
-Design input: [revised proposal](specifications/loading-abi-v0.1.proposal.zh-CN.md).
-Host traffic continues to use the existing NexaCL binary Sidecar ABI. Proposal
-sections 1.2 and 11 do not authorize JSON framing or new transport message IDs.
+Design input: [v0.2 proposal](specifications/plugin-abi-v0.2.proposal.zh-CN.md).
+The v0.1 proposal is retained as loading history where compatible. Host traffic
+continues to use the existing NexaCL binary Sidecar ABI; no JSON framing or new
+transport message IDs are introduced.
 Local managed facades never cross that boundary; adapters send opaque handles
 and explicit bounded data through reviewed upstream operations.
 
 ## Preview compatibility
 
-Bootstrap and SDK packages are now `0.1.0-alpha.2`. The requested revision changes
-managed signatures and moves a preview method: **rebuild alpha.1 plugins**. These
+Bootstrap and SDK packages are now `0.2.0-alpha.1`. The requested revision changes
+managed signatures and adds activation: **rebuild earlier preview plugins**. These
 unpublished previews are not binary-compatible. Bootstrap assembly identity remains
 `1.0.0.0`; that identity alone does not make old preview binaries compatible.
 After formal freezing, equivalent changes require an explicit new compatibility
@@ -41,7 +42,10 @@ when negotiation failed. Stop carries the original final context.
 ## ABI 100 SDK views
 
 Use `abi.AsAbi100()` for runtime views and `abi.ForStage100(stage)` inside a load
-callback. Both expose `Events`, `UI`, `Plugins`, `Diagnostics` and `Resources`.
+callback. Both expose all 33 public capability groups, including the nine Minecraft subgroups.
+`Experiments` exposes confirmed experimental views; `TryGet<T>` preserves missing
+capability errors and `IsAvailable<T>` offers a convenience check.
+`Abi100Draft.Require/Optional/Include` assembles immutable Make inputs.
 Views lazily request exact contract IDs and preserve structured Host errors.
 A different stable ABI is rejected, never silently upgraded. `GetExperiment<T>`
 uses the static `IExperimentView<T>` ContractId/Create mapping; no reflection is
@@ -55,8 +59,10 @@ used. Saved experiment proxies recheck access before dispatch.
 | `nexa.diagnostics/100` | 1–4 | Report, ReportFinding, QueryRegistrations, QueryBindingStatus |
 | `nexa.resources/100` | 1 | RegisterCleanup |
 
-There are 22 callable methods. Inputs are typed; outputs use the closed AbiValue
-union pending Host integration. Diagnostic source/ownership is assigned by Host.
+These 22 historical methods keep their dispatch meaning. The v0.2 catalog adds
+339 operations with typed requests and replies. Each entry records phase,
+permission, idempotency and pending Host mapping. Contract IDs, schemas and
+permissions are preview design choices until Host mapping is reviewed. Diagnostic source/ownership is assigned by Host.
 The pre-Make `PreInitContext.Resources` port and post-Make `api.Resources` MUST
 map to one instance resource table, preserving operation IDs and avoiding duplicate
 cleanup. This SDK does not create another cleanup registry.
@@ -93,11 +99,43 @@ Tests cover all 22 dispatch slots, reserved event slot exclusion, exact UInt64,
 structured error propagation, lazy views, draft/unconfirmed experiment errors,
 stage-ID forwarding and conflict rejection, disposed proxies, runtime budgets,
 and a real in-memory sample using a private SDK against shared Bootstrap types.
-Host-phase responses in these tests come from explicit **test authority ports**;
-they are not a production Host implementation.
+The repository also contains a real local Host authority and coordinator. Tests
+exercise exact Make admission, phase leases, timeout/idempotency handling,
+required-dependency groups, hot-conflict stop closure, atomic publication and
+instance-owned cleanup. A signed encrypted package is reopened offline and loaded
+through either actual Wasmtime callbacks or a declarative entry. These tests use
+the production kernel with explicit trusted schema policies, not fake route
+replies. The separately labelled SDK tests still use test ports.
 
-The coordinator, authenticated Host adapter, staged registry, permission checks,
-atomic groups, shared cleanup execution and hot-conflict Checkup ordering still
-require implementation. The remaining proposal acceptance matrix is not claimed
-complete. Manifest/version validation and permanent experimental compatibility
-likewise require Host implementations and retained compatibility fixtures.
+The Desktop composition, authenticated remote loading port, actual business
+adapters and full proposal scenario matrix remain incomplete. No experimental
+capabilities are currently offered; existing experiment IDs must gain retained
+compatibility fixtures when implementations are added.
+
+## v0.2 data and authority
+
+`contracts/abi100.json` is the machine-readable source; generated source uses static
+codecs over the closed Bootstrap value union. No reflection dispatcher or CLR
+object serialization is added. The JSON catalog is build input, not IPC data.
+`Snapshot<T>` includes revision, schema version and observation time. Pages carry
+opaque cursors. Definitions in `DeclarativeContentPack` use the same `Definition`
+as code registration; this does not introduce a second content-pack file format.
+
+All methods require Host validation of schemas and effect-specific scopes.
+Catalog `.read`/`.write` permissions identify draft capability families and are
+not substitutes for target grants. An acquisition such as Storage.OpenNamespace
+can only open the caller's already authorized namespace during initialization.
+Network receive/stream operations consume external state and are Active-only.
+No automatic retry is performed; uncertain external outcomes remain explicit.
+
+`InvocationOptions` carries expected revision, idempotency key, correlation and
+causation IDs. `AbiError` carries localized message parameters and operation ID.
+The SDK does not implement durable idempotency or mutation-plan confirmation.
+Opaque FileRef/BlobRef and service bindings retain their load-instance identity.
+
+OnActivated receives an InvocationContext only after atomic commit. It is not a
+seventh loading stage. Events/workflow callbacks need their own invocation scope.
+Raw CoreCLR development loading is not allowed as the production isolation
+boundary. Service/provider descriptors, Java arguments and public launch profiles
+must be checked against actual execution effects; a provider's own metadata is
+not proof that it cannot delegate arbitrary native execution.

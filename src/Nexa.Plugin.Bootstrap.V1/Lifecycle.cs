@@ -41,6 +41,7 @@ public sealed record PreInitResult(ABIContext FinalContext, ImmutableArray<Plugi
 public sealed record CheckupResult(CheckupStatus Status, ImmutableArray<Finding> Findings, ImmutableArray<string> EnabledDegradationModes);
 public sealed record AbortContext(PluginIdentity Identity, LoadStage FailedStage, AbiError RootCause, ImmutableArray<LoadStage> CompletedStages, AbiValue Resources, CancellationToken Cancellation, TimeSpan Budget, ABIContext? ABI = null);
 public sealed record StopContext(PluginIdentity Identity, ABIContext ABI, string ReasonCode, CancellationToken Cancellation, TimeSpan Budget);
+public sealed record InvocationContext(PluginIdentity Identity, Guid InvocationId, Guid CorrelationId, Guid? CausationId, CancellationToken Cancellation, TimeSpan Budget);
 public interface IPluginBootstrapV1
 {
     ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext context);
@@ -48,6 +49,7 @@ public interface IPluginBootstrapV1
     ValueTask<AbiReply<Unit>> OnPostInitialize(ABIContext abi, StageContext stage);
     ValueTask<AbiReply<CheckupResult>> OnCheckup(ABIContext abi, StageContext stage);
     ValueTask<AbiReply<Unit>> OnFinalize(ABIContext abi, StageContext stage);
+    ValueTask<AbiReply<Unit>> OnActivated(ABIContext abi, InvocationContext invocation);
     ValueTask<AbiReply<Unit>> OnAbort(AbortContext context);
     ValueTask<AbiReply<Unit>> OnStop(StopContext context);
 }

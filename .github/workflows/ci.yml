@@ -3,7 +3,20 @@ on: [push, pull_request, workflow_dispatch]
 permissions:
   contents: read
 jobs:
+  guest-sdk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y clang lld
+      - run: python3 eng/build_wasm_sample.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-guest-sample
+          path: artifacts/wasm-sample/plugin.zip
   build:
+    needs: guest-sdk
+    env:
+      NEXA_WASM_SAMPLE: artifacts/wasm-sample/plugin.zip
     strategy:
       fail-fast: false
       matrix:
@@ -17,11 +30,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: wasm-guest-sample
+          path: artifacts/wasm-sample
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python eng/generate_abi100.py --verify
       - run: dotnet build PluginSidecar.slnx -c Release
       - run: dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
+      - run: dotnet publish tests/PluginSidecar.AotSmoke -c Release -r ${{ matrix.rid }} -p:PublishAot=true -p:TrimmerSingleWarn=false -o artifacts/aot-smoke
+      - shell: pwsh
+        run: |
+          $binary = if ($IsWindows) { './artifacts/aot-smoke/PluginSidecar.AotSmoke.exe' } else { './artifacts/aot-smoke/PluginSidecar.AotSmoke' }
+          & $binary
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: dotnet pack src/Nexa.Plugin.Bootstrap.V1 -c Release -o artifacts/packages
       - run: dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
       - run: dotnet pack src/Nexa.Plugin.MarketDelivery -c Release -o artifacts/packages

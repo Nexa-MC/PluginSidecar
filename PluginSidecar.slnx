@@ -6,4 +6,8 @@
   <Project Path="samples/HelloPlugin/HelloPlugin.csproj"/>
   <Project Path="tests/PluginSidecar.Tests/PluginSidecar.Tests.csproj"/>
   <Project Path="src/Nexa.Plugin.MarketDelivery/Nexa.Plugin.MarketDelivery.csproj"/>
+  <Project Path="src/PluginSidecar.WasmRuntime/PluginSidecar.WasmRuntime.csproj"/>
+  <Project Path="src/Nexa.Plugin.Hosting/Nexa.Plugin.Hosting.csproj"/>
+  <Project Path="src/PluginSidecar.Packages/PluginSidecar.Packages.csproj"/>
+  <Project Path="tests/PluginSidecar.AotSmoke/PluginSidecar.AotSmoke.csproj"/>
 </Solution>

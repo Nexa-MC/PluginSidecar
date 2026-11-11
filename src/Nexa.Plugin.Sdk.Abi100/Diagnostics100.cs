@@ -3,7 +3,7 @@ using static Nexa.Plugin.Sdk.Abi100.Values;
 namespace Nexa.Plugin.Sdk.Abi100;
 
 public sealed record Diagnostic(string Code, string Message, string Severity);
-public sealed class Diagnostics100(IAbilityV1 ability)
+public sealed partial class Diagnostics100(IAbilityV1 ability)
 {
     public const string ContractId = "nexa.diagnostics/100";
     public ValueTask<AbiReply<AbiValue>> Report(Diagnostic value, InvocationOptions options) => ability.Invoke(ContractId, 1,

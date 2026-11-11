@@ -2,7 +2,7 @@ using Nexa.Plugin.Bootstrap.V1;
 using static Nexa.Plugin.Sdk.Abi100.Values;
 namespace Nexa.Plugin.Sdk.Abi100;
 
-public sealed class InterPlugin100(IAbilityV1 ability)
+public sealed partial class InterPlugin100(IAbilityV1 ability)
 {
     public const string ContractId = "nexa.interplugin/100";
     public ValueTask<AbiReply<AbiValue>> Describe(ServiceQuery value, InvocationOptions options) => ability.Invoke(ContractId, 1, M(("providerPluginId", S(value.ProviderPluginId)), ("serviceId", S(value.ServiceId))), options);

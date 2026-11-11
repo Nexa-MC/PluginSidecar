@@ -18,7 +18,7 @@ public static class Abi100Extensions
 }
 
 /// <summary>Local typed view. Host still authorizes every call, even for already acquired proxies.</summary>
-public sealed class Abi100Context : IDisposable
+public sealed partial class Abi100Context : IDisposable
 {
     private readonly ABIContext _context;
     private readonly StageContext? _stage;
@@ -33,6 +33,7 @@ public sealed class Abi100Context : IDisposable
     internal Abi100Context(ABIContext context, StageContext? stage = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context)); _stage = stage;
+        InitializePublicGroups();
         Events = new(new ContextAbility(this, Events100.ContractId));
         UI = new(new ContextAbility(this, Ui100.ContractId));
         Plugins = new(new ContextAbility(this, InterPlugin100.ContractId));

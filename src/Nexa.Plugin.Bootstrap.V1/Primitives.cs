@@ -14,7 +14,12 @@ public sealed record PluginIdentity(string PluginId, string PluginVersion, Guid 
 public enum LoadStage { Checksum, PreInitialize, Initialize, PostInitialize, Checkup, Finalize }
 public enum LoadState { Discovered, Verifying, Verified, PreInitializing, Negotiated, Planned, Initializing, Initialized, PostInitializing, Bound, Checking, Checked, Finalizing, Prepared, Active, Aborting, Failed, BlockedConflict, Quiescing, Stopping, Unloaded, SessionLost }
 public enum CheckupStatus { Passed, Degraded, Failed }
-public sealed record AbiError(string Code, string Message, string Stage, string Operation, string PluginId, Guid LoadInstanceId, Guid CorrelationId, bool Retryable, ImmutableDictionary<string, string> Details);
+public sealed record AbiError(string Code, string Message, string Stage, string Operation, string PluginId, Guid LoadInstanceId, Guid CorrelationId, bool Retryable, ImmutableDictionary<string, string> Details)
+{
+    public string MessageKey { get; init; } = Code;
+    public ImmutableDictionary<string, string> Parameters { get; init; } = ImmutableDictionary<string, string>.Empty;
+    public Guid OperationId { get; init; }
+}
 public sealed class AbiReply<T>
 {
     private AbiReply(T value, AbiError? error) { Value = value; Error = error; }
@@ -46,12 +51,21 @@ public sealed record InvocationOptions(Guid OperationId, TimeSpan Budget, Cancel
 {
     // Empty for runtime calls; a Host-issued identity for phase-limited operations.
     public Guid StageInvocationId { get; init; }
+    public Guid CorrelationId { get; init; }
+    public Guid? CausationId { get; init; }
+    public string? ExpectedRevision { get; init; }
+    public string? IdempotencyKey { get; init; }
 }
 public sealed record VersionRange(string? Minimum, bool MinimumInclusive, string? Maximum, bool MaximumInclusive);
 public sealed record PluginDependency(string PluginId, VersionRange Version);
 public sealed record PluginConflict(string PluginId, VersionRange Version, string? ReasonCode);
 public sealed record Finding(string Code, string Message, bool Fatal);
-public sealed record MakeOptions(Guid OperationId, ImmutableArray<string> RequestedPermissions);
+public sealed record CapabilityRequirement(string ContractId, uint MinimumVersion);
+public sealed record MakeOptions(Guid OperationId, ImmutableArray<string> RequestedPermissions)
+{
+    public ImmutableArray<CapabilityRequirement> RequiredCapabilities { get; init; } = [];
+    public ImmutableArray<CapabilityRequirement> OptionalCapabilities { get; init; } = [];
+}
 public sealed record ExperimentDescriptor(Guid ExpId, string ContractDigest, ImmutableArray<uint> SupportedBaseAbis, ImmutableArray<Guid> RequiredExperiments, ImmutableArray<Guid> ConflictingExperiments, ImmutableArray<string> RequiredPermissions, ImmutableArray<string> SupportedPlatforms, uint? PromotedStableAbi);
 public sealed record CapabilityDescriptor(string ContractId, Guid? ExperimentId = null);
 public sealed record AbiContextInfo(AbiContextHandle Handle, Guid SessionId, PluginIdentity Identity, uint StableAbiVersion, ImmutableArray<ExperimentDescriptor> Experiments, ImmutableArray<string> Permissions, Guid LoadPermitId, string ProtocolDigest, string AdapterId, ImmutableArray<CapabilityDescriptor> Capabilities);
