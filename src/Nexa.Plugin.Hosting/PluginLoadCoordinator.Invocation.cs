@@ -17,21 +17,22 @@ public sealed partial class PluginLoadCoordinator
         if (chain.Contains(owner.LoadInstanceId) || chain.Count() >= 16) return Failure(AbiErrors.CONFLICT);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(options.Cancellation, target.Invocations.Token);
         timeout.CancelAfter(options.Budget);
+        var cancellation=timeout.Token;
         CallbackChain.Value = chain.Push(owner.LoadInstanceId);
         try
         {
             timeout.Token.ThrowIfCancellationRequested();
             DataCodec.Validate(input);
-            Task<AbiReply<AbiValue>> pending;
-            if (target.Entry is IPluginInvocationV1 entry)
-                pending = entry.InvokeHandler(target.Final!, handle, input, new(owner, options.OperationId, options.CorrelationId, options.CausationId, timeout.Token, options.Budget)).AsTask();
-            else
+            var pending=Task.Run(async()=>
             {
+                cancellation.ThrowIfCancellationRequested();
+                if(target.Entry is IPluginInvocationV1 entry)
+                    return await entry.InvokeHandler(target.Final!,handle,input,new(owner,options.OperationId,options.CorrelationId,options.CausationId,cancellation,options.Budget)).ConfigureAwait(false);
                 Func<AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>>? handler;
                 lock (target.Callbacks) target.Callbacks.TryGetValue(handle, out handler);
                 if (handler is null) return Failure(AbiErrors.HANDLE_INVALID);
-                pending = handler(input, options with { Cancellation = timeout.Token }).AsTask();
-            }
+                return await handler(input,options with{Cancellation=cancellation}).ConfigureAwait(false);
+            },cancellation);
             _ = Observe(pending);
             var reply = await pending.WaitAsync(timeout.Token).ConfigureAwait(false);
             timeout.Token.ThrowIfCancellationRequested();

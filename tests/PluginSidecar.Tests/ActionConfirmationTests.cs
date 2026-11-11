@@ -31,8 +31,8 @@ internal static class ActionConfirmationTests
         {
             await using(var runtime=new PluginHostRuntime(root,_=>true,Abi100Schemas.Validate,options:new(){ActionConfirmation=prompt}))
             {
-                var provider=new Entry("confirm");var caller=new Entry("caller");
-                Check((await runtime.LoadAsync([provider.Source(),caller.Source()])).All(r=>r.State==LoadState.Active));
+                var provider=new Entry("confirm");var caller=new Entry("caller");var limited=new Entry("limited"){DenyActionEffects=true};
+                Check((await runtime.LoadAsync([provider.Source(),caller.Source(),limited.Source()])).All(r=>r.State==LoadState.Active));
                 using var api=caller.Context!.AsAbi100();using var owner=provider.Context!.AsAbi100();
                 var first=Success(await api.Actions.Invoke(Request("once"),Options()));
                 var question=await prompt.Next();
@@ -44,6 +44,11 @@ internal static class ActionConfirmationTests
                 Check((await Terminal(api,duplicate.Id)).State==OperationState.Completed&&provider.Calls==1&&prompt.Count==1);
                 var conflicting=Success(await api.Actions.Invoke(Request("once") with{Inputs=TextResult.Write(new("changed"))},Options()));
                 Check((await Terminal(api,conflicting.Id)).Failure?.Code==AbiErrors.REQUEST_ID_REUSED&&prompt.Count==1);
+                using(var limitedApi=limited.Context!.AsAbi100())
+                {
+                    var forbidden=Success(await limitedApi.Workflows.Start(new(new("confirm:workflow"),TextResult.Write(new("forbidden")),"v1"),Options()));
+                    Check((await Terminal(limitedApi,forbidden.Id)).Failure?.Code==AbiErrors.PERMISSION_DENIED&&prompt.Count==1&&provider.Calls==1);
+                }
 
                 var declined=Success(await api.Actions.Invoke(Request("declined"),Options()));
                 (await prompt.Next()).Answer.SetResult(false);
@@ -71,10 +76,27 @@ internal static class ActionConfirmationTests
                 var replayInvalid=Success(await api.Actions.Invoke(Request("invalid"),Options()));
                 Check((await Terminal(api,replayInvalid.Id)).Failure?.Code==AbiErrors.OUTCOME_UNKNOWN&&provider.Calls==2);
 
+                using(var releaseHandler=new ManualResetEventSlim())
+                {
+                    provider.BlockingRelease=releaseHandler;
+                    try
+                    {
+                        var blockedAction=Success(await api.Actions.Invoke(Request("blocked"),Options()));
+                        (await prompt.Next()).Answer.SetResult(true);
+                        await provider.HandlerEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                        Success(await api.Tasks.Cancel(new(blockedAction.Id),Options()));
+                        Check((await Terminal(api,blockedAction.Id)).State==OperationState.OutcomeUnknown);
+                        var replayBlocked=Success(await api.Actions.Invoke(Request("blocked"),Options()));
+                        Check((await Terminal(api,replayBlocked.Id)).Failure?.Code==AbiErrors.OUTCOME_UNKNOWN&&provider.Calls==3);
+                    }
+                    finally{releaseHandler.Set();}
+                    await provider.HandlerExited.Task.WaitAsync(TimeSpan.FromSeconds(5));
+                }
+
                 var lost=Success(await api.Actions.Invoke(Request("provider-stop"),Options()));
                 var retired=await prompt.Next();await runtime.StopAsync("confirm");
                 Check((await Terminal(api,lost.Id)).State==OperationState.Cancelled);
-                retired.Answer.SetResult(true);Check(provider.Calls==2);
+                retired.Answer.SetResult(true);Check(provider.Calls==3);
             }
             await using(var noUi=new PluginHostRuntime(root,_=>true,Abi100Schemas.Validate))
             {
@@ -122,20 +144,26 @@ internal static class ActionConfirmationTests
     private sealed class Entry(string id):IPluginBootstrapV1
     {
         internal ABIContext? Context;internal PluginIdentity? Identity;internal int Calls;private ulong _handler;
+        internal bool DenyActionEffects;
+        internal ManualResetEventSlim? BlockingRelease;
+        internal TaskCompletionSource HandlerEntered=new(TaskCreationOptions.RunContinuationsAsynchronously),HandlerExited=new(TaskCreationOptions.RunContinuationsAsynchronously);
         private static readonly string[] Groups=["Actions","Workflows","Tasks"];
         private static readonly ImmutableArray<string> Permissions=Abi100Catalog.Operations.Where(o=>Groups.Contains(o.Group)).Select(o=>o.Permission).Where(p=>!string.IsNullOrEmpty(p)).Distinct().ToImmutableArray();
-        internal PluginLoadSource Source()=>new(new(1,id,"1.0.0",1,new("test","test"),new([],[],"fixture"),[100],[],[],[],Permissions,[]),Permissions,_=>ValueTask.FromResult<IPluginBootstrapV1>(this),()=>ValueTask.CompletedTask);
+        private ImmutableArray<string> Grants=>DenyActionEffects?Permissions.Remove("nexa.actions.write"):Permissions;
+        internal PluginLoadSource Source()=>new(new(1,id,"1.0.0",1,new("test","test"),new([],[],"fixture"),[100],[],[],[],Grants,[]),Grants,_=>ValueTask.FromResult<IPluginBootstrapV1>(this),()=>ValueTask.CompletedTask);
         public async ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext context)
         {
             Identity=context.Identity;
             _handler=context.Callbacks.Register("effect",(input,options)=>
             {
                 Interlocked.Increment(ref Calls);var value=ActionRequest.Read(input).Inputs;
+                if(TextResult.Read(value).Text=="blocked")
+                {HandlerEntered.SetResult();BlockingRelease!.Wait(TimeSpan.FromSeconds(10));HandlerExited.SetResult();}
                 return ValueTask.FromResult(AbiReply<AbiValue>.Ok(TextResult.Read(value).Text=="invalid"?Empty.Write(new()):value));
             }).Value;
             var draft=new Abi100Draft(Success(await context.Negotiator.GetABIContext(100,Options())));
             foreach(var contract in Abi100Catalog.Operations.Where(o=>Groups.Contains(o.Group)).Select(o=>o.ContractId).Distinct())draft=draft.Require(contract);
-            Context=Success(await draft.Make(context.Negotiator,Guid.NewGuid(),Permissions,default));return AbiReply<PreInitResult>.Ok(new(Context,[],[],[],[]));
+            Context=Success(await draft.Make(context.Negotiator,Guid.NewGuid(),Grants,default));return AbiReply<PreInitResult>.Ok(new(Context,[],[],[],[]));
         }
         public async ValueTask<AbiReply<Unit>> OnInitialize(ABIContext context,StageContext stage)
         {

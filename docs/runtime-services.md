@@ -18,6 +18,8 @@ binding becomes unavailable. Bindings never silently attach to a replacement loa
 Only the coordinator dispatches handlers, with the admitted identity/context,
 cancellation and causal metadata. Nested callback cycles are rejected. Host service
 calls return an owned operation whose typed result is read through Tasks.Read.
+The coordinator's deadline also bounds synchronously blocking adapter callbacks.
+It observes a late completion without replacing an already uncertain action result.
 Native-execution service methods and unapproved cross-service delegation are denied.
 Actions validate input/output schemas and declared capability/scope requirements.
 Actions requiring confirmation use the trusted `IActionConfirmation` port supplied

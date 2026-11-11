@@ -19,6 +19,7 @@ public sealed partial class PluginRuntimeServices
     ];
     private void AdmitAction(HostInvocation c,ActionDescriptor action,ActionRequest request)
     {
+        if(!_authorize(c.Identity,"nexa.actions.write"))throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
         Validate(action.Input,request.Inputs);
         if(!_capabilities(c,action.RequiredCapabilities)||action.Scopes.Length!=0&&!action.Scopes.Contains(request.Target.Scope))throw new AbiHostException(AbiErrors.CAPABILITY_DENIED);
         if(action.Confirmation!=ConfirmationRequirement.None&&_options.ActionConfirmation is null)throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
@@ -51,7 +52,6 @@ public sealed partial class PluginRuntimeServices
             await ConfirmAction(c,entry,action,request,token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
             AdmitAction(c,action,request);
-            if(!_authorize(c.Identity,"nexa.actions.write"))throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
             lock(_gate)
             {
                 if(!_entries.TryGetValue(("action",action.Id),out var current)||current.Owner!=entry.Owner||
@@ -78,7 +78,13 @@ public sealed partial class PluginRuntimeServices
     {
         if(action.Confirmation==ConfirmationRequirement.None)return;
         var confirmation=_options.ActionConfirmation??throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
-        var providerLifetime=Lifetime(provider.Owner);
+        CancellationToken providerLifetime;
+        lock(_gate)
+        {
+            if(!_entries.TryGetValue(("action",action.Id),out var current)||current.Owner!=provider.Owner||current.Registration.Handle!=provider.Registration.Handle||current.Registration.State!=RegistrationState.Active)
+                throw new AbiHostException(AbiErrors.PROVIDER_GONE);
+            providerLifetime=Lifetime(provider.Owner);
+        }
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(token,providerLifetime);
         timeout.CancelAfter(caller.Options.Budget);
         var cancellation=timeout.Token;
