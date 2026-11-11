@@ -330,6 +330,7 @@ public static class Abi100Catalog
         new("Files", "nexa.files/100", 8, "Move", "PlanRequest", "OperationRef", "Operation", ["Active"], "nexa.files.write", "RequiredKey", "HostMappingPending"),
         new("Files", "nexa.files/100", 9, "PrepareDelete", "FileDelete", "MutationPlan", "Query", ["Initialize", "PostInitialize", "Checkup", "Finalize", "Active"], "nexa.files.read", "ReadOnly", "HostMappingPending"),
         new("Files", "nexa.files/100", 10, "Delete", "PlanRequest", "OperationRef", "Operation", ["Active"], "nexa.files.write", "RequiredKey", "HostMappingPending"),
+        new("Files", "nexa.files/100", 11, "OpenPackageFile", "PackageFileRequest", "FileRef", "Query", ["Initialize", "PostInitialize", "Checkup", "Finalize", "Active"], "nexa.files.read", "ReadOnly", "HostMappingPending"),
         new("Network", "nexa.network/100", 1, "Request", "NetworkRequest", "NetworkResponse", "Operation", ["Active"], "nexa.network.write", "OutcomeMayBeUnknown", "HostMappingPending"),
         new("Network", "nexa.network/100", 2, "OpenResponseStream", "EntityRequest", "BlobRef", "Operation", ["Active"], "nexa.network.write", "OutcomeMayBeUnknown", "HostMappingPending"),
         new("Network", "nexa.network/100", 3, "Cancel", "OperationRequest", "Empty", "Mutation", ["Active"], "nexa.network.write", "RequiredKey", "HostMappingPending"),

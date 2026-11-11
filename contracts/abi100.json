@@ -4226,6 +4226,12 @@
         "name": "ResyncRequired",
         "type": "bool"
       }
+    ],
+    "PackageFileRequest": [
+      {
+        "name": "Path",
+        "type": "string"
+      }
     ]
   },
   "groups": [
@@ -9229,6 +9235,23 @@
           ],
           "permission": "nexa.files.write",
           "idempotency": "RequiredKey",
+          "hostBinding": "HostMappingPending"
+        },
+        {
+          "name": "OpenPackageFile",
+          "methodId": 11,
+          "input": "PackageFileRequest",
+          "output": "FileRef",
+          "kind": "Query",
+          "phases": [
+            "Initialize",
+            "PostInitialize",
+            "Checkup",
+            "Finalize",
+            "Active"
+          ],
+          "permission": "nexa.files.read",
+          "idempotency": "ReadOnly",
           "hostBinding": "HostMappingPending"
         }
       ]

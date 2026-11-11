@@ -32,7 +32,7 @@ internal static class WasmWorkflowTests
         finally{Directory.Delete(root,true);}
         Console.WriteLine("PASS: compiled C workflow package, sequential registration continuations, activation-triggered queued workflow, typed action callback, schedule trigger and post-stop cleanup.");
     }
-    private static async Task Completed(Abi100Context api,EntityId id)
+    internal static async Task Completed(Abi100Context api,EntityId id)
     {
         using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
         while(true)
@@ -43,7 +43,7 @@ internal static class WasmWorkflowTests
             await Task.Delay(5,timeout.Token);
         }
     }
-    private sealed class Capture(IPluginBootstrapV1 entry):IPluginBootstrapV1,IPluginInvocationV1,IPluginCleanupInvocationV1
+    internal sealed class Capture(IPluginBootstrapV1 entry):IPluginBootstrapV1,IPluginInvocationV1,IPluginCleanupInvocationV1
     {
         internal ABIContext? Context;internal int BusinessCallbacks,CleanupCallbacks;
         public async ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext c)

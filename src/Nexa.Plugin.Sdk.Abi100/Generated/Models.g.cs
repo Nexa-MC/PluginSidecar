@@ -3841,3 +3841,19 @@ public sealed record SubscriptionBatch(ImmutableArray<AbiValue> Items, bool Resy
         return new(DataCodec.ReadArray(DataCodec.Field(map, "items"), (item, nestedDepth) => DataCodec.ReadValue(item), depth + 1), DataCodec.ReadBoolean(DataCodec.Field(map, "resyncRequired")));
     }
 }
+
+public sealed record PackageFileRequest(string Path) : IAbiData<PackageFileRequest>
+{
+    public static AbiValue Write(PackageFileRequest value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("path", DataCodec.WriteString(value.Path)));
+    }
+    public static PackageFileRequest Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(DataCodec.ReadString(DataCodec.Field(map, "path")));
+    }
+}

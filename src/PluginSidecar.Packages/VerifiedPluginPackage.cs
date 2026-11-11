@@ -80,23 +80,34 @@ public sealed class VerifiedPluginPackage : IDisposable
         }
         catch { foreach (var bytes in payloads.Values) CryptographicOperations.ZeroMemory(bytes); throw; }
     }
+    /// <summary>Trusted Host asset copy. Ownership transfers to the caller, which must clear it on retirement.</summary>
+    public byte[] CopyPayload(string path) => (_payloads ?? throw new ObjectDisposedException(nameof(VerifiedPluginPackage)))
+        .TryGetValue(path, out var bytes) ? bytes.ToArray() : throw new FileNotFoundException("Verified payload missing.");
+
     public PluginLoadSource CreateLoadSource(ImmutableArray<string> hostGrantedPermissions)
+        =>CreateLoadSource(hostGrantedPermissions,(bytes,token)=>new ValueTask<IWasmPluginMachine>(Task.Run<IWasmPluginMachine>(()=>new WasmPluginMachine(bytes.Span),token)));
+
+    /// <summary>The trusted Host may supply an authenticated remote execution factory.
+    /// Payload memory is valid only until the awaited factory returns.</summary>
+    public PluginLoadSource CreateLoadSource(ImmutableArray<string> hostGrantedPermissions,
+        Func<ReadOnlyMemory<byte>,CancellationToken,ValueTask<IWasmPluginMachine>> createMachine)
     {
+        ArgumentNullException.ThrowIfNull(createMachine);
         var payloads = _payloads ?? throw new ObjectDisposedException(nameof(VerifiedPluginPackage));
         WasmPluginEntry? entry = null; int consumed = 0;
-        return new(Manifest, hostGrantedPermissions, token => new ValueTask<IPluginBootstrapV1>(Task.Run<IPluginBootstrapV1>(() =>
+        return new(Manifest, hostGrantedPermissions, async token =>
         {
             token.ThrowIfCancellationRequested();
             if (Interlocked.Exchange(ref consumed, 1) != 0) throw new InvalidOperationException("A verified load source may be consumed only once.");
             try
             {
-                if (Manifest.WebAssemblyEntryPath is { } wasm) entry = new(Manifest, new(payloads[wasm]));
+                if (Manifest.WebAssemblyEntryPath is { } wasm) entry = new(Manifest,await createMachine(payloads[wasm],token).ConfigureAwait(false));
                 return Manifest.DeclarativeEntryPath is { } content
                     ? new DeclarativePluginEntry(Manifest, DeclarativeContentPack.Read(AbiValueBinary.Decode(payloads[content])), entry)
                     : entry ?? throw new InvalidDataException(AbiErrors.ENTRY_INVALID);
             }
             finally { Dispose(); }
-        }, token)), async () => { if (entry is not null) await entry.DisposeAsync().ConfigureAwait(false); Dispose(); });
+        }, async () => { if (entry is not null) await entry.DisposeAsync().ConfigureAwait(false); Dispose(); });
     }
     private sealed class SensitiveBuffer(byte[] bytes) : IDisposable
     {

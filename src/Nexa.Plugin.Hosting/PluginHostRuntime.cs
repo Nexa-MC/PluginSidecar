@@ -52,6 +52,10 @@ public sealed class PluginHostRuntime : IAsyncDisposable
         await Services.PollSchedulesAsync(cancellation).ConfigureAwait(false);
         return reports;
     }
+    /// <summary>Trusted presentation dispatch, retaining the original admission and permissions.</summary>
+    public ValueTask<AbiReply<AbiValue>> InvokeAsync(PluginIdentity identity, string contract, uint method,
+        AbiValue input, InvocationOptions options) => Authority.InvokeAdmitted(identity, contract, method, input, options);
+
     public ValueTask StopAsync(string pluginId, CancellationToken cancellation = default) => _loads.StopAsync(pluginId, cancellation);
     public async ValueTask DisposeAsync()
     {

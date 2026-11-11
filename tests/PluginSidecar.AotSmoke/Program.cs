@@ -1,3 +1,4 @@
+if (args is ["--remote-only"]) { await RemoteExecutionTests.Run(); return; }
 await WasmTests.Run();
 await EndToEndTests.Run();
 await DefinitionTests.Run();
@@ -9,6 +10,7 @@ await DurableEventTests.Run();
 await ContentRuntimeTests.Run();
 await ResourceRuntimeTests.Run();
 await WasmWorkflowTests.Run();
+await RemoteExecutionTests.Run();
 await GuestSdkTests.Run();
 await GuestConformanceTests.Run();
 await CallbackSdkTests.Run();

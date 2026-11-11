@@ -280,3 +280,35 @@ The load-report query returns only the admitted caller's identity, current phase
 retained load findings and required dependency IDs. Checkup findings survive into
 the final report. It has no caller-supplied target plugin and cannot inspect an
 unrelated plugin's private diagnostics.
+
+## Desktop integration and remote execution
+
+Desktop composes the trusted authority, lifecycle coordinator, business adapters
+and UI state publisher. PluginSidecar owns Wasmtime instances and executes verified
+guest bytes in its separate authenticated process. An execution adapter carries
+bounded continuation messages over the existing Sidecar binary command channel;
+it does not grant a remote process permission to impersonate a plugin's Host calls.
+Each yielded capability request returns to the original admitted Host context.
+No JSON IPC, private launcher reference or new transport opcode is introduced.
+
+Payloads exceeding one Sidecar value are transferred in bounded sequential chunks,
+with explicit transfer identity, length, digest and retirement. Callback IDs and
+continuation sequence numbers prevent replay after an interrupted exchange. A
+failed transport seals the guest; reconnecting never retries an uncertain effect.
+Package validation and grants precede remote compilation. User-installed developer
+packages require explicit admission; production Market authentication remains a
+separate package-source port. Safe mode keeps extension execution disabled.
+
+Desktop consumes committed plugin UI declarations and model snapshots through its
+existing state/intent renderer boundary. It owns confirmation, file selection and
+business policy. Plugin navigation and view replacement cannot remove the Host's
+plugin-management/recovery entry. External SDK implementations stay in this
+repository; the Host consumes a pinned package feed, not adjacent workspace source.
+
+The alpha.5 addition `Files.OpenPackageFile` uses the unused Files method 11;
+all prior IDs and schema fingerprints remain unchanged. It grants only an opaque
+read-only reference to an already verified asset of the admitted load, never an
+OS path. `VerifiedPluginPackage.CopyPayload` is a trusted embedding API: callers
+own and clear copies. Host presentation dispatch uses `PluginHostRuntime.InvokeAsync`
+and retains the original plugin identity, stage, capability and permission checks.
+The Desktop authoring example exercises package files, staged UI and a confirmed action.

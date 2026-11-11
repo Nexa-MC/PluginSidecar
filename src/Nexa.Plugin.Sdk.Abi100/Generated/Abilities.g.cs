@@ -1164,6 +1164,9 @@ public sealed partial class Files100(IAbilityV1 ability) : ICapabilityView<Files
     /// <summary>Draft Operation; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
     public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.OperationRef>> Delete(global::Nexa.Plugin.Sdk.Abi100.Data.PlanRequest request, InvocationOptions options) =>
         AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.PlanRequest, global::Nexa.Plugin.Sdk.Abi100.Data.OperationRef>(ability, ContractId, 10, request, options);
+    /// <summary>Draft Query; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
+    public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.FileRef>> OpenPackageFile(global::Nexa.Plugin.Sdk.Abi100.Data.PackageFileRequest request, InvocationOptions options) =>
+        AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.PackageFileRequest, global::Nexa.Plugin.Sdk.Abi100.Data.FileRef>(ability, ContractId, 11, request, options);
 }
 
 public sealed partial class Network100(IAbilityV1 ability) : ICapabilityView<Network100>

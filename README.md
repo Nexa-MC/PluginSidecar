@@ -5,17 +5,17 @@ English | [简体中文](README.zh-CN.md)
 NexaCL plugin contracts and SDK for derivative developers and contributors.
 The current design is [Plugin ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md).
 
-## SDK 0.2.0-alpha.4
+## SDK 0.2.0-alpha.5
 
 - `Nexa.Plugin.Bootstrap.V1`: unified ABIContext, required/optional capability negotiation, six loading stages, activation/cleanup callbacks, errors and Host commit ports.
-- `Nexa.Plugin.Sdk.Abi100`: 33 capability groups, 341 new typed operations, 238 data models, bounded codecs, opaque IDs/revisions, and the 22 previous preview dispatch slots.
+- `Nexa.Plugin.Sdk.Abi100`: 33 capability groups, 342 new typed operations, 239 data models, bounded codecs, opaque IDs/revisions, and the 22 previous preview dispatch slots.
 - `Nexa.Plugin.MarketDelivery`: signed encrypted delivery verification and an offline cache; independent package version `0.1.0-alpha.1`.
 - `Nexa.Plugin.Hosting`: capability authority, dependency-group loading, atomic definitions and durable private storage, runtime state/events/services and durable workflow checkpoints.
 - `PluginSidecar.WasmRuntime` / `PluginSidecar.Packages`: import-free Wasm execution, authenticated package parsing and declarative content entries.
-- `sdk/wasm`: complete C/Wasm bindings for 341 current and 22 legacy operations, typed models/builders/results, callbacks and schema/operation metadata; see [guest development](docs/wasm-sdk.md).
+- `sdk/wasm`: complete C/Wasm bindings for 342 current and 22 legacy operations, typed models/builders/results, callbacks and schema/operation metadata; see [guest development](docs/wasm-sdk.md).
 - `PluginSidecar.RuntimeAdapter`: **trusted development only** CoreCLR memory loading. This is not the controlled execution environment required by v0.2.
 
-The typed catalog is a **draft SDK surface**, not 341 working Host integrations.
+The typed catalog is a **draft SDK surface**, not 342 working Host integrations.
 Every new operation records `HostMappingPending`. Host transport continues to use
 the existing NexaCL binary Sidecar ABI; catalog numbers are local dispatch slots,
 not new transport opcodes. The CLI is not yet an installable `.nsc`.
@@ -43,15 +43,16 @@ Requires .NET 10 and Python 3.12+:
 ```sh
 python eng/generate_abi100.py --verify
 python eng/build_wasm_sample.py --clang /path/to/clang
+python eng/prepare_host_reference.py
 dotnet build PluginSidecar.slnx -c Release
-NEXA_WASM_SAMPLE=artifacts/wasm-sample/plugin.zip NEXA_WASM_CONFORMANCE=artifacts/wasm-sample/conformance.wasm NEXA_WASM_CALLBACK=artifacts/wasm-sample/callback.wasm NEXA_WASM_CODEC=artifacts/wasm-sample/codec.wasm dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
+NEXA_PLUGIN_WORKER=src/PluginSidecar/bin/Release/net10.0/PluginSidecar.dll NEXA_WASM_SAMPLE=artifacts/wasm-sample/plugin.zip NEXA_WASM_CONFORMANCE=artifacts/wasm-sample/conformance.wasm NEXA_WASM_CALLBACK=artifacts/wasm-sample/callback.wasm NEXA_WASM_CODEC=artifacts/wasm-sample/codec.wasm dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
 dotnet pack src/Nexa.Plugin.Bootstrap.V1 -c Release -o artifacts/packages
 dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 ```
 
 Run `python eng/package_sdk.py` for the standalone C/Wasm SDK ZIP. The managed SDK
 NuGet package also includes its schemas and C headers. Cross-language tests cover
-all 363 calls and 292 model/collection shapes, including callbacks and malformed
+all 364 calls and 293 model/collection shapes, including callbacks and malformed
 wire values. These tests exercise SDK semantics against explicit test Host ports.
 
 CI also packs Hosting, WasmRuntime, Packages and the trusted development
@@ -59,7 +60,7 @@ RuntimeAdapter with their versioned dependencies. Host embedders can use those
 packages without a private project reference.
 
 Use `artifacts/packages` as a local NuGet source and reference
-`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.4`. Edit
+`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.5`. Edit
 [contracts/abi100.json](contracts/abi100.json), then run the generator without
 `--verify`; do not edit generated sources. CI checks reproducibility on all three
 supported operating systems. The managed sample demonstrates Get/Make negotiation and
@@ -83,3 +84,5 @@ resolved content registries/tags/overlays, state/CAS, durable event callbacks, p
 workflows with atomic persistent checkpoints, scheduling and suspended nodes. It runs the same lifecycle tests in
 NativeAOT. Desktop business adapters, UI consumers and other remaining
 items are tracked explicitly in the [acceptance status](docs/roadmap.md).
+
+See [Desktop integration](docs/desktop-integration.md) for the authenticated worker, package UI references and the runnable Desktop example.

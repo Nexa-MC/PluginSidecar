@@ -211,6 +211,7 @@ typedef enum { nx_OperationState_Pending = 0, nx_OperationState_Running = 1, nx_
 typedef enum { nx_OrderingPolicy_ExplicitConstraints = 0, nx_OrderingPolicy_UserSelection = 1, nx_OrderingPolicy_RejectAmbiguity = 2 } nx_OrderingPolicy;
 typedef struct { nx_value value; } nx_OverlayDefinition;
 typedef enum { nx_OwnershipPolicy_OwnerOnly = 0, nx_OwnershipPolicy_AuditedOverlay = 1 } nx_OwnershipPolicy;
+typedef struct { nx_value value; } nx_PackageFileRequest;
 typedef struct { nx_value value; } nx_Page_AccountPublic;
 typedef struct { nx_value value; } nx_Page_ActionDescriptor;
 typedef struct { nx_value value; } nx_Page_BackupSummary;
@@ -1039,6 +1040,9 @@ static inline void nx_OverlayDefinition_encode(nx_writer *w, nx_OverlayDefinitio
 static inline void nx_OwnershipPolicy_validate(nx_value v, nx_u32 depth);
 static inline nx_OwnershipPolicy nx_OwnershipPolicy_read(nx_value v);
 static inline void nx_OwnershipPolicy_encode(nx_writer *w, nx_OwnershipPolicy value);
+static inline void nx_PackageFileRequest_validate(nx_value v, nx_u32 depth);
+static inline nx_PackageFileRequest nx_PackageFileRequest_read(nx_value v);
+static inline void nx_PackageFileRequest_encode(nx_writer *w, nx_PackageFileRequest value);
 static inline void nx_Page_AccountPublic_validate(nx_value v, nx_u32 depth);
 static inline nx_Page_AccountPublic nx_Page_AccountPublic_read(nx_value v);
 static inline void nx_Page_AccountPublic_encode(nx_writer *w, nx_Page_AccountPublic value);
@@ -2281,6 +2285,9 @@ static inline void nx_OverlayDefinition_encode(nx_writer *w,nx_OverlayDefinition
 static inline void nx_OwnershipPolicy_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(nx_is_string(v,"OwnerOnly") || nx_is_string(v,"AuditedOverlay")); }
 static inline nx_OwnershipPolicy nx_OwnershipPolicy_read(nx_value v) { nx_OwnershipPolicy_validate(v,0); if(nx_is_string(v,"OwnerOnly")) return nx_OwnershipPolicy_OwnerOnly; if(nx_is_string(v,"AuditedOverlay")) return nx_OwnershipPolicy_AuditedOverlay; __builtin_trap(); }
 static inline void nx_OwnershipPolicy_encode(nx_writer *w,nx_OwnershipPolicy value) { switch(value) { case nx_OwnershipPolicy_OwnerOnly: nx_string(w,"OwnerOnly"); return; case nx_OwnershipPolicy_AuditedOverlay: nx_string(w,"AuditedOverlay"); return; default: __builtin_trap(); } }
+static inline void nx_PackageFileRequest_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(v.size && v.data[0]==8); nx_string_validate(nx_field(v,"path"),depth+1);  }
+static inline nx_PackageFileRequest nx_PackageFileRequest_read(nx_value v) { nx_PackageFileRequest_validate(v,0); nx_PackageFileRequest result={v}; return result; }
+static inline void nx_PackageFileRequest_encode(nx_writer *w,nx_PackageFileRequest value) { nx_raw(w,value.value); }
 static inline void nx_Page_AccountPublic_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(v.size && v.data[0]==8); nx_AccountPublicArray_validate(nx_field(v,"items"),depth+1); nx_stringOptional_validate(nx_field(v,"nextCursor"),depth+1); nx_Revision_validate(nx_field(v,"revision"),depth+1);  }
 static inline nx_Page_AccountPublic nx_Page_AccountPublic_read(nx_value v) { nx_Page_AccountPublic_validate(v,0); nx_Page_AccountPublic result={v}; return result; }
 static inline void nx_Page_AccountPublic_encode(nx_writer *w,nx_Page_AccountPublic value) { nx_raw(w,value.value); }
@@ -3728,6 +3735,8 @@ static inline nx_value nx_OverlayDefinition_Patch(nx_OverlayDefinition value) { 
 static inline nx_QualifiedIdArray nx_OverlayDefinition_Before(nx_OverlayDefinition value) { return nx_QualifiedIdArray_read(nx_field(value.value,"before")); }
 static inline nx_QualifiedIdArray nx_OverlayDefinition_After(nx_OverlayDefinition value) { return nx_QualifiedIdArray_read(nx_field(value.value,"after")); }
 static inline nx_OverlayDefinition nx_OverlayDefinition_write(nx_writer *w, nx_text arg_Id, nx_text arg_Target, nx_MergePolicy arg_Mode, nx_SchemaRef arg_Schema, nx_value arg_Patch, nx_QualifiedIdArray arg_Before, nx_QualifiedIdArray arg_After) { nx_u32 start=w->size; nx_map(w,7); nx_key(w,"after"); nx_QualifiedIdArray_encode(w,arg_After);nx_key(w,"before"); nx_QualifiedIdArray_encode(w,arg_Before);nx_key(w,"id"); nx_QualifiedId_encode(w,arg_Id);nx_key(w,"mode"); nx_MergePolicy_encode(w,arg_Mode);nx_key(w,"patch"); nx_AbiValue_encode(w,arg_Patch);nx_key(w,"schema"); nx_SchemaRef_encode(w,arg_Schema);nx_key(w,"target"); nx_QualifiedId_encode(w,arg_Target);return nx_OverlayDefinition_read(nx_written(w,start)); }
+static inline nx_text nx_PackageFileRequest_Path(nx_PackageFileRequest value) { return nx_string_read(nx_field(value.value,"path")); }
+static inline nx_PackageFileRequest nx_PackageFileRequest_write(nx_writer *w, nx_text arg_Path) { nx_u32 start=w->size; nx_map(w,1); nx_key(w,"path"); nx_string_encode(w,arg_Path);return nx_PackageFileRequest_read(nx_written(w,start)); }
 static inline nx_AccountPublicArray nx_Page_AccountPublic_Items(nx_Page_AccountPublic value) { return nx_AccountPublicArray_read(nx_field(value.value,"items")); }
 static inline nx_stringOptional nx_Page_AccountPublic_NextCursor(nx_Page_AccountPublic value) { return nx_stringOptional_read(nx_field(value.value,"nextCursor")); }
 static inline nx_text nx_Page_AccountPublic_Revision(nx_Page_AccountPublic value) { return nx_Revision_read(nx_field(value.value,"revision")); }
@@ -5137,6 +5146,8 @@ static inline void nx_Files_PrepareDelete(nx_writer *w,nx_FileDelete request,con
 static inline int nx_Files_PrepareDelete_result(nx_value reply,nx_MutationPlan *result) { nx_require(result!=0); *result=(nx_MutationPlan){0}; if(!nx_reply_success(reply)) return 0; *result=nx_MutationPlan_read(nx_field(reply,"value")); return 1; }
 static inline void nx_Files_Delete(nx_writer *w,nx_PlanRequest request,const nx_call_options *options) { nx_PlanRequest_validate(request.value,0); nx_invoke_options(w,"nexa.files/100",10,request.value,options); }
 static inline int nx_Files_Delete_result(nx_value reply,nx_OperationRef *result) { nx_require(result!=0); *result=(nx_OperationRef){0}; if(!nx_reply_success(reply)) return 0; *result=nx_OperationRef_read(nx_field(reply,"value")); return 1; }
+static inline void nx_Files_OpenPackageFile(nx_writer *w,nx_PackageFileRequest request,const nx_call_options *options) { nx_PackageFileRequest_validate(request.value,0); nx_invoke_options(w,"nexa.files/100",11,request.value,options); }
+static inline int nx_Files_OpenPackageFile_result(nx_value reply,nx_FileRef *result) { nx_require(result!=0); *result=(nx_FileRef){0}; if(!nx_reply_success(reply)) return 0; *result=nx_FileRef_read(nx_field(reply,"value")); return 1; }
 static inline void nx_Network_Request(nx_writer *w,nx_NetworkRequest request,const nx_call_options *options) { nx_NetworkRequest_validate(request.value,0); nx_invoke_options(w,"nexa.network/100",1,request.value,options); }
 static inline int nx_Network_Request_result(nx_value reply,nx_NetworkResponse *result) { nx_require(result!=0); *result=(nx_NetworkResponse){0}; if(!nx_reply_success(reply)) return 0; *result=nx_NetworkResponse_read(nx_field(reply,"value")); return 1; }
 static inline void nx_Network_OpenResponseStream(nx_writer *w,nx_EntityRequest request,const nx_call_options *options) { nx_EntityRequest_validate(request.value,0); nx_invoke_options(w,"nexa.network/100",2,request.value,options); }
@@ -5353,6 +5364,7 @@ static inline nx_SchemaRef nx_schema_OperationRecord(nx_writer *w) { return nx_S
 static inline nx_SchemaRef nx_schema_OperationRef(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/operationref"),1,nx_literal("765c2a43a31ac45479fc0d940ef9a0a8e59c02533ab78f2263435237e48baed2")); }
 static inline nx_SchemaRef nx_schema_OperationRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/operationrequest"),1,nx_literal("609a9ee8790c9cc25f42d1c7418b445dfb51abd24926477943996f6665203f38")); }
 static inline nx_SchemaRef nx_schema_OverlayDefinition(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/overlaydefinition"),1,nx_literal("19a5b3d40756f76de4dd32fb8188e3c924ca20d75fac44c909b898bcd35d467c")); }
+static inline nx_SchemaRef nx_schema_PackageFileRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/packagefilerequest"),1,nx_literal("c1da2809ce75f21a814b330adddabf5ee392d5ef1d70edb56cad61bd64b91f68")); }
 static inline nx_SchemaRef nx_schema_PageRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pagerequest"),1,nx_literal("c91ffc50be926c0a585bafd621221b7ad7d41eb53f48938ba2e4e40361b82d02")); }
 static inline nx_SchemaRef nx_schema_PlanRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/planrequest"),1,nx_literal("861927ac6fbfd2395e744aa5ad733f0a2cd9d64a1d10a050610d0b37079fe20b")); }
 static inline nx_SchemaRef nx_schema_PlatformDescription(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/platformdescription"),1,nx_literal("23bb603c4a3316b71bb22ddd48dce21a3938b915519baed5b4426e9f88f06e05")); }
@@ -5784,6 +5796,7 @@ static const nx_operation_descriptor nx_operation_catalog[] = {
     {"Files", "Move", "nexa.files/100", "PlanRequest", "OperationRef", "Operation", "nexa.files.write", "RequiredKey", "HostMappingPending", 8, 1, {"Active"}},
     {"Files", "PrepareDelete", "nexa.files/100", "FileDelete", "MutationPlan", "Query", "nexa.files.read", "ReadOnly", "HostMappingPending", 9, 5, {"Initialize", "PostInitialize", "Checkup", "Finalize", "Active"}},
     {"Files", "Delete", "nexa.files/100", "PlanRequest", "OperationRef", "Operation", "nexa.files.write", "RequiredKey", "HostMappingPending", 10, 1, {"Active"}},
+    {"Files", "OpenPackageFile", "nexa.files/100", "PackageFileRequest", "FileRef", "Query", "nexa.files.read", "ReadOnly", "HostMappingPending", 11, 5, {"Initialize", "PostInitialize", "Checkup", "Finalize", "Active"}},
     {"Network", "Request", "nexa.network/100", "NetworkRequest", "NetworkResponse", "Operation", "nexa.network.write", "OutcomeMayBeUnknown", "HostMappingPending", 1, 1, {"Active"}},
     {"Network", "OpenResponseStream", "nexa.network/100", "EntityRequest", "BlobRef", "Operation", "nexa.network.write", "OutcomeMayBeUnknown", "HostMappingPending", 2, 1, {"Active"}},
     {"Network", "Cancel", "nexa.network/100", "OperationRequest", "Empty", "Mutation", "nexa.network.write", "RequiredKey", "HostMappingPending", 3, 1, {"Active"}},

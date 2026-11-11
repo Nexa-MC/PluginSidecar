@@ -16,6 +16,7 @@ jobs:
   build:
     needs: guest-sdk
     env:
+      NEXA_PLUGIN_WORKER: src/PluginSidecar/bin/Release/net10.0/PluginSidecar.dll
       NEXA_WASM_SAMPLE: artifacts/wasm-sample/plugin.zip
       NEXA_WASM_CONFORMANCE: artifacts/wasm-sample/conformance.wasm
       NEXA_WASM_CALLBACK: artifacts/wasm-sample/callback.wasm
@@ -39,10 +40,11 @@ jobs:
           path: artifacts/wasm-sample
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: '10.0.403'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - run: python eng/prepare_host_reference.py
       - run: python eng/generate_abi100.py --verify
       - run: dotnet build PluginSidecar.slnx -c Release
       - run: dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
@@ -71,4 +73,10 @@ jobs:
         run: |
           $binary = if ($IsWindows) { './artifacts/${{ matrix.rid }}/PluginSidecar.exe' } else { './artifacts/${{ matrix.rid }}/PluginSidecar' }
           & $binary --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - shell: pwsh
+        run: |
+          $env:NEXA_PLUGIN_WORKER = if ($IsWindows) { './artifacts/${{ matrix.rid }}/PluginSidecar.exe' } else { './artifacts/${{ matrix.rid }}/PluginSidecar' }
+          $test = if ($IsWindows) { './artifacts/aot-smoke/PluginSidecar.AotSmoke.exe' } else { './artifacts/aot-smoke/PluginSidecar.AotSmoke' }
+          & $test --remote-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

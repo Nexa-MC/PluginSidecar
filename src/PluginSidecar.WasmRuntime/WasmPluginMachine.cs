@@ -9,7 +9,7 @@ public sealed record WasmHostCall(string Contract, uint Method, AbiValue Argumen
 public sealed record WasmLimits(long MemoryBytes = 32 * 1024 * 1024, ulong FuelPerCallback = 10_000_000, int MaximumHostCalls = 1024);
 
 /// <summary>Import-free, bounded guest machine. All effects are asynchronous continuations.</summary>
-public sealed class WasmPluginMachine : IAsyncDisposable
+public sealed class WasmPluginMachine : IWasmPluginMachine
 {
     private readonly Engine _engine;
     private readonly Module _module;
@@ -118,7 +118,7 @@ public sealed class WasmPluginMachine : IAsyncDisposable
         if (size > DataCodec.MaximumBytes) throw new InvalidDataException("Guest reply exceeds its byte budget.");
         return AbiValueBinary.Decode(_memory.GetSpan(outputAddress, checked((int)size)));
     }
-    private static AbiValue EncodeError(AbiError error) => DataCodec.Map(("code", DataCodec.WriteString(error.Code)),
+    internal static AbiValue EncodeError(AbiError error) => DataCodec.Map(("code", DataCodec.WriteString(error.Code)),
         ("message", DataCodec.WriteString(error.Message)), ("stage", DataCodec.WriteString(error.Stage)),
         ("operation", DataCodec.WriteString(error.Operation)), ("pluginId", DataCodec.WriteString(error.PluginId)), ("loadInstanceId", DataCodec.WriteGuid(error.LoadInstanceId)),
         ("messageKey", DataCodec.WriteString(error.MessageKey)), ("operationId", DataCodec.WriteGuid(error.OperationId)),

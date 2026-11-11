@@ -5,8 +5,9 @@ using Nexa.Plugin.Sdk.Abi100.Data;
 namespace PluginSidecar.WasmRuntime;
 
 /// <summary>Bootstrap and business callback adapter for import-free WebAssembly.</summary>
-public sealed class WasmPluginEntry(PluginManifest manifest, WasmPluginMachine machine) : IPluginBootstrapV1, IPluginInvocationV1, IPluginCleanupInvocationV1, IPluginProbeInvocationV1, IAsyncDisposable
+public sealed class WasmPluginEntry(PluginManifest manifest, IWasmPluginMachine machine) : IPluginBootstrapV1, IPluginInvocationV1, IPluginCleanupInvocationV1, IPluginProbeInvocationV1, IAsyncDisposable
 {
+    public WasmPluginEntry(PluginManifest manifest,WasmPluginMachine machine):this(manifest,(IWasmPluginMachine)machine){}
     private PluginIdentity? _identity;
     private ABIContext? _abi;
     private readonly CancellationTokenSource _activeLifetime = new();

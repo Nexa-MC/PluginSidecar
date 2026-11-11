@@ -1,8 +1,15 @@
-if (args is ["--version"])
+using Nexa.Sidecar.Transport;
+using PluginSidecar;
+if(args is ["--version"]){Console.WriteLine("PluginSidecar 0.2.0-alpha.5");return 0;}
+if(args is not ["--nexa-sidecar","--endpoint",var endpoint])
+{Console.Error.WriteLine("Usage: PluginSidecar --nexa-sidecar --endpoint <host-endpoint>");return 2;}
+try
 {
-    Console.WriteLine("PluginSidecar 0.2.0-alpha.4");
+    using var connect=new CancellationTokenSource(TimeSpan.FromSeconds(15));
+    await using var stream=await SidecarBootstrap.ConnectAsync(endpoint,Console.OpenStandardInput(),connect.Token);
+    using var wire=new SidecarFrameTransport(stream);
+    await new PluginExecutionPeer(wire).RunAsync(default);
     return 0;
 }
-Console.WriteLine("PluginSidecar development scaffold. NexaCL Host integration is not implemented yet.");
-Console.WriteLine("Usage: PluginSidecar --version");
-return args.Length == 0 ? 0 : 2;
+catch(Exception error)when(error is not OutOfMemoryException and not AccessViolationException)
+{Console.Error.WriteLine("Plugin execution session failed: "+error.GetType().Name);return 1;}
