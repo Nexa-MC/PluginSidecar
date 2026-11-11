@@ -1,6 +1,6 @@
 # Nexa ABI 100 C/Wasm SDK
 
-This package contains all 339 v0.2 operations and the 22 preserved preview slots,
+This package contains all 341 v0.2 operations and the 22 preserved preview slots,
 with typed model views, builders, arrays, optionals, enum codecs and result readers.
 It also includes the generic guest continuation and callback API. The Host remains
 authoritative for capability availability, permissions, scope and lifecycle.

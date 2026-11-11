@@ -153,3 +153,23 @@ separate typed callback port for events, services and other Host-dispatched
 handlers. The embedding Host must authorize dispatch and provide its context;
 the guest cannot supply identity, phase or deadline. This is an SDK/adapter
 boundary and does not install business handlers, subscriptions or UI in Desktop.
+
+## Runtime capability services (2026-11-11)
+
+The kernel will own scoped state, public service definitions and bindings, callback
+scheduling, events, operation records and diagnostics. These are executable routes,
+not generated dispatch stubs. Declarations participate in the same publication
+lock and group commit as content; abort and stop invalidate bindings, subscriptions
+and callbacks. The coordinator is the only dispatcher of plugin callbacks and
+supplies the admitted identity/context, deadline and causality. Calls never wait
+while holding the publication lock. Watch handles are consumed by a trusted Host
+subscription port; this adds no wire opcode. Application effects still belong to
+the existing launcher services and require explicit public Host adapters.
+
+The watch contract had a missing consumption path: `SubscriptionRef` could be
+created but the SDK had no way to read or release it. ABI 100 now appends
+Resources methods 4 (`ReadSubscription`) and 5 (`ReleaseSubscription`), preserving
+all existing method slots. These are capability operations over the existing
+binary boundary, not transport message IDs. Reads are bounded, owner checked and
+report queue gaps; callback subscriptions return their gap status without stealing
+callback messages. SDK packages advance to 0.2.0-alpha.3 for this additive change.

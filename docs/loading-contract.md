@@ -9,7 +9,7 @@ and explicit bounded data through reviewed upstream operations.
 
 ## Preview compatibility
 
-Bootstrap and SDK packages are now `0.2.0-alpha.2`. The requested revision changes
+Bootstrap and SDK packages are now `0.2.0-alpha.3`. The requested revision changes
 managed signatures and adds activation: **rebuild earlier preview plugins**. These
 unpublished previews are not binary-compatible. Bootstrap assembly identity remains
 `1.0.0.0`; that identity alone does not make old preview binaries compatible.
@@ -60,7 +60,7 @@ used. Saved experiment proxies recheck access before dispatch.
 | `nexa.resources/100` | 1 | RegisterCleanup |
 
 These 22 historical methods keep their dispatch meaning. The v0.2 catalog adds
-339 operations with typed requests and replies. Each entry records phase,
+341 operations with typed requests and replies. Each entry records phase,
 permission, idempotency and pending Host mapping. Contract IDs, schemas and
 permissions are preview design choices until Host mapping is reviewed. Diagnostic source/ownership is assigned by Host.
 The pre-Make `PreInitContext.Resources` port and post-Make `api.Resources` MUST

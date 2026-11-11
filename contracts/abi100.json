@@ -4206,6 +4206,26 @@
         "name": "Value",
         "type": "StorageValue"
       }
+    ],
+    "SubscriptionRead": [
+      {
+        "name": "Subscription",
+        "type": "SubscriptionRef"
+      },
+      {
+        "name": "Limit",
+        "type": "long"
+      }
+    ],
+    "SubscriptionBatch": [
+      {
+        "name": "Items",
+        "type": "AbiValue[]"
+      },
+      {
+        "name": "ResyncRequired",
+        "type": "bool"
+      }
     ]
   },
   "groups": [
@@ -5717,6 +5737,33 @@
             "Finalize",
             "Active",
             "Abort",
+            "Stop"
+          ],
+          "permission": "nexa.resources.write",
+          "idempotency": "RequiredKey",
+          "hostBinding": "HostMappingPending"
+        },
+        {
+          "name": "ReadSubscription",
+          "methodId": 4,
+          "input": "SubscriptionRead",
+          "output": "SubscriptionBatch",
+          "kind": "Mutation",
+          "phases": [
+            "Active"
+          ],
+          "permission": "nexa.resources.read",
+          "idempotency": "RequiredKey",
+          "hostBinding": "HostMappingPending"
+        },
+        {
+          "name": "ReleaseSubscription",
+          "methodId": 5,
+          "input": "SubscriptionRef",
+          "output": "Empty",
+          "kind": "Mutation",
+          "phases": [
+            "Active",
             "Stop"
           ],
           "permission": "nexa.resources.write",

@@ -46,6 +46,13 @@ public sealed class CapabilityAuthority
         }
     }
 
+    internal bool HasCapabilities(HostInvocation caller, ImmutableArray<string> contracts)
+    {
+        lock (_gate)
+            return _contexts.TryGetValue(caller.Identity.LoadInstanceId, out var context) && context.Info.Identity == caller.Identity &&
+                contracts.All(id => context.GetAbility(id).Success);
+    }
+
     public void CommitGroup(IReadOnlyList<Admission> members, Action publishRegistrations)
     {
         lock (_gate)

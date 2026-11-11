@@ -16,7 +16,7 @@ internal static class SurfaceTests
         var options = new InvocationOptions(Guid.NewGuid(), TimeSpan.FromSeconds(5), default)
         { CorrelationId = Guid.NewGuid(), CausationId = Guid.NewGuid(), ExpectedRevision = "opaque:r7", IdempotencyKey = "save-123" };
         var descriptors = Abi100Catalog.Operations;
-        Check(descriptors.Length == 339 && descriptors.Select(x => (x.ContractId, x.MethodId)).Distinct().Count() == 339);
+        Check(descriptors.Length == 341 && descriptors.Select(x => (x.ContractId, x.MethodId)).Distinct().Count() == 341);
         Check(descriptors.All(x => x.HostBinding == "HostMappingPending" && x.Phases.Length > 0));
         foreach (var group in spec.GetProperty("groups").EnumerateArray())
         {
@@ -79,7 +79,7 @@ internal static class SurfaceTests
         Check(descriptors.Single(x => x.Group == "Network" && x.Name == "Receive").Phases.SequenceEqual(["Active"]));
         api.Dispose();
         Check(!api.TryGet<Network100>().Success);
-        Console.WriteLine("PASS: 339 typed draft operations, nested groups, DTO codecs, opaque identifiers, capability revocation, malformed data bounds, exact Make requirements and Host failure preservation.");
+        Console.WriteLine("PASS: 341 typed draft operations, nested groups, DTO codecs, opaque identifiers, capability revocation, malformed data bounds, exact Make requirements and Host failure preservation.");
 
         AbiValue Fixture(string type)
         {

@@ -1,6 +1,7 @@
 await WasmTests.Run();
 await EndToEndTests.Run();
 await DefinitionTests.Run();
+await RuntimeServicesTests.Run();
 await GuestSdkTests.Run();
 await GuestConformanceTests.Run();
 await CallbackSdkTests.Run();

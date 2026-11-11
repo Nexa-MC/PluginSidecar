@@ -20,8 +20,10 @@ internal static class GuestCodecTests
             [1,0,0,0,8,2,0,0,0,1,0,0,0,97,0,1,0,0,0,97,0], // duplicate key
             [1,0,0,0,6,255,255,255,255] // negative byte length
         ];
+        int fixture = 0;
         foreach (var bytes in invalid)
         {
+            Console.WriteLine($"Codec rejection fixture {++fixture}/{invalid.Length}");
             try { AbiValueBinary.Decode(bytes); throw new InvalidOperationException("Invalid test fixture."); } catch (FormatException) { }
             await using var machine=new WasmPluginMachine(module);
             try { await machine.RunAsync(new AbiValue.Bytes(bytes.ToImmutableArray()), (_,_,_,_)=>throw new InvalidOperationException(),TimeSpan.FromSeconds(5)); throw new InvalidOperationException("Malformed C codec value accepted."); }

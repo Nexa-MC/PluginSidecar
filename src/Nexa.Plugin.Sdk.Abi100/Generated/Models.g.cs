@@ -3809,3 +3809,35 @@ public sealed record StorageEntry(string Key, global::Nexa.Plugin.Sdk.Abi100.Dat
         return new(DataCodec.ReadString(DataCodec.Field(map, "key")), global::Nexa.Plugin.Sdk.Abi100.Data.StorageValue.Read(DataCodec.Field(map, "value"), depth + 1));
     }
 }
+
+public sealed record SubscriptionRead(global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef Subscription, long Limit) : IAbiData<SubscriptionRead>
+{
+    public static AbiValue Write(SubscriptionRead value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("subscription", global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef.Write(value.Subscription, depth + 1)), ("limit", DataCodec.WriteInt64(value.Limit)));
+    }
+    public static SubscriptionRead Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef.Read(DataCodec.Field(map, "subscription"), depth + 1), DataCodec.ReadInt64(DataCodec.Field(map, "limit")));
+    }
+}
+
+public sealed record SubscriptionBatch(ImmutableArray<AbiValue> Items, bool ResyncRequired) : IAbiData<SubscriptionBatch>
+{
+    public static AbiValue Write(SubscriptionBatch value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("items", DataCodec.WriteArray(value.Items, (item, nestedDepth) => DataCodec.WriteValue(item), depth + 1)), ("resyncRequired", DataCodec.WriteBoolean(value.ResyncRequired)));
+    }
+    public static SubscriptionBatch Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(DataCodec.ReadArray(DataCodec.Field(map, "items"), (item, nestedDepth) => DataCodec.ReadValue(item), depth + 1), DataCodec.ReadBoolean(DataCodec.Field(map, "resyncRequired")));
+    }
+}

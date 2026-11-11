@@ -9,6 +9,7 @@ public sealed class PluginHostRuntime : IAsyncDisposable
     public CapabilityAuthority Authority { get; }
     public AtomicDefinitionRegistry Definitions { get; }
     public DurablePluginStorage Storage { get; }
+    public PluginRuntimeServices Services { get; }
     private readonly PluginLoadCoordinator _loads;
 
     public PluginHostRuntime(string storageDirectory, Func<Definition, bool> validateDefinition,
@@ -18,13 +19,16 @@ public sealed class PluginHostRuntime : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(validateDefinition); ArgumentNullException.ThrowIfNull(validateStorage);
         Storage = new(Path.GetFullPath(storageDirectory), validateStorage);
         AtomicDefinitionRegistry? definitions = null;
+        PluginRuntimeServices? services = null;
+        PluginLoadCoordinator? coordinator = null;
         Authority = new(owner =>
         {
             definitions = new(owner, validateDefinition);
-            return definitions.Routes.Concat(Storage.Routes).Concat(businessRoutes ?? []);
+            services = new(owner.PublicationGate, validateStorage, (identity, handle, input, options) => coordinator!.InvokeHandler(identity, handle, input, options), owner.HasCapabilities, Path.Combine(Path.GetFullPath(storageDirectory), "workflow-runs"));
+            return definitions.Routes.Concat(Storage.Routes).Concat(services.Routes).Concat(businessRoutes ?? []);
         });
-        Definitions = definitions!;
-        _loads = new(Authority, Definitions, identity => Storage.RetireAsync(identity.LoadInstanceId));
+        Definitions = definitions!; Services = services!;
+        _loads = coordinator = new(Authority, Definitions, identity => { Services.Retire(identity.LoadInstanceId); return Storage.RetireAsync(identity.LoadInstanceId); }, Services);
     }
 
     public ImmutableArray<PluginIdentity> Active => _loads.Active;

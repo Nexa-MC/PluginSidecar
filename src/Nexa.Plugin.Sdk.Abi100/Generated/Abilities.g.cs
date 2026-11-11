@@ -373,6 +373,12 @@ public sealed partial class Resources100 : ICapabilityView<Resources100>
     /// <summary>Draft Mutation; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
     public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.Empty>> Release(global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRequest request, InvocationOptions options) =>
         AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRequest, global::Nexa.Plugin.Sdk.Abi100.Data.Empty>(ability, ContractId, 3, request, options);
+    /// <summary>Draft Mutation; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
+    public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionBatch>> ReadSubscription(global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRead request, InvocationOptions options) =>
+        AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRead, global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionBatch>(ability, ContractId, 4, request, options);
+    /// <summary>Draft Mutation; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
+    public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.Empty>> ReleaseSubscription(global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef request, InvocationOptions options) =>
+        AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef, global::Nexa.Plugin.Sdk.Abi100.Data.Empty>(ability, ContractId, 5, request, options);
 }
 
 public sealed partial class Instances100(IAbilityV1 ability) : ICapabilityView<Instances100>

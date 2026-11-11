@@ -243,6 +243,8 @@ public static class Abi100Schemas
     public static SchemaRef RepairRequest { get; } = new(new("nexa:abi100/repairrequest"), 1, "03de8c519f768d8aaf79564adc01d76b3434fb2c9a47f7a8820e31600bc8d9db");
     public static SchemaRef DeclarativeContentPack { get; } = new(new("nexa:abi100/declarativecontentpack"), 1, "9bfd30b76847968b7d9f6320cceadf54ea312536d72b1ae477e17d00704cb671");
     public static SchemaRef StorageEntry { get; } = new(new("nexa:abi100/storageentry"), 1, "3ae8c9a065c86147c88115c8114af5dfd830dd05ba3be3740c28550ffe693be3");
+    public static SchemaRef SubscriptionRead { get; } = new(new("nexa:abi100/subscriptionread"), 1, "2612bfb615b0faf1a440f8e316f37c1f9547177b7f4a6a6a8f91b09e957bf453");
+    public static SchemaRef SubscriptionBatch { get; } = new(new("nexa:abi100/subscriptionbatch"), 1, "dad7176a95c7e2b80e79dd9db582b8d1ce7eed4c77e37a297f1ba739caed3513");
     public static bool Validate(SchemaRef schema, AbiValue value)
     {
         try
@@ -486,6 +488,8 @@ public static class Abi100Schemas
                 case "nexa:abi100/repairrequest": if (schema != RepairRequest) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.RepairRequest.Read(value); return true;
                 case "nexa:abi100/declarativecontentpack": if (schema != DeclarativeContentPack) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.DeclarativeContentPack.Read(value); return true;
                 case "nexa:abi100/storageentry": if (schema != StorageEntry) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.StorageEntry.Read(value); return true;
+                case "nexa:abi100/subscriptionread": if (schema != SubscriptionRead) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRead.Read(value); return true;
+                case "nexa:abi100/subscriptionbatch": if (schema != SubscriptionBatch) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionBatch.Read(value); return true;
                 default: return false;
             }
         }

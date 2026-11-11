@@ -341,7 +341,9 @@ typedef struct { nx_value value; } nx_StorageTransaction;
 typedef struct { nx_value value; } nx_StorageValue;
 typedef struct { nx_value value; } nx_StorageWrite;
 typedef struct { nx_value value; } nx_StorageWriteArray;
+typedef struct { nx_value value; } nx_SubscriptionBatch;
 typedef enum { nx_SubscriptionLifetime_Transient = 0, nx_SubscriptionLifetime_Resumable = 1 } nx_SubscriptionLifetime;
+typedef struct { nx_value value; } nx_SubscriptionRead;
 typedef struct { nx_value value; } nx_SubscriptionRef;
 typedef struct { nx_value value; } nx_TagDefinition;
 typedef struct { nx_value value; } nx_TagResolution;
@@ -1433,9 +1435,15 @@ static inline void nx_StorageWrite_encode(nx_writer *w, nx_StorageWrite value);
 static inline void nx_StorageWriteArray_validate(nx_value v, nx_u32 depth);
 static inline nx_StorageWriteArray nx_StorageWriteArray_read(nx_value v);
 static inline void nx_StorageWriteArray_encode(nx_writer *w, nx_StorageWriteArray value);
+static inline void nx_SubscriptionBatch_validate(nx_value v, nx_u32 depth);
+static inline nx_SubscriptionBatch nx_SubscriptionBatch_read(nx_value v);
+static inline void nx_SubscriptionBatch_encode(nx_writer *w, nx_SubscriptionBatch value);
 static inline void nx_SubscriptionLifetime_validate(nx_value v, nx_u32 depth);
 static inline nx_SubscriptionLifetime nx_SubscriptionLifetime_read(nx_value v);
 static inline void nx_SubscriptionLifetime_encode(nx_writer *w, nx_SubscriptionLifetime value);
+static inline void nx_SubscriptionRead_validate(nx_value v, nx_u32 depth);
+static inline nx_SubscriptionRead nx_SubscriptionRead_read(nx_value v);
+static inline void nx_SubscriptionRead_encode(nx_writer *w, nx_SubscriptionRead value);
 static inline void nx_SubscriptionRef_validate(nx_value v, nx_u32 depth);
 static inline nx_SubscriptionRef nx_SubscriptionRef_read(nx_value v);
 static inline void nx_SubscriptionRef_encode(nx_writer *w, nx_SubscriptionRef value);
@@ -2669,9 +2677,15 @@ static inline void nx_StorageWrite_encode(nx_writer *w,nx_StorageWrite value) { 
 static inline void nx_StorageWriteArray_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_u32 count=nx_count(v); for(nx_u32 i=0;i<count;i++) nx_StorageWrite_validate(nx_at(v,i),depth+1); }
 static inline nx_StorageWriteArray nx_StorageWriteArray_read(nx_value v) { nx_StorageWriteArray_validate(v,0); nx_StorageWriteArray result={v}; return result; }
 static inline void nx_StorageWriteArray_encode(nx_writer *w,nx_StorageWriteArray value) { nx_raw(w,value.value); }
+static inline void nx_SubscriptionBatch_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(v.size && v.data[0]==8); nx_AbiValueArray_validate(nx_field(v,"items"),depth+1); nx_bool_validate(nx_field(v,"resyncRequired"),depth+1);  }
+static inline nx_SubscriptionBatch nx_SubscriptionBatch_read(nx_value v) { nx_SubscriptionBatch_validate(v,0); nx_SubscriptionBatch result={v}; return result; }
+static inline void nx_SubscriptionBatch_encode(nx_writer *w,nx_SubscriptionBatch value) { nx_raw(w,value.value); }
 static inline void nx_SubscriptionLifetime_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(nx_is_string(v,"Transient") || nx_is_string(v,"Resumable")); }
 static inline nx_SubscriptionLifetime nx_SubscriptionLifetime_read(nx_value v) { nx_SubscriptionLifetime_validate(v,0); if(nx_is_string(v,"Transient")) return nx_SubscriptionLifetime_Transient; if(nx_is_string(v,"Resumable")) return nx_SubscriptionLifetime_Resumable; __builtin_trap(); }
 static inline void nx_SubscriptionLifetime_encode(nx_writer *w,nx_SubscriptionLifetime value) { switch(value) { case nx_SubscriptionLifetime_Transient: nx_string(w,"Transient"); return; case nx_SubscriptionLifetime_Resumable: nx_string(w,"Resumable"); return; default: __builtin_trap(); } }
+static inline void nx_SubscriptionRead_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(v.size && v.data[0]==8); nx_SubscriptionRef_validate(nx_field(v,"subscription"),depth+1); nx_long_validate(nx_field(v,"limit"),depth+1);  }
+static inline nx_SubscriptionRead nx_SubscriptionRead_read(nx_value v) { nx_SubscriptionRead_validate(v,0); nx_SubscriptionRead result={v}; return result; }
+static inline void nx_SubscriptionRead_encode(nx_writer *w,nx_SubscriptionRead value) { nx_raw(w,value.value); }
 static inline void nx_SubscriptionRef_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(v.size && v.data[0]==8); nx_Guid_validate(nx_field(v,"token"),depth+1); nx_Guid_validate(nx_field(v,"loadInstanceId"),depth+1); nx_stringOptional_validate(nx_field(v,"cursor"),depth+1); nx_bool_validate(nx_field(v,"resyncRequired"),depth+1);  }
 static inline nx_SubscriptionRef nx_SubscriptionRef_read(nx_value v) { nx_SubscriptionRef_validate(v,0); nx_SubscriptionRef result={v}; return result; }
 static inline void nx_SubscriptionRef_encode(nx_writer *w,nx_SubscriptionRef value) { nx_raw(w,value.value); }
@@ -4226,6 +4240,12 @@ static inline nx_StorageWrite nx_StorageWrite_write(nx_writer *w, nx_StorageName
 static inline nx_u32 nx_StorageWriteArray_count(nx_StorageWriteArray v) { return nx_count(v.value); }
 static inline nx_StorageWrite nx_StorageWriteArray_at(nx_StorageWriteArray v,nx_u32 i) { return nx_StorageWrite_read(nx_at(v.value,i)); }
 static inline nx_StorageWriteArray nx_StorageWriteArray_write(nx_writer *w,const nx_StorageWrite *items,nx_u32 count) { nx_u32 start=w->size; nx_require(count==0 || items); nx_array(w,count); for(nx_u32 i=0;i<count;i++) { nx_StorageWrite_encode(w,items[i]); } return nx_StorageWriteArray_read(nx_written(w,start)); }
+static inline nx_AbiValueArray nx_SubscriptionBatch_Items(nx_SubscriptionBatch value) { return nx_AbiValueArray_read(nx_field(value.value,"items")); }
+static inline int nx_SubscriptionBatch_ResyncRequired(nx_SubscriptionBatch value) { return nx_bool_read(nx_field(value.value,"resyncRequired")); }
+static inline nx_SubscriptionBatch nx_SubscriptionBatch_write(nx_writer *w, nx_AbiValueArray arg_Items, int arg_ResyncRequired) { nx_u32 start=w->size; nx_map(w,2); nx_key(w,"items"); nx_AbiValueArray_encode(w,arg_Items);nx_key(w,"resyncRequired"); nx_bool_encode(w,arg_ResyncRequired);return nx_SubscriptionBatch_read(nx_written(w,start)); }
+static inline nx_SubscriptionRef nx_SubscriptionRead_Subscription(nx_SubscriptionRead value) { return nx_SubscriptionRef_read(nx_field(value.value,"subscription")); }
+static inline nx_i64 nx_SubscriptionRead_Limit(nx_SubscriptionRead value) { return nx_long_read(nx_field(value.value,"limit")); }
+static inline nx_SubscriptionRead nx_SubscriptionRead_write(nx_writer *w, nx_SubscriptionRef arg_Subscription, nx_i64 arg_Limit) { nx_u32 start=w->size; nx_map(w,2); nx_key(w,"limit"); nx_long_encode(w,arg_Limit);nx_key(w,"subscription"); nx_SubscriptionRef_encode(w,arg_Subscription);return nx_SubscriptionRead_read(nx_written(w,start)); }
 static inline nx_text nx_SubscriptionRef_Token(nx_SubscriptionRef value) { return nx_Guid_read(nx_field(value.value,"token")); }
 static inline nx_text nx_SubscriptionRef_LoadInstanceId(nx_SubscriptionRef value) { return nx_Guid_read(nx_field(value.value,"loadInstanceId")); }
 static inline nx_stringOptional nx_SubscriptionRef_Cursor(nx_SubscriptionRef value) { return nx_stringOptional_read(nx_field(value.value,"cursor")); }
@@ -4669,6 +4689,10 @@ static inline void nx_Resources_RegisterCleanup(nx_writer *w,nx_CleanupRequest r
 static inline int nx_Resources_RegisterCleanup_result(nx_value reply,nx_RegistrationRef *result) { nx_require(result!=0); *result=(nx_RegistrationRef){0}; if(!nx_reply_success(reply)) return 0; *result=nx_RegistrationRef_read(nx_field(reply,"value")); return 1; }
 static inline void nx_Resources_Release(nx_writer *w,nx_RegistrationRequest request,const nx_call_options *options) { nx_RegistrationRequest_validate(request.value,0); nx_invoke_options(w,"nexa.resources/100",3,request.value,options); }
 static inline int nx_Resources_Release_result(nx_value reply,nx_Empty *result) { nx_require(result!=0); *result=(nx_Empty){0}; if(!nx_reply_success(reply)) return 0; *result=nx_Empty_read(nx_field(reply,"value")); return 1; }
+static inline void nx_Resources_ReadSubscription(nx_writer *w,nx_SubscriptionRead request,const nx_call_options *options) { nx_SubscriptionRead_validate(request.value,0); nx_invoke_options(w,"nexa.resources/100",4,request.value,options); }
+static inline int nx_Resources_ReadSubscription_result(nx_value reply,nx_SubscriptionBatch *result) { nx_require(result!=0); *result=(nx_SubscriptionBatch){0}; if(!nx_reply_success(reply)) return 0; *result=nx_SubscriptionBatch_read(nx_field(reply,"value")); return 1; }
+static inline void nx_Resources_ReleaseSubscription(nx_writer *w,nx_SubscriptionRef request,const nx_call_options *options) { nx_SubscriptionRef_validate(request.value,0); nx_invoke_options(w,"nexa.resources/100",5,request.value,options); }
+static inline int nx_Resources_ReleaseSubscription_result(nx_value reply,nx_Empty *result) { nx_require(result!=0); *result=(nx_Empty){0}; if(!nx_reply_success(reply)) return 0; *result=nx_Empty_read(nx_field(reply,"value")); return 1; }
 static inline void nx_Minecraft_Instances_List(nx_writer *w,nx_InstanceListRequest request,const nx_call_options *options) { nx_InstanceListRequest_validate(request.value,0); nx_invoke_options(w,"nexa.minecraft.instances/100",1,request.value,options); }
 static inline int nx_Minecraft_Instances_List_result(nx_value reply,nx_Page_InstanceSummary *result) { nx_require(result!=0); *result=(nx_Page_InstanceSummary){0}; if(!nx_reply_success(reply)) return 0; *result=nx_Page_InstanceSummary_read(nx_field(reply,"value")); return 1; }
 static inline void nx_Minecraft_Instances_Read(nx_writer *w,nx_EntityRequest request,const nx_call_options *options) { nx_EntityRequest_validate(request.value,0); nx_invoke_options(w,"nexa.minecraft.instances/100",2,request.value,options); }
@@ -5394,6 +5418,8 @@ static inline nx_SchemaRef nx_schema_StorageQuery(nx_writer *w) { return nx_Sche
 static inline nx_SchemaRef nx_schema_StorageTransaction(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/storagetransaction"),1,nx_literal("db554d8c5938e1534f1cf13638ded1cb756f62af925b26f0878bfdb4120b74b0")); }
 static inline nx_SchemaRef nx_schema_StorageValue(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/storagevalue"),1,nx_literal("36dc329ec8bf50eb148c650ebb74062d4aa447860dda09f4842453573e181249")); }
 static inline nx_SchemaRef nx_schema_StorageWrite(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/storagewrite"),1,nx_literal("ec43cc0015783374a4b77d81324f0cd8df58a3ea15d3e38e0699cf2e726bc7f5")); }
+static inline nx_SchemaRef nx_schema_SubscriptionBatch(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/subscriptionbatch"),1,nx_literal("dad7176a95c7e2b80e79dd9db582b8d1ce7eed4c77e37a297f1ba739caed3513")); }
+static inline nx_SchemaRef nx_schema_SubscriptionRead(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/subscriptionread"),1,nx_literal("2612bfb615b0faf1a440f8e316f37c1f9547177b7f4a6a6a8f91b09e957bf453")); }
 static inline nx_SchemaRef nx_schema_SubscriptionRef(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/subscriptionref"),1,nx_literal("9dd19e4a7a181f5e1f9b424666fcc8d62a768784b08efa40dcacdb4ccae5e22b")); }
 static inline nx_SchemaRef nx_schema_TagDefinition(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/tagdefinition"),1,nx_literal("342b754160e6c15c769a8c2fd2af2f13a610cf28ab242c9163e558ba0b659e4b")); }
 static inline nx_SchemaRef nx_schema_TagResolution(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/tagresolution"),1,nx_literal("13122ca4f947abf968afbb4f98aaf5a958381623933f7e872225f1cae743403b")); }
@@ -5534,6 +5560,8 @@ static const nx_operation_descriptor nx_operation_catalog[] = {
     {"Diagnostics", "ReadOwnReports", "nexa.diagnostics/100", "PageRequest", "Page<DiagnosticReport>", "Query", "nexa.diagnostics.read", "ReadOnly", "HostMappingPending", 8, 5, {"Initialize", "PostInitialize", "Checkup", "Finalize", "Active"}},
     {"Resources", "RegisterCleanup", "nexa.resources/100", "CleanupRequest", "RegistrationRef", "Registration", "nexa.resources.write", "RequiredKey", "HostMappingPending", 2, 5, {"PreInitialize", "Initialize", "PostInitialize", "Checkup", "Finalize"}},
     {"Resources", "Release", "nexa.resources/100", "RegistrationRequest", "Empty", "Mutation", "nexa.resources.write", "RequiredKey", "HostMappingPending", 3, 8, {"PreInitialize", "Initialize", "PostInitialize", "Checkup", "Finalize", "Active", "Abort", "Stop"}},
+    {"Resources", "ReadSubscription", "nexa.resources/100", "SubscriptionRead", "SubscriptionBatch", "Mutation", "nexa.resources.read", "RequiredKey", "HostMappingPending", 4, 1, {"Active"}},
+    {"Resources", "ReleaseSubscription", "nexa.resources/100", "SubscriptionRef", "Empty", "Mutation", "nexa.resources.write", "RequiredKey", "HostMappingPending", 5, 2, {"Active", "Stop"}},
     {"Minecraft.Instances", "List", "nexa.minecraft.instances/100", "InstanceListRequest", "Page<InstanceSummary>", "Query", "nexa.minecraft.instances.read", "ReadOnly", "HostMappingPending", 1, 5, {"Initialize", "PostInitialize", "Checkup", "Finalize", "Active"}},
     {"Minecraft.Instances", "Read", "nexa.minecraft.instances/100", "EntityRequest", "InstanceDetails", "Query", "nexa.minecraft.instances.read", "ReadOnly", "HostMappingPending", 2, 5, {"Initialize", "PostInitialize", "Checkup", "Finalize", "Active"}},
     {"Minecraft.Instances", "Watch", "nexa.minecraft.instances/100", "WatchRequest", "SubscriptionRef", "Subscription", "nexa.minecraft.instances.read", "ReadOnly", "HostMappingPending", 3, 5, {"Initialize", "PostInitialize", "Checkup", "Finalize", "Active"}},

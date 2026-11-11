@@ -9,8 +9,8 @@ public sealed record PluginLoadReport(PluginIdentity Identity, LoadState State, 
 { public ImmutableArray<Finding> Diagnostics { get; init; } = []; }
 
 /// <summary>Serialized dependency groups with atomic publication and fail-before-stop hot conflicts.</summary>
-public sealed class PluginLoadCoordinator(CapabilityAuthority authority, AtomicDefinitionRegistry registry,
-    Func<PluginIdentity, ValueTask>? retireResources = null) : IAsyncDisposable
+public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority, AtomicDefinitionRegistry registry,
+    Func<PluginIdentity, ValueTask>? retireResources = null, PluginRuntimeServices? services = null) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<string, Attempt> _active = new(StringComparer.Ordinal);
@@ -107,7 +107,8 @@ public sealed class PluginLoadCoordinator(CapabilityAuthority authority, AtomicD
                         authority.CommitGroup(members.Select(a => a.Admission!).ToArray(), () =>
                         {
                             if (members.Any(m => _active.ContainsKey(m.Identity.PluginId))) throw new InvalidOperationException(AbiErrors.CONFLICT);
-                            registry.Publish(group);
+                            services?.ValidateCommit(group);
+                            registry.Publish(group); services?.Publish(group);
                             foreach (var member in members) { _active.Add(member.Identity.PluginId, member); member.State = LoadState.Active; }
                         });
                         foreach (var member in members)
@@ -125,10 +126,10 @@ public sealed class PluginLoadCoordinator(CapabilityAuthority authority, AtomicD
                 }
                 if (failure is not null)
                 {
-                    registry.Abort(group);
+                    registry.Abort(group); services?.Abort(group);
                     foreach (var member in members.Reverse())
                     {
-                        member.Failure = failure; member.State = LoadState.Failed; member.Admission?.Retire(true);
+                        member.Invocations.Cancel(); member.Failure = failure; member.State = LoadState.Failed; member.Admission?.Retire(true);
                         if (member.Entry is not null && member.Stage != LoadStage.Checksum)
                         {
                             var cleanup = await CleanupCall(member, () => member.Entry.OnAbort(new(member.Identity, member.Stage, failure, member.Completed.ToImmutableArray(), new AbiValue.Null(), default, StageBudgets.Cleanup, member.Final))).ConfigureAwait(false);
@@ -151,18 +152,19 @@ public sealed class PluginLoadCoordinator(CapabilityAuthority authority, AtomicD
     private async ValueTask StopClosure(HashSet<string> ids)
     {
         bool changed;
-        do { changed = false; foreach (var entry in _active.Values) if (entry.Source.Manifest.RequiredDependencies.Any(d => ids.Contains(d.PluginId))) changed |= ids.Add(entry.Identity.PluginId); } while (changed);
+        do { changed = false; foreach (var entry in _active.Values) if (entry.Source.Manifest.RequiredDependencies.Any(d => ids.Contains(d.PluginId))) changed |= ids.Add(entry.Identity.PluginId); if(services is not null)foreach(var consumer in services.RequiredConsumers(ids))changed |= ids.Add(consumer); } while (changed);
         var affected = _active.Values.Where(a => ids.Contains(a.Identity.PluginId)).ToArray();
+        var requiredConsumers = affected.ToDictionary(a => a.Identity.PluginId, a => services?.RequiredConsumers(new HashSet<string> {a.Identity.PluginId}) ?? []);
         // Seal every affected instance before any callback; cycles cannot keep a provider reachable.
         lock (authority.PublicationGate)
         {
-            foreach (var entry in affected) { entry.Admission!.Retire(false); registry.Retire(entry.Identity.LoadInstanceId); _active.Remove(entry.Identity.PluginId); }
+            foreach (var entry in affected) { entry.Invocations.Cancel(); entry.Admission!.Retire(false); registry.Retire(entry.Identity.LoadInstanceId); services?.Retire(entry.Identity.LoadInstanceId); _active.Remove(entry.Identity.PluginId); }
         }
         var ordered = new List<Attempt>(); var visiting = new HashSet<string>(StringComparer.Ordinal);
         void ConsumersFirst(Attempt entry)
         {
             if (!visiting.Add(entry.Identity.PluginId)) return;
-            foreach (var consumer in affected.Where(a => a.Source.Manifest.RequiredDependencies.Any(d => d.PluginId == entry.Identity.PluginId))) ConsumersFirst(consumer);
+            foreach (var consumer in affected.Where(a => a.Source.Manifest.RequiredDependencies.Any(d => d.PluginId == entry.Identity.PluginId) || requiredConsumers[entry.Identity.PluginId].Contains(a.Identity.PluginId))) ConsumersFirst(consumer);
             ordered.Add(entry);
         }
         foreach (var entry in affected) ConsumersFirst(entry);
@@ -237,9 +239,13 @@ public sealed class PluginLoadCoordinator(CapabilityAuthority authority, AtomicD
     }
     private static async ValueTask RunRegisteredCleanup(Attempt member)
     {
-        foreach (var handle in member.CleanupCallbacks.AsEnumerable().Reverse().ToArray())
+        CallbackHandle[] cleanupHandles;
+        lock(member.Callbacks) cleanupHandles=member.CleanupCallbacks.AsEnumerable().Reverse().ToArray();
+        foreach (var handle in cleanupHandles)
         {
-            if (!member.Callbacks.TryGetValue(handle.Value, out var callback)) continue;
+            Func<AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>>? callback;
+            lock (member.Callbacks) member.Callbacks.TryGetValue(handle.Value, out callback);
+            if (callback is null) continue;
             using var deadline = new CancellationTokenSource(StageBudgets.Cleanup);
             try
             {
@@ -249,7 +255,7 @@ public sealed class PluginLoadCoordinator(CapabilityAuthority authority, AtomicD
             }
             catch (Exception e) when (Recoverable(e)) { member.Cleanup.Add(Error(member, AbiErrors.PLUGIN_EXCEPTION)); }
         }
-        member.CleanupCallbacks.Clear(); member.Callbacks.Clear();
+        lock(member.Callbacks) { member.CleanupCallbacks.Clear(); member.Callbacks.Clear(); }
     }
     private static async ValueTask Release(Attempt member)
     { try { var task = member.Source.Release().AsTask(); _ = Observe(task); await task.WaitAsync(StageBudgets.Cleanup).ConfigureAwait(false); } catch (Exception e) when (Recoverable(e)) { member.Cleanup.Add(Error(member, AbiErrors.PLUGIN_EXCEPTION)); } }
@@ -281,6 +287,7 @@ public sealed class PluginLoadCoordinator(CapabilityAuthority authority, AtomicD
         internal PluginIdentity Identity = new(source.Manifest.PluginId, source.Manifest.PluginVersion, Guid.NewGuid());
         internal Guid GroupId;
         internal IPluginBootstrapV1? Entry;
+        internal CancellationTokenSource Invocations = new();
         internal CapabilityAuthority.Admission? Admission;
         internal ABIContext? Final;
         internal LoadStage Stage = LoadStage.Checksum;
@@ -302,16 +309,19 @@ public sealed class PluginLoadCoordinator(CapabilityAuthority authority, AtomicD
         }
         public ValueTask<AbiReply<RegistrationHandle>> RegisterCleanup(CallbackHandle callback, InvocationOptions options)
         {
-            if (!member.Callbacks.ContainsKey(callback.Value)) return ValueTask.FromResult(AbiReply<RegistrationHandle>.Fail(Error(member, AbiErrors.HANDLE_INVALID)));
-            if (!member.CleanupCallbacks.Contains(callback)) member.CleanupCallbacks.Add(callback);
-            return ValueTask.FromResult(AbiReply<RegistrationHandle>.Ok(new(callback.Value)));
+            lock(member.Callbacks)
+            {
+                if(member.Invocations.IsCancellationRequested)return ValueTask.FromResult(AbiReply<RegistrationHandle>.Fail(Error(member,AbiErrors.PLUGIN_STOPPED)));
+                if (!member.Callbacks.ContainsKey(callback.Value)) return ValueTask.FromResult(AbiReply<RegistrationHandle>.Fail(Error(member, AbiErrors.HANDLE_INVALID)));
+                if (!member.CleanupCallbacks.Contains(callback)) member.CleanupCallbacks.Add(callback);
+                return ValueTask.FromResult(AbiReply<RegistrationHandle>.Ok(new(callback.Value)));
+            }
         }
         public CallbackHandle Register(string contractId, Func<AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>> callback)
         {
             ArgumentNullException.ThrowIfNull(callback);
-            if (member.Callbacks.Count >= 256) throw new InvalidOperationException(AbiErrors.MESSAGE_TOO_LARGE);
-            var handle = new CallbackHandle(++member.NextCallback); member.Callbacks.Add(handle.Value, callback); return handle;
+            lock (member.Callbacks) { if(member.Invocations.IsCancellationRequested)throw new InvalidOperationException(AbiErrors.PLUGIN_STOPPED);if (member.Callbacks.Count >= 256) throw new InvalidOperationException(AbiErrors.MESSAGE_TOO_LARGE);var handle = new CallbackHandle(++member.NextCallback); member.Callbacks.Add(handle.Value, callback); return handle; }
         }
-        public void Release(CallbackHandle callback) { member.Callbacks.Remove(callback.Value); member.CleanupCallbacks.Remove(callback); }
+        public void Release(CallbackHandle callback) { lock (member.Callbacks) { member.Callbacks.Remove(callback.Value); member.CleanupCallbacks.Remove(callback); } }
     }
 }

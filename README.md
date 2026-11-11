@@ -5,17 +5,17 @@ English | [简体中文](README.zh-CN.md)
 NexaCL plugin contracts and SDK for derivative developers and contributors.
 The current design is [Plugin ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md).
 
-## SDK 0.2.0-alpha.2
+## SDK 0.2.0-alpha.3
 
 - `Nexa.Plugin.Bootstrap.V1`: unified ABIContext, required/optional capability negotiation, six loading stages, activation/cleanup callbacks, errors and Host commit ports.
-- `Nexa.Plugin.Sdk.Abi100`: 33 capability groups, 339 new typed operations, 236 data models, bounded codecs, opaque IDs/revisions, and the 22 previous preview dispatch slots.
+- `Nexa.Plugin.Sdk.Abi100`: 33 capability groups, 341 new typed operations, 238 data models, bounded codecs, opaque IDs/revisions, and the 22 previous preview dispatch slots.
 - `Nexa.Plugin.MarketDelivery`: signed encrypted delivery verification and an offline cache; independent package version `0.1.0-alpha.1`.
-- `Nexa.Plugin.Hosting`: capability authority, dependency-group loading, atomic definitions and durable private storage.
+- `Nexa.Plugin.Hosting`: capability authority, dependency-group loading, atomic definitions and durable private storage, runtime state/events/services and durable workflow checkpoints.
 - `PluginSidecar.WasmRuntime` / `PluginSidecar.Packages`: import-free Wasm execution, authenticated package parsing and declarative content entries.
-- `sdk/wasm`: complete C/Wasm bindings for 339 current and 22 legacy operations, typed models/builders/results, callbacks and schema/operation metadata; see [guest development](docs/wasm-sdk.md).
+- `sdk/wasm`: complete C/Wasm bindings for 341 current and 22 legacy operations, typed models/builders/results, callbacks and schema/operation metadata; see [guest development](docs/wasm-sdk.md).
 - `PluginSidecar.RuntimeAdapter`: **trusted development only** CoreCLR memory loading. This is not the controlled execution environment required by v0.2.
 
-The typed catalog is a **draft SDK surface**, not 339 working Host integrations.
+The typed catalog is a **draft SDK surface**, not 341 working Host integrations.
 Every new operation records `HostMappingPending`. Host transport continues to use
 the existing NexaCL binary Sidecar ABI; catalog numbers are local dispatch slots,
 not new transport opcodes. The CLI is not yet an installable `.nsc`.
@@ -26,6 +26,8 @@ supports capability requirements, and new typed overloads sometimes require an
 explicit request type instead of target-typed `new(...)`. ABI generation remains
 100. Bootstrap assembly identity remains 1.0.0.0, which does not make old preview
 binaries compatible. See [loading and migration](docs/loading-contract.md).
+
+Runtime behavior and remaining limits are documented in [runtime services](docs/runtime-services.md) and [acceptance status](docs/roadmap.md).
 
 ## Build and validate
 
@@ -42,11 +44,11 @@ dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 
 Run `python eng/package_sdk.py` for the standalone C/Wasm SDK ZIP. The managed SDK
 NuGet package also includes its schemas and C headers. Cross-language tests cover
-all 361 calls and 290 model/collection shapes, including callbacks and malformed
+all 363 calls and 292 model/collection shapes, including callbacks and malformed
 wire values. These tests exercise SDK semantics against explicit test Host ports.
 
 Use `artifacts/packages` as a local NuGet source and reference
-`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.2`. Edit
+`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.3`. Edit
 [contracts/abi100.json](contracts/abi100.json), then run the generator without
 `--verify`; do not edit generated sources. CI checks reproducibility on all three
 supported operating systems. The managed sample demonstrates Get/Make negotiation and
@@ -64,8 +66,8 @@ See [architecture](docs/architecture.md), [acceptance status](docs/roadmap.md),
 [Market/offline](docs/market-offline.md), [contributing](CONTRIBUTING.md), and
 [security](SECURITY.md). Apache-2.0.
 
-The composed kernel has 13 implemented operations: six definition operations
-(Register/RegisterBatch/Get/Query/UpdateOwned/RemoveOwned) and seven private
-storage operations. These are not Desktop business adapters. Dynamic registries,
-tags/overlays, workflows, providers, UI replacement and launcher business bindings
-still have acceptance work tracked in [the status table](docs/roadmap.md).
+The composed kernel implements 69 operations across 12 capability groups, including
+state/CAS, bounded event callbacks, public services, actions, predicates, tasks and
+workflows with atomic persistent checkpoints. It runs the same lifecycle tests in
+NativeAOT. Desktop business adapters, schedules, UI consumers and other remaining
+items are tracked explicitly in the [acceptance status](docs/roadmap.md).
