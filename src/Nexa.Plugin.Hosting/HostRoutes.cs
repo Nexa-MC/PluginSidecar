@@ -23,6 +23,6 @@ public static class HostRoutes
             catch (FormatException) { return Failure(AbiErrors.SCHEMA_INVALID, ImmutableDictionary<string, string>.Empty); }
             AbiReply<AbiValue> Failure(string code, ImmutableDictionary<string, string> details) => AbiReply<AbiValue>.Fail(new(code, code, invocation.Phase,
                 descriptor.ContractId + "." + method, invocation.Identity.PluginId, invocation.Identity.LoadInstanceId, invocation.Options.CorrelationId, false, details) { OperationId = invocation.Options.OperationId });
-        });
+        }) { MaximumReplyBytes = descriptor.Output is "Empty" or "OperationRef" ? 65536 : DataCodec.MaximumBytes };
     }
 }

@@ -173,3 +173,34 @@ all existing method slots. These are capability operations over the existing
 binary boundary, not transport message IDs. Reads are bounded, owner checked and
 report queue gaps; callback subscriptions return their gap status without stealing
 callback messages. SDK packages advance to 0.2.0-alpha.3 for this additive change.
+
+## Scheduled and suspended workflows (2026-11-11)
+
+The kernel owns interval, absolute-time and event-triggered schedules, bounded
+missed-trigger policies and debounce. A Host clock/pump supports deterministic
+verification; the normal runtime starts and stops the pump with its lifetime.
+Every scheduled workflow re-enters the existing capability authority as the
+schedule owner. Schedule definitions and subscriptions remain staged until group
+publication; disable/stop fences new dispatch. Persistent next-due state advances
+before dispatch, so a crash never causes an uncertain trigger to be replayed.
+
+Workflow concurrency is scoped to the admitted caller and workflow ID. Queue and
+ReplacePending serialize running work; replacement cancels only queued work.
+RejectDuplicate fails admission while a matching run is queued or executing.
+Resume uses the same admission path. Cancellation while queued cannot start work.
+WaitEvent and AskUser store waiting data in persistent journals. The trusted Host
+supplies a user-interaction port; unavailable UI is an explicit error. No plugin
+receives a renderer object or permission to impersonate a user's answer.
+
+## Durable event delivery and availability (2026-11-11)
+
+Durable events keep a bounded, atomically replaced binary history. Resumable
+subscriptions return an opaque checkpoint cursor bound to the subscriber ID,
+event stream and exact scope. Successful callbacks advance that checkpoint;
+a crash before acknowledgement may redeliver. The checkpoint never advances
+past an outstanding parallel delivery. Retention loss or queue overflow is an
+explicit resynchronization signal. No new transport message or callback identity
+is introduced. Callback retries use the existing admitted dispatcher and end at
+subscription release or plugin retirement. Staged replay cannot dispatch before
+successful activation. Availability subscriptions use the same owned resource
+queue and publish snapshots only at atomic publication/retirement boundaries.

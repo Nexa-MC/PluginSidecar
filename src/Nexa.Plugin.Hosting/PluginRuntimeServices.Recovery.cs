@@ -19,7 +19,7 @@ public sealed partial class PluginRuntimeServices
             ("pluginVersion",DataCodec.WriteString(operation.Owner.PluginVersion)),("operation",OperationRecord.Write(operation.Record)),
             ("definition",WorkflowDefinition.Write(run.Definition)),("request",WorkflowRequest.Write(run.Request)),
             ("trace",WorkflowTrace.Write(new(run.Id,run.Definition.DefinitionDigest,run.Steps.ToImmutableArray()))),
-            ("returns",new AbiValue.Array(run.Returns.Select(DataCodec.WriteString).ToImmutableArray())),("outcomes",new AbiValue.Map(run.Outcomes.ToImmutableDictionary())),("pendingEffects",new AbiValue.Array(run.PendingEffects.Select(DataCodec.WriteString).ToImmutableArray())));
+            ("waits",new AbiValue.Map(run.Waits.ToImmutableDictionary())),("returns",new AbiValue.Array(run.Returns.Select(DataCodec.WriteString).ToImmutableArray())),("outcomes",new AbiValue.Map(run.Outcomes.ToImmutableDictionary())),("pendingEffects",new AbiValue.Array(run.PendingEffects.Select(DataCodec.WriteString).ToImmutableArray())));
         byte[] bytes=AbiValueBinary.Encode(journal);
         string path=JournalPath(operation.Owner.PluginId,run.Id);Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var journals=Directory.EnumerateFiles(_workflowStore,"*.run",SearchOption.AllDirectories).Take(257).Select(p=>new FileInfo(p)).ToArray();
@@ -55,6 +55,7 @@ public sealed partial class PluginRuntimeServices
         var record=OperationRecord.Read(Field("operation"));if(record.Id!=id)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         var run=new Run(WorkflowDefinition.Read(Field("definition")),WorkflowRequest.Read(Field("request")))
         {
+            Waits=map.TryGetValue("waits",out var waits)?DataCodec.ReadMap(waits).ToDictionary():[],
             Id=id,Steps=WorkflowTrace.Read(Field("trace")).Steps.ToList(),Outcomes=DataCodec.ReadMap(Field("outcomes")).ToDictionary(),
             Returns=DataCodec.ReadArray(Field("returns"),(v,_)=>DataCodec.ReadString(v),0).ToHashSet(StringComparer.Ordinal),
             PendingEffects=DataCodec.ReadArray(Field("pendingEffects"),(v,_)=>DataCodec.ReadString(v),0).ToHashSet(StringComparer.Ordinal)
@@ -76,12 +77,11 @@ public sealed partial class PluginRuntimeServices
             var current=ResolveWorkflow(c,run.Request);
             if(!AbiValueBinary.Encode(WorkflowDefinition.Write(current)).SequenceEqual(AbiValueBinary.Encode(WorkflowDefinition.Write(run.Definition))))throw new AbiHostException(AbiErrors.PLAN_STALE);
             operation.Lifetime.Dispose();operation.Lifetime=CancellationTokenSource.CreateLinkedTokenSource(Lifetime(c.Identity));run.Work=0;
-            Change(operation,operation.Record with {State=OperationState.Pending,Failure=null,Stage="resuming"});
-            RunOperation(c,operation,async token=>
-            {
-                try{return AbiReply<AbiValue>.Ok(await ExecuteNodes(c with {Options=c.Options with {Cancellation=token}},run,run.Definition.Nodes,run.Request.Inputs,0,token,"root"));}
-                catch(FlowReturn result){return AbiReply<AbiValue>.Ok(result.Value);}
-            });
+            ReserveWorkflow(run);
+            var previous=operation.Record;
+            try { Change(operation,operation.Record with {State=OperationState.Pending,Failure=null,Stage="resuming"}); }
+            catch { operation.Record=previous;ReleaseWorkflow(run);throw; }
+            RunOperation(c,operation,token=>ExecuteRun(c,run,token),token=>EnterWorkflow(run,token),()=>ReleaseWorkflow(run));
             return new(operation.Record.Id,OperationState.Pending);
         }
     }

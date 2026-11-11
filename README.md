@@ -70,8 +70,8 @@ See [architecture](docs/architecture.md), [acceptance status](docs/roadmap.md),
 [Market/offline](docs/market-offline.md), [contributing](CONTRIBUTING.md), and
 [security](SECURITY.md). Apache-2.0.
 
-The composed kernel implements 69 operations across 12 capability groups, including
+The composed kernel implements 77 operations across 13 capability groups, including
 state/CAS, bounded event callbacks, public services, actions, predicates, tasks and
-workflows with atomic persistent checkpoints. It runs the same lifecycle tests in
-NativeAOT. Desktop business adapters, schedules, UI consumers and other remaining
+workflows with atomic persistent checkpoints, scheduling and suspended nodes. It runs the same lifecycle tests in
+NativeAOT. Desktop business adapters, UI consumers and other remaining
 items are tracked explicitly in the [acceptance status](docs/roadmap.md).

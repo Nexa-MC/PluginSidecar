@@ -7,7 +7,11 @@ namespace Nexa.Plugin.Hosting;
 
 public sealed record HostInvocation(PluginIdentity Identity, Guid GroupId, string Phase, InvocationOptions Options);
 public delegate ValueTask<AbiReply<AbiValue>> HostAbilityHandler(HostInvocation invocation, AbiValue arguments);
-public sealed record HostCapabilityRoute(AbiOperationDescriptor Descriptor, HostAbilityHandler Handler);
+public sealed record HostCapabilityRoute(AbiOperationDescriptor Descriptor, HostAbilityHandler Handler)
+{
+    // Trusted route metadata; enforced before a reply enters the replay cache.
+    public int MaximumReplyBytes { get; init; } = DataCodec.MaximumBytes;
+}
 
 /// <summary>Trusted Host authority. Guest-provided identity, phase and capability metadata are never used as grants.</summary>
 public sealed class CapabilityAuthority
@@ -27,7 +31,7 @@ public sealed class CapabilityAuthority
     {
         _routes = createRoutes(this).ToImmutableDictionary(r => (r.Descriptor.ContractId, r.Descriptor.MethodId));
         foreach (var route in _routes.Values)
-            if (route.Descriptor.MethodId == 0 || string.IsNullOrWhiteSpace(route.Descriptor.ContractId) || route.Handler is null)
+            if (route.Descriptor.MethodId == 0 || string.IsNullOrWhiteSpace(route.Descriptor.ContractId) || route.Handler is null || route.MaximumReplyBytes is < 65536 or > DataCodec.MaximumBytes)
                 throw new ArgumentException("Invalid Host capability route.", nameof(createRoutes));
     }
 
@@ -51,6 +55,22 @@ public sealed class CapabilityAuthority
         lock (_gate)
             return _contexts.TryGetValue(caller.Identity.LoadInstanceId, out var context) && context.Info.Identity == caller.Identity &&
                 contracts.All(id => context.GetAbility(id).Success);
+    }
+
+    internal bool IsAuthorized(PluginIdentity identity,string permission)
+    {
+        lock(_gate)return _contexts.TryGetValue(identity.LoadInstanceId,out var context)&&context.Info.Identity==identity&&
+            context.Phase=="Active"&&context.Info.Permissions.Contains(permission);
+    }
+
+    internal ValueTask<AbiReply<AbiValue>> InvokeAdmitted(PluginIdentity identity, string contract, uint method, AbiValue input, InvocationOptions options)
+    {
+        Context? context;
+        lock (_gate) _contexts.TryGetValue(identity.LoadInstanceId, out context);
+        if (context is null || context.Info.Identity != identity)
+            return ValueTask.FromResult(AbiReply<AbiValue>.Fail(new(AbiErrors.PLUGIN_STOPPED, AbiErrors.PLUGIN_STOPPED, "Active", contract,
+                identity.PluginId, identity.LoadInstanceId, options.CorrelationId, false, ImmutableDictionary<string,string>.Empty)));
+        return context.Invoke(contract, method, input, options);
     }
 
     public void CommitGroup(IReadOnlyList<Admission> members, Action publishRegistrations)
@@ -231,7 +251,7 @@ public sealed class CapabilityAuthority
                     else
                     {
                         if (_idempotency.Count >= 4096 || owner._memoEntries >= 65536) return Fail<AbiValue>(AbiErrors.MESSAGE_TOO_LARGE, options);
-                        if (_cachedBytes + _reservedBytes + DataCodec.MaximumBytes > 8L * 1024 * 1024 || owner._cachedBytes + owner._reservedBytes + DataCodec.MaximumBytes > 64L * 1024 * 1024)
+                        if (_cachedBytes + _reservedBytes + route.MaximumReplyBytes > 8L * 1024 * 1024 || owner._cachedBytes + owner._reservedBytes + route.MaximumReplyBytes > 64L * 1024 * 1024)
                             return Fail<AbiValue>(AbiErrors.MESSAGE_TOO_LARGE, options);
                         completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
                         _idempotency.Add(key, (digest, completion.Task)); owner._memoEntries++;
@@ -245,7 +265,7 @@ public sealed class CapabilityAuthority
                         return Fail<AbiValue>(AbiErrors.MESSAGE_TOO_LARGE, options);
                     }
                     _inflight++; owner._inflight++;
-                    if (completion is not null) { reserved = true; _reservedBytes += DataCodec.MaximumBytes; owner._reservedBytes += DataCodec.MaximumBytes; }
+                    if (completion is not null) { reserved = true; _reservedBytes += route.MaximumReplyBytes; owner._reservedBytes += route.MaximumReplyBytes; }
                 }
                 invocation = new(Info.Identity, GroupId, Phase, options);
             }
@@ -262,6 +282,8 @@ public sealed class CapabilityAuthority
                     reply = await route.Handler(invocation with { Options = options with { Cancellation = callToken } }, arguments).ConfigureAwait(false);
                     if (reply.Success) DataCodec.Validate(reply.Value);
                     memoSize = reply.Success ? AbiValueBinary.Encode(reply.Value).Length : ErrorSize(reply.Error!);
+                    if (memoSize > route.MaximumReplyBytes)
+                    { reply = Fail<AbiValue>(AbiErrors.MESSAGE_TOO_LARGE, options); memoSize = ErrorSize(reply.Error!); }
                 }
                 catch (OperationCanceledException)
                 { reply = Fail<AbiValue>(route.Descriptor.Kind == "Query" ? AbiErrors.CANCELLED : AbiErrors.OUTCOME_UNKNOWN, options); memoSize = 4096; }
@@ -272,7 +294,7 @@ public sealed class CapabilityAuthority
                     _inflight--; owner._inflight--;
                     if (reserved)
                     {
-                        _reservedBytes -= DataCodec.MaximumBytes; owner._reservedBytes -= DataCodec.MaximumBytes;
+                        _reservedBytes -= route.MaximumReplyBytes; owner._reservedBytes -= route.MaximumReplyBytes;
                         if (Phase != "Stopped") { _cachedBytes += memoSize; owner._cachedBytes += memoSize; }
                     }
                     completion?.TrySetResult(reply);

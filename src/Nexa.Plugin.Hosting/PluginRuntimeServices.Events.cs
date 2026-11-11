@@ -11,10 +11,17 @@ public sealed partial class PluginRuntimeServices
     {
         internal PluginIdentity Owner=owner;internal string Kind=kind,Key=key;internal Guid Group=group;
         internal int Limit=limit;internal EventSubscribeRequest? Handler=handler;
-        internal Queue<AbiValue> Queue=[]; internal HashSet<Guid> Seen=[];internal bool Gap,Draining,Closed,Active;
+        internal Queue<AbiValue> Queue=[]; internal HashSet<Guid> Seen=[];internal bool Gap,Closed,Active;
+        internal int Workers;internal bool Retry;
+        internal EventCheckpoint? Checkpoint;
+        internal ServiceLookup? ServiceLookup;
+        internal CapabilityDescription? LastAvailability;
+        internal Dictionary<Guid,long> Pending=[];
+        internal CancellationTokenSource Cancellation=new();
     }
     private readonly Dictionary<Guid,Subscription> _subscriptions=[];
     private long _queuedBytes;
+    private int _eventWorkers;
     private bool Enqueue(Subscription sub,AbiValue value)
     { int size=AbiValueBinary.Encode(value).Length;try{DataCodec.Validate(SubscriptionBatch.Write(new([value],false)));}catch(FormatException){sub.Gap=true;return false;}if(size>DataCodec.MaximumBytes-4096||sub.Queue.Count>=sub.Limit||_queuedBytes+size>16*1024*1024){sub.Gap=true;return false;}sub.Queue.Enqueue(value);_queuedBytes+=size;return true; }
     private void Consumed(AbiValue value) => _queuedBytes-=AbiValueBinary.Encode(value).Length;
@@ -53,11 +60,14 @@ public sealed partial class PluginRuntimeServices
         {
             if(!_subscriptions.TryGetValue(reference.Token,out var sub))return;
             if(sub.Owner!=owner||reference.LoadInstanceId!=owner.LoadInstanceId)throw new AbiHostException(AbiErrors.HANDLE_OWNER_MISMATCH);
-            sub.Closed=true;Clear(sub);_subscriptions.Remove(reference.Token);
+            if(sub.Checkpoint is { } checkpoint)File.Delete(CheckpointPath(checkpoint.Id));
+            Close(sub);_subscriptions.Remove(reference.Token);
         }
     }
     private void RetireSubscriptions(Guid instance)
-    {foreach(var pair in _subscriptions.Where(p=>p.Value.Owner.LoadInstanceId==instance).ToArray()){pair.Value.Closed=true;Clear(pair.Value);_subscriptions.Remove(pair.Key);}}
+    {foreach(var pair in _subscriptions.Where(p=>p.Value.Owner.LoadInstanceId==instance).ToArray()){Close(pair.Value);_subscriptions.Remove(pair.Key);}}
+    private void Close(Subscription sub)
+    {sub.Closed=true;sub.Cancellation.Cancel();Clear(sub);if(sub.Workers==0)sub.Cancellation.Dispose();}
     private void Notify(string kind,string key,AbiValue value,Guid? owner=null)
     {
         lock(_gate)
@@ -75,36 +85,100 @@ public sealed partial class PluginRuntimeServices
             if(descriptor.Schema!=v.Schema||v.EventId==Guid.Empty)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
             Validate(v.Schema,v.Payload);
             var envelope=v with {Origin=c.Identity.PluginId,CorrelationId=c.Options.CorrelationId,CausationId=c.Options.CausationId};
+            if(!AppendHistory(descriptor,envelope))return new();
             foreach(var sub in _subscriptions.Values.Where(s=>s.Active&&s.Kind=="event"&&s.Key==v.Event.Value))
             {
-                var request=sub.Handler!;
-                if(request.Scope!=v.Scope ||request.IgnoreSelf&&sub.Owner==c.Identity)continue;
-                if(request.Deduplicate&&!sub.Seen.Add(v.EventId))continue;
-                if(sub.Seen.Count>4096){sub.Seen.Clear();sub.Seen.Add(v.EventId);}
-                if(!Enqueue(sub,EventEnvelope.Write(envelope)))continue;
-                if(!sub.Draining){sub.Draining=true;using(ExecutionContext.SuppressFlow())_=Task.Run(()=>Drain(sub));}
+                QueueEvent(sub,envelope);
             }
+            DeliverWaiters(envelope);OnScheduledEvent(envelope);
             return new();
         }
     }
+    private void QueueEvent(Subscription sub,EventEnvelope envelope)
+    {
+        var request=sub.Handler!;
+        if(request.Scope!=envelope.Scope||request.IgnoreSelf&&sub.Owner.PluginId==envelope.Origin)return;
+        if(request.Deduplicate&&sub.Seen.Contains(envelope.EventId))return;
+        if(request.Reentry==ReentryPolicy.Reject&&(sub.Workers>0||sub.Queue.Count>0)){sub.Gap=true;return;}
+        if(!Enqueue(sub,EventEnvelope.Write(envelope)))return;
+        if(request.Deduplicate){if(sub.Seen.Count>=4096)sub.Seen.Clear();sub.Seen.Add(envelope.EventId);}
+        if(sub.Checkpoint is { } checkpoint)
+            sub.Pending[envelope.EventId]=_eventHistory[checkpoint.Event].Events.Single(e=>e.Envelope.EventId==envelope.EventId).Sequence;
+        StartDrains(sub);
+    }
+    private void StartDrains(Subscription sub)
+    {
+        if(!sub.Active||sub.Closed||!_runtimeReady.Contains(sub.Owner.LoadInstanceId))return;
+        int maximum=sub.Handler!.Reentry==ReentryPolicy.AllowBounded?4:1;
+        int count=Math.Min(64-_eventWorkers,Math.Min(maximum-sub.Workers,sub.Queue.Count));
+        for(int i=0;i<count;i++)
+        {sub.Workers++;_eventWorkers++;using(ExecutionContext.SuppressFlow())_=Task.Run(()=>Drain(sub));}
+    }
     private async Task Drain(Subscription sub)
     {
-        while(true)
+        AbiValue? retained=null;
+        try
         {
-            AbiValue value;CancellationToken lifetime;
+            while(true)
+            {
+                AbiValue value;
+                lock(_gate)
+                {
+                    if(sub.Closed||!sub.Queue.TryDequeue(out value!))return;
+                    retained=value;
+                }
+                var envelope=EventEnvelope.Read(value);
+                while(true)
+                {
+                    bool succeeded=false;
+                    try
+                    {
+                        var reply=await _dispatch(sub.Owner,sub.Handler!.Handler,value,new(Guid.NewGuid(),TimeSpan.FromSeconds(5),sub.Cancellation.Token)
+                            {CorrelationId=envelope.CorrelationId,CausationId=envelope.EventId}).ConfigureAwait(false);
+                        succeeded=reply.Success;
+                        lock(_gate)
+                        {
+                            if(sub.Closed)return;
+                            if(succeeded||!sub.Retry){if(!succeeded)sub.Gap=true;Acknowledge(sub,envelope);break;}
+                        }
+                    }
+                    catch(Exception e)when(e is not OutOfMemoryException and not AccessViolationException)
+                    {lock(_gate){if(sub.Closed)return;sub.Gap=true;}}
+                    if(!sub.Retry){lock(_gate)sub.Gap=true;break;}
+                    await Task.Delay(TimeSpan.FromMilliseconds(250),sub.Cancellation.Token).ConfigureAwait(false);
+                }
+                lock(_gate){Consumed(value);retained=null;}
+            }
+        }
+        catch(OperationCanceledException)when(sub.Cancellation.IsCancellationRequested){}
+        finally
+        {
             lock(_gate)
             {
-                if(sub.Closed||!sub.Queue.TryDequeue(out value!)){sub.Draining=false;return;}
-                Consumed(value);lifetime=Lifetime(sub.Owner);
+                if(retained is not null)Consumed(retained);
+                sub.Workers--;_eventWorkers--;if(sub.Closed&&sub.Workers==0)sub.Cancellation.Dispose();
+                foreach(var waiting in _subscriptions.Values.Where(s=>s.Handler is not null))StartDrains(waiting);
             }
-            try
+        }
+    }
+    private SubscriptionRef SubscribeEvent(HostInvocation c,EventSubscribeRequest request)
+    {
+        lock(_gate)
+        {
+            var descriptor=EventDescriptor.Read(Find(c,"event",request.Event).Value);
+            if(descriptor.Schema!=request.Schema||request.Handler==0||request.QueueLimit is <1 or >4096)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
+            if(request.Lifetime==SubscriptionLifetime.Transient&&request.Cursor is not null||request.Lifetime==SubscriptionLifetime.Resumable&&!descriptor.Durable)throw new AbiHostException(AbiErrors.RESYNC_REQUIRED);
+            EventHistory? history=descriptor.Durable?History(descriptor):null;
+            EventCheckpoint? checkpoint=request.Lifetime==SubscriptionLifetime.Resumable?OpenCheckpoint(c,request,history!):null;
+            var reference=Subscribe(c,"event",request.Event.Value,(int)Math.Min(request.QueueLimit,descriptor.QueueLimit),request);
+            var sub=_subscriptions[reference.Token];sub.Retry=descriptor.Delivery==DeliveryGuarantee.AtLeastOnce;sub.Checkpoint=checkpoint;
+            if(checkpoint is not null)
             {
-                var envelope=EventEnvelope.Read(value);
-                var reply=await _dispatch(sub.Owner,sub.Handler!.Handler,value,new(Guid.NewGuid(),TimeSpan.FromSeconds(5),lifetime)
-                    {CorrelationId=envelope.CorrelationId,CausationId=envelope.EventId}).ConfigureAwait(false);
-                if(!reply.Success)lock(_gate)sub.Gap=true;
+                sub.Gap=checkpoint.Gap;
+                foreach(var item in history!.Events.Where(e=>e.Sequence>checkpoint.Sequence))QueueEvent(sub,item.Envelope);
+                reference=reference with {Cursor=checkpoint.Id.ToString("N"),ResyncRequired=sub.Gap};
             }
-            catch(Exception e) when(e is not OutOfMemoryException and not AccessViolationException){lock(_gate)sub.Gap=true;}
+            return reference;
         }
     }
     private IEnumerable<HostCapabilityRoute> EventRoutes => [
@@ -113,15 +187,9 @@ public sealed partial class PluginRuntimeServices
         HostRoutes.Typed<SubscriptionRef,Empty>("Resources","ReleaseSubscription",(c,v)=>
         {ReleaseSubscription(c.Identity,v);return ValueTask.FromResult(new Empty());}),
         HostRoutes.Typed<EventDescriptor,RegistrationRef>("Events","Define",(c,v)=>
-        {if(v.Durable||v.Delivery!=DeliveryGuarantee.BestEffortAtMostOnce)throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);if(v.QueueLimit is <1 or >4096)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);return ValueTask.FromResult(Stage(c,"event",v.Id,v));}),
+        {if(v.QueueLimit is <1 or >4096)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);lock(_gate){Own(c,v.Id);if(v.Durable)History(v);return ValueTask.FromResult(Stage(c,"event",v.Id,v));}}),
         HostRoutes.Typed<QualifiedRequest,EventDescriptor>("Events","Describe",(c,v)=>ValueTask.FromResult(EventDescriptor.Read(Find(c,"event",v.Id).Value))),
-        HostRoutes.Typed<EventSubscribeRequest,SubscriptionRef>("Events","Subscribe",(c,v)=>
-        {
-            var descriptor=EventDescriptor.Read(Find(c,"event",v.Event).Value);
-            if(descriptor.Schema!=v.Schema||v.Handler==0)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
-            if(v.Lifetime!=SubscriptionLifetime.Transient||v.Cursor is not null||v.Reentry!=ReentryPolicy.Queue)throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
-            return ValueTask.FromResult(Subscribe(c,"event",v.Event.Value,checked((int)Math.Min(v.QueueLimit,descriptor.QueueLimit)),v));
-        }),
+        HostRoutes.Typed<EventSubscribeRequest,SubscriptionRef>("Events","Subscribe",(c,v)=>ValueTask.FromResult(SubscribeEvent(c,v))),
         HostRoutes.Typed<EventEnvelope,Empty>("Events","Publish",(c,v)=>ValueTask.FromResult(PublishEvent(c,v))),
         HostRoutes.Typed<StateReadRequest,SubscriptionRef>("State","Watch",(c,v)=>
         {ReadState(c,v);return ValueTask.FromResult(Subscribe(c,"state",v.Id.Value));}),

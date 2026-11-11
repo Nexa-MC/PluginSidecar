@@ -15,7 +15,7 @@ internal static class AuthorityTests
             executions++;
             Check(invocation.Identity.PluginId == "test.plugin" && invocation.Phase == "Active");
             return ValueTask.FromResult(AbiReply<AbiValue>.Ok(argument));
-        })]);
+        }) { MaximumReplyBytes=65536 }]);
         var identity = new PluginIdentity("test.plugin", "1.0.0", Guid.NewGuid()); var group = Guid.NewGuid();
         var admission = authority.Admit(identity, group, [descriptor.Permission]);
         var options = new InvocationOptions(Guid.NewGuid(), TimeSpan.FromSeconds(2), default) { CorrelationId = Guid.NewGuid(), IdempotencyKey = "edit-1" };
@@ -45,6 +45,9 @@ internal static class AuthorityTests
         Check(!conflict.Success && conflict.Error!.Code == AbiErrors.REQUEST_ID_REUSED && executions == 1);
         var stale = await ability.Invoke(descriptor.ContractId, descriptor.MethodId, argument, options with { StageInvocationId = Guid.NewGuid() });
         Check(!stale.Success && stale.Error!.Code == AbiErrors.STAGE_FROZEN);
+        var oversized=await ability.Invoke(descriptor.ContractId,descriptor.MethodId,new AbiValue.Array([new AbiValue.Utf8String(new string('x',35000)),new AbiValue.Utf8String(new string('x',35000))]),options with {IdempotencyKey="oversized"});
+        Check(oversized.Error?.Code==AbiErrors.MESSAGE_TOO_LARGE);
+        Check((await ability.Invoke(descriptor.ContractId,descriptor.MethodId,argument,options with {IdempotencyKey="after-large"})).Success);
         admission.Retire(false);
         var stopped = await ability.Invoke(descriptor.ContractId, descriptor.MethodId, argument, options);
         Check(!stopped.Success && stopped.Error!.Code == AbiErrors.PLUGIN_STOPPED);

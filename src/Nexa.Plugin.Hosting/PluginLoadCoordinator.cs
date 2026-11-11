@@ -115,6 +115,7 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
                         {
                             if (member.State != LoadState.Active) continue;
                             var activated = await CleanupCall(member, () => member.Entry!.OnActivated(member.Final!, new(member.Identity, Guid.NewGuid(), Guid.NewGuid(), null, default, TimeSpan.FromSeconds(5)))).ConfigureAwait(false);
+                            if (activated is null) services?.Activated(member.Identity);
                             if (activated is not null)
                             {
                                 member.Cleanup.Add(activated); member.Failure = activated;

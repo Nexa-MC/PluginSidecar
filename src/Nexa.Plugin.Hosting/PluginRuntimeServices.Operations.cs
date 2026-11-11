@@ -49,20 +49,22 @@ public sealed partial class PluginRuntimeServices
         foreach(var op in _operations.Values.Where(o=>o.Owner.LoadInstanceId==owner).ToArray())
         { op.Lifetime.Cancel(); _operations.Remove(op.Record.Id); ForgetRun(op.Record.Id); if(!op.Running)op.Lifetime.Dispose(); }
     }
-    private OperationRef StartOperation(HostInvocation c,SchemaRef schema,Func<CancellationToken,ValueTask<AbiReply<AbiValue>>> execute, Action<Operation>? initialize = null)
+    private OperationRef StartOperation(HostInvocation c,SchemaRef schema,Func<CancellationToken,ValueTask<AbiReply<AbiValue>>> execute, Action<Operation>? initialize = null, Func<CancellationToken,ValueTask>? enter = null, Action? exit = null)
     {
         var operation=CreateOperation(c,schema,true);
         try {initialize?.Invoke(operation);}catch{lock(_gate){_operations.Remove(operation.Record.Id);ForgetRun(operation.Record.Id);}operation.Lifetime.Dispose();throw;}
-        RunOperation(c,operation,execute);
+        RunOperation(c,operation,execute,enter,exit);
         return new(operation.Record.Id,OperationState.Pending);
     }
-    private void RunOperation(HostInvocation c,Operation operation,Func<CancellationToken,ValueTask<AbiReply<AbiValue>>> execute)
+    private void RunOperation(HostInvocation c,Operation operation,Func<CancellationToken,ValueTask<AbiReply<AbiValue>>> execute, Func<CancellationToken,ValueTask>? enter = null, Action? exit = null)
     {
         operation.Running=true;operation.Lifetime.CancelAfter(TimeSpan.FromMinutes(5));
         operation.Worker=Task.Run(async()=>
         {
             try
             {
+                if(enter is not null)await enter(operation.Lifetime.Token).ConfigureAwait(false);
+                operation.Lifetime.Token.ThrowIfCancellationRequested();
                 Change(operation,operation.Record with {State=OperationState.Running,Stage="running"});
                 var result=await execute(operation.Lifetime.Token).ConfigureAwait(false);
                 if(result.Success) { Validate(operation.Record.ResultSchema,result.Value); Change(operation,operation.Record with {State=OperationState.Completed,Progress=1,Stage="completed",Result=result.Value}); }
@@ -72,7 +74,7 @@ public sealed partial class PluginRuntimeServices
             catch(OperationCanceledException) { Change(operation,operation.Record with {State=OperationState.Cancelled,Stage="cancelled"}); }
             catch(Exception e) when(e is not OutOfMemoryException and not AccessViolationException)
             { var code=e is AbiHostException known?known.Code:AbiErrors.PLUGIN_EXCEPTION;Change(operation,operation.Record with {State=OperationState.Failed,Stage="failed",Failure=new(code,Text(code),c.Options.CorrelationId,false,[])}); }
-            finally { lock(_gate) { operation.Running=false; if(!_operations.ContainsKey(operation.Record.Id))operation.Lifetime.Dispose(); } }
+            finally { exit?.Invoke(); lock(_gate) { operation.Running=false; if(!_operations.ContainsKey(operation.Record.Id))operation.Lifetime.Dispose(); } }
         });
         _=ObserveOperation(operation);
     }

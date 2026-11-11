@@ -1,6 +1,6 @@
 # Runtime services
 
-`PluginHostRuntime` installs 69 implemented operations from the ABI catalog. The
+`PluginHostRuntime` installs 77 implemented operations from the ABI catalog. The
 embedding Host still supplies schema policy, verified acquisition, grants and
 launcher business adapters. This is a runnable library kernel, not an installed
 Desktop Sidecar. The CLI remains a scaffold. No production signing key or live
@@ -33,11 +33,16 @@ consumes up to 256 items, reports gaps and binds the returned batch to the call'
 idempotency key; retries must reuse that key. `Resources.ReleaseSubscription`
 retires either kind of subscription. Both methods check the admitted owner.
 
-Event callbacks currently implement transient, queued, best-effort delivery with
-optional self filtering and bounded event-ID deduplication. Durable/resumable and
-other reentry/delivery modes are rejected. Callbacks never block event publication.
+Event callbacks support transient and resumable subscriptions, best-effort and
+at-least-once delivery, self filtering and bounded event-ID deduplication. Queue
+serializes callbacks; Reject drops a new delivery while busy and reports a gap;
+AllowBounded runs at most four callbacks per subscription. The Host caps all event
+workers at 64 and retains queue/in-flight payloads within a shared 16 MiB budget.
+Callbacks never block event publication.
 Queue overflow or callback failure sets a gap flag; reading a callback subscription
-returns that flag without stealing messages from its handler. Only published
+returns that flag without stealing messages from its handler. Callback failures
+retry at 250 ms intervals for at-least-once subscriptions until success or release;
+handlers must tolerate duplicate effects. Only published
 subscriptions receive notifications. Event origin is supplied by Host, not trusted
 from plugin data. Watches cannot silently claim cursor replay support.
 
@@ -56,9 +61,12 @@ work/depth budget. Checkpoint flushes the current persistent run journal.
 
 Runtime limits are at most 32 nesting levels, 4096 node executions/trace records,
 32 parallel branches, 16 retry attempts and five minutes per asynchronous run.
-Current registration supports Parallel workflow concurrency. Queue,
-RejectDuplicate/ReplacePending policies, schedules, WaitEvent and AskUser remain
-unavailable; they are not reported as successful no-ops. Predicates may use a
+Workflow concurrency supports Parallel, Queue, RejectDuplicate and ReplacePending.
+Queued cancellation preserves the predecessor fence. Replacement cancels queued
+work only. WaitEvent matches the exact declared event/schema/scope; a transient
+wait interrupted by reload requires resynchronization. AskUser requires the
+trusted Host interaction port and an explicit UI permission. Missing UI fails.
+Persistent Delay resumes its saved deadline instead of restarting the delay. Predicates may use a
 handler, a Boolean literal, or the bounded `op` expression grammar: `input` with
 `field`, `not` with one argument, `eq` with two, and `all`/`any` with `args`.
 
@@ -94,3 +102,44 @@ This preserves .NET apphost CET shadow-stack protection while avoiding Wasmtime'
 incompatible signal-based trap recovery ([upstream issue 374](https://github.com/bytecodealliance/wasmtime-dotnet/issues/374)).
 CI exercises unreachable instructions, memory bounds, division by zero and fuel
 exhaustion as well as compiled C decoder rejection, in managed and NativeAOT hosts.
+
+## Schedules
+
+The six schedule routes implement interval, absolute-time and event triggers,
+explicit timezone validation, enable/disable, manual trigger and next-run queries.
+The runtime owns a 250 ms pump; tests or embedding Hosts may supply a TimeProvider
+and disable automatic polling. Skip, Coalesce and ReplayBounded govern missed
+triggers; event debounce retains the latest matching payload. Schedule dispatch
+re-enters workflow authority with the owner's grants. It cannot confer workflow
+or event permissions. Stop and disable fence further dispatch.
+
+Schedule state persists by plugin version and exact definition. The due time is
+advanced and flushed before dispatch: a crash in this window may lose a trigger,
+but cannot automatically replay an uncertain effect. Event debounce payloads are
+transient and are not invented after restart. Limits are 256 schedules, 32 replayed
+occurrences per poll, 1 second to 30 day intervals, and 5 minute debounce.
+
+## Durable events and availability
+
+Durable event publication flushes an atomic binary history before dispatch. Each
+stream retains at most 256 events (or its smaller declared queue limit) and 1 MiB;
+one event is limited to 256 KiB. There are at most 64 persisted streams. Resumable
+subscription cursors identify persisted checkpoints bound to subscriber plugin ID,
+stream and exact scope. Store the returned cursor for the next Initialize callback.
+Subscribe remains an Initialize-only registration under the existing ABI.
+
+Successful callback acknowledgement advances the checkpoint. Parallel completion
+cannot advance it past an earlier outstanding delivery. Restart may repeat a
+callback that completed before its acknowledgement was flushed. Retention loss,
+queue overflow and rejected reentry report resynchronization explicitly. Up to
+4096 checkpoints persist; explicit ReleaseSubscription deletes its checkpoint,
+while plugin stop retains it. Starting a fresh subscription establishes a new
+checkpoint after the author has resynchronized application state. Durable
+WaitEvent nodes use this same history to recover events published while suspended;
+expired history fails with RESYNC_REQUIRED instead of silently skipping events.
+
+Contracts.WatchAvailability and Plugins.WatchAvailability queue typed
+CapabilityDescription snapshots through Resources.ReadSubscription. They deliver
+an initial snapshot, followed by changes at group publication and retirement.
+Service snapshots honor provider identity and the requested version range; no
+binding silently switches to a new provider. Staged declarations are not exposed.

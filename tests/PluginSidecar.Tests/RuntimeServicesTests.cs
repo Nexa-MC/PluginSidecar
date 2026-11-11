@@ -24,6 +24,12 @@ internal static class RuntimeServicesTests
             var reports=await runtime.LoadAsync([provider.Source(),consumer.Source()]);
             Check(reports.All(r=>r.State==LoadState.Active));
             using var p=provider.Context!.AsAbi100();using var c=consumer.Context!.AsAbi100();
+            var availability=Success(await c.Plugins.WatchAvailability(new("provider",new("provider:service"),1,1,false),Options()));
+            var contractWatch=Success(await c.Contracts.WatchAvailability(new(new("provider:echo")),Options()));
+            foreach(var subscription in new[]{availability,contractWatch})
+                Check(CapabilityDescription.Read(Success(await c.Resources.ReadSubscription(new(subscription,256),Options())).Items.Single()).Availability==CapabilityAvailability.Supported);
+            var absent=Success(await c.Contracts.WatchAvailability(new(new("absent:contract")),Options()));
+            Check(CapabilityDescription.Read(Success(await c.Resources.ReadSubscription(new(absent,256),Options())).Items.Single()).Availability==CapabilityAvailability.Unavailable);
             var initial=Success(await p.State.Read(new(new("provider:value"),Scope),Options()));
             Check(initial.Revision.Value=="uninitialized");
             var watch=Success(await c.State.Watch(new(new("provider:value"),Scope),Options()));
@@ -61,6 +67,8 @@ internal static class RuntimeServicesTests
             Success(await c.Tasks.Complete(new(task.Id,TextResult.Write(new("done")),Abi100Schemas.TextResult,record.Revision),Options()));
             Check((await c.Tasks.Report(new(task.Id,"late",0.5,record.Revision),Options())).Error?.Code==AbiErrors.STALE_REVISION);
             await runtime.StopAsync("provider");
+            foreach(var subscription in new[]{availability,contractWatch})
+                Check(CapabilityDescription.Read(Success(await c.Resources.ReadSubscription(new(subscription,256),Options())).Items.Single()).Availability==CapabilityAvailability.Unavailable);
             Check((await c.Plugins.CallService(new(consumer.Binding!,1,TextResult.Write(new("gone")),[],null),Options())).Error?.Code==AbiErrors.PROVIDER_GONE);
             Check((await c.State.Read(new(new("provider:value"),Scope),Options())).Error?.Code==AbiErrors.NOT_FOUND);
             await runtime.StopAsync("consumer");

@@ -10,8 +10,11 @@ public sealed partial class PluginRuntimeServices
     private sealed class FlowReturn(AbiValue value) : Exception { internal AbiValue Value=value; }
     private sealed class Run(WorkflowDefinition definition,WorkflowRequest request)
     {
+        internal Task Predecessor=Task.CompletedTask,Tail=Task.CompletedTask;
+        internal TaskCompletionSource Completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal bool Admitted,Started;
         internal Operation? Operation;internal WorkflowDefinition Definition=definition;internal WorkflowRequest Request=request;
-        internal List<WorkflowStep> Steps=[];internal Dictionary<string,AbiValue> Outcomes=[];internal HashSet<string> PendingEffects=[],Returns=[];internal EntityId Id=null!;internal long Work,Bytes;
+        internal Dictionary<string,AbiValue> Waits=[];internal List<WorkflowStep> Steps=[];internal Dictionary<string,AbiValue> Outcomes=[];internal HashSet<string> PendingEffects=[],Returns=[];internal EntityId Id=null!;internal long Work,Bytes;
     }
     private readonly Dictionary<EntityId,Run> _runs=[];
     private long _workflowBytes;
@@ -21,7 +24,7 @@ public sealed partial class PluginRuntimeServices
         if(run.Bytes+delta>2*1024*1024||_workflowBytes+delta>32*1024*1024)throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
         run.Bytes+=delta;_workflowBytes+=delta;run.Outcomes[path]=value;
     }
-    private void ForgetRun(EntityId id){if(_runs.Remove(id,out var run))_workflowBytes-=run.Bytes;}
+    private void ForgetRun(EntityId id){if(_runs.Remove(id,out var run)){_workflowBytes-=run.Bytes;ReleaseWorkflow(run);}}
     private IEnumerable<HostCapabilityRoute> WorkflowRoutes => [
         HostRoutes.Typed<WorkflowDefinition,RegistrationRef>("Workflows","Register",(c,v)=>
         {var report=ValidateWorkflow(v);if(!report.Valid)throw new AbiHostException(report.Issues[0].Code);return ValueTask.FromResult(Stage(c,"workflow",v.Id,v));}),
@@ -29,13 +32,7 @@ public sealed partial class PluginRuntimeServices
         HostRoutes.Typed<WorkflowRequest,ValidationReport>("Workflows","ExplainPlan",(c,v)=>{ResolveWorkflow(c,v);return ValueTask.FromResult(Validation(true));}),
         HostRoutes.Typed<WorkflowRequest,MutationPlan>("Workflows","Preview",(c,v)=>
         {var definition=ResolveWorkflow(c,v);return ValueTask.FromResult(new MutationPlan(new(Guid.NewGuid().ToString("N")),_revision,Convert.ToHexString(SHA256.HashData(AbiValueBinary.Encode(WorkflowRequest.Write(v)))),Text(definition.Id.Value),ConfirmationRequirement.None,[]));}),
-        HostRoutes.Typed<WorkflowRequest,OperationRef>("Workflows","Start",(c,v)=>
-        {
-            var definition=ResolveWorkflow(c,v);var run=new Run(definition,v);
-            return ValueTask.FromResult(StartOperation(c,definition.Output,async token=>
-            {try { var result=await ExecuteNodes(c with {Options=c.Options with {Cancellation=token}},run,definition.Nodes,v.Inputs,0,token,"root").ConfigureAwait(false);return AbiReply<AbiValue>.Ok(result); } catch(FlowReturn result) { return AbiReply<AbiValue>.Ok(result.Value); }},
-                operation=>{lock(_gate){run.Operation=operation;run.Id=operation.Record.Id;_runs.Add(run.Id,run);PersistRun(operation);}}));
-        }),
+        HostRoutes.Typed<WorkflowRequest,OperationRef>("Workflows","Start",(c,v)=>ValueTask.FromResult(StartWorkflow(c,v))),
         HostRoutes.Typed<WorkflowRunRequest,OperationRef>("Workflows","Resume",(c,v)=>ValueTask.FromResult(Resume(c,v))),
         HostRoutes.Typed<WorkflowStepRequest,OperationRef>("Workflows","RetryStep",(c,v)=>
         {lock(_gate){var run=FindRun(c,v.Run);if(string.IsNullOrWhiteSpace(v.IdempotencyKey)||!run.Steps.Any(s=>s.Id==v.StepId&&s.State==OperationState.Failed))throw new AbiHostException(AbiErrors.CONFLICT);return ValueTask.FromResult(Resume(c,new(v.Run,v.ExpectedRevision,run.Definition.DefinitionDigest)));}}),
@@ -48,6 +45,43 @@ public sealed partial class PluginRuntimeServices
         HostRoutes.Typed<WatchRequest,SubscriptionRef>("Workflows","Watch",(c,v)=>
         {if(v.Schema!=Abi100Schemas.OperationRecord)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);FindRun(c,v.Target);return ValueTask.FromResult(Subscribe(c,"operation",v.Target.Value) with {ResyncRequired=v.Cursor is not null});})
     ];
+    private OperationRef StartWorkflow(HostInvocation caller,WorkflowRequest request)
+    {
+        lock(_gate)
+        {
+            var definition=ResolveWorkflow(caller,request);
+            var run=new Run(definition,request);
+            return StartOperation(caller,definition.Output,token=>ExecuteRun(caller,run,token), operation=>
+            {
+                run.Operation=operation;run.Id=operation.Record.Id;_runs.Add(run.Id,run);
+                ReserveWorkflow(run);PersistRun(operation);
+            },token=>EnterWorkflow(run,token),()=>ReleaseWorkflow(run));
+        }
+    }
+    private async ValueTask<AbiReply<AbiValue>> ExecuteRun(HostInvocation caller,Run run,CancellationToken token)
+    {
+        try{return AbiReply<AbiValue>.Ok(await ExecuteNodes(caller with {Options=caller.Options with {Cancellation=token}},run,run.Definition.Nodes,run.Request.Inputs,0,token,"root").ConfigureAwait(false));}
+        catch(FlowReturn returned){return AbiReply<AbiValue>.Ok(returned.Value);}
+    }
+    private void ReserveWorkflow(Run run)
+    {
+        var peers=_runs.Values.Where(r=>!ReferenceEquals(r,run)&&r.Admitted&&r.Operation!.Owner==run.Operation!.Owner&&r.Definition.Id==run.Definition.Id).ToArray();
+        if(run.Definition.Concurrency==ConcurrencyPolicy.RejectDuplicate&&peers.Length>0)throw new AbiHostException(AbiErrors.CONFLICT);
+        if(run.Definition.Concurrency==ConcurrencyPolicy.ReplacePending)
+            foreach(var pending in peers.Where(r=>!r.Started))pending.Operation!.Lifetime.Cancel();
+        run.Completion=new(TaskCreationOptions.RunContinuationsAsynchronously);
+        run.Predecessor=run.Definition.Concurrency==ConcurrencyPolicy.Parallel?Task.CompletedTask:Task.WhenAll(peers.Select(r=>r.Tail));
+        run.Tail=Task.WhenAll(run.Predecessor,run.Completion.Task);
+        run.Admitted=true;run.Started=false;
+    }
+    private async ValueTask EnterWorkflow(Run run,CancellationToken token)
+    {
+        await run.Predecessor.WaitAsync(token).ConfigureAwait(false);
+        lock(_gate){token.ThrowIfCancellationRequested();run.Started=true;}
+    }
+    private void ReleaseWorkflow(Run run)
+    {lock(_gate){run.Admitted=false;run.Started=false;run.Completion.TrySetResult();}}
+
     private Run FindRun(HostInvocation c,EntityId id)
     {lock(_gate){GetOperation(c,id);return _runs.GetValueOrDefault(id)??throw new AbiHostException(AbiErrors.HANDLE_TYPE_MISMATCH);}}
     private WorkflowDefinition ResolveWorkflow(HostInvocation c,WorkflowRequest request)
@@ -58,7 +92,6 @@ public sealed partial class PluginRuntimeServices
     }
     private static ValidationReport ValidateWorkflow(WorkflowDefinition definition)
     {
-        if(definition.Concurrency!=ConcurrencyPolicy.Parallel)return Validation(false,AbiErrors.CAPABILITY_UNAVAILABLE);
         if(definition.MaximumDepth is <1 or >32||definition.MaximumWork is <1 or >4096||string.IsNullOrWhiteSpace(definition.DefinitionDigest))return Validation(false);
         int count=0;var ids=new HashSet<string>(StringComparer.Ordinal);
         bool Nodes(ImmutableArray<WorkflowNode> nodes,int depth)
@@ -67,8 +100,7 @@ public sealed partial class PluginRuntimeServices
             foreach(var node in nodes)
             {
                 if(++count>definition.MaximumWork||!ids.Add(node.Id)||string.IsNullOrWhiteSpace(node.Id)||node.MaximumConcurrency is <1 or >32||node.MaximumAttempts is <1 or >16||node.BackoffMilliseconds is <0 or >300000)return false;
-                if(node.Kind is WorkflowNodeKind.AskUser or WorkflowNodeKind.WaitEvent)return false;
-                if(node.Kind is WorkflowNodeKind.Action or WorkflowNodeKind.Compensate or WorkflowNodeKind.Subflow or WorkflowNodeKind.If && node.Target is null)return false;
+                if(node.Kind is WorkflowNodeKind.Action or WorkflowNodeKind.Compensate or WorkflowNodeKind.Subflow or WorkflowNodeKind.If or WorkflowNodeKind.WaitEvent && node.Target is null)return false;
                 if(node.Kind is WorkflowNodeKind.Retry && node.Children.Length!=1 ||node.Kind is WorkflowNodeKind.Finally && node.Children.Length!=2 ||node.Kind is WorkflowNodeKind.Try && node.Children.Length is <1 or >2)return false;
                 if(!Nodes(node.Children,depth+1))return false;
             }
@@ -95,9 +127,9 @@ public sealed partial class PluginRuntimeServices
         try
         {
             AbiValue output=await Execute().ConfigureAwait(false);Validate(node.OutputSchema,output);
-            lock(_gate){run.Steps[trace]=run.Steps[trace] with {State=OperationState.Completed};SaveOutcome(run,path,output);run.PendingEffects.Remove(path);PersistRun(run.Operation!);}return output;
+            lock(_gate){run.Steps[trace]=run.Steps[trace] with {State=OperationState.Completed};SaveOutcome(run,path,output);run.PendingEffects.Remove(path);run.Waits.Remove(path);PersistRun(run.Operation!);}return output;
         }
-        catch(FlowReturn result) {Validate(node.OutputSchema,result.Value);lock(_gate){run.Steps[trace]=run.Steps[trace] with {State=OperationState.Completed};SaveOutcome(run,path,result.Value);run.Returns.Add(path);run.PendingEffects.Remove(path);PersistRun(run.Operation!);}throw;}
+        catch(FlowReturn result) {Validate(node.OutputSchema,result.Value);lock(_gate){run.Steps[trace]=run.Steps[trace] with {State=OperationState.Completed};SaveOutcome(run,path,result.Value);run.Returns.Add(path);run.PendingEffects.Remove(path);run.Waits.Remove(path);PersistRun(run.Operation!);}throw;}
         catch(Exception e) when(e is not OutOfMemoryException and not AccessViolationException)
         {lock(_gate)run.Steps[trace]=run.Steps[trace] with {State=e is OperationCanceledException?OperationState.Cancelled:OperationState.Failed,Failure=new(e is AbiHostException known?known.Code:AbiErrors.PLUGIN_EXCEPTION,Text("workflow.step.failed"),c.Options.CorrelationId,false,[])};throw;}
         async ValueTask<AbiValue> Execute()
@@ -108,7 +140,9 @@ public sealed partial class PluginRuntimeServices
                 case WorkflowNodeKind.Fail:throw new AbiHostException(input is AbiValue.Utf8String code?code.Value:AbiErrors.PLUGIN_EXCEPTION);
                 case WorkflowNodeKind.Checkpoint:lock(_gate)PersistRun(run.Operation!);return input;
                 case WorkflowNodeKind.Sequence:return await Children(node.Children,input);
-                case WorkflowNodeKind.Delay:await Task.Delay(TimeSpan.FromMilliseconds(node.BackoffMilliseconds),token).ConfigureAwait(false);return input;
+                case WorkflowNodeKind.Delay:await WaitDelay(run,path,node.BackoffMilliseconds,token).ConfigureAwait(false);return input;
+                case WorkflowNodeKind.WaitEvent:return await WaitEvent(c,run,path,node,input,token).ConfigureAwait(false);
+                case WorkflowNodeKind.AskUser:return await AskUser(c,run,path,node,input,token).ConfigureAwait(false);
                 case WorkflowNodeKind.Action:
                 case WorkflowNodeKind.Compensate:
                     var entry=Find(c,"action",node.Target!);var action=ActionDescriptor.Read(entry.Value);

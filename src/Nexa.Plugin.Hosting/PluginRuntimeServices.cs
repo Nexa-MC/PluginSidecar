@@ -10,6 +10,9 @@ public sealed partial class PluginRuntimeServices
 {
     private readonly object _gate;
     private readonly string _workflowStore;
+    private readonly PluginRuntimeOptions _options;
+    private readonly Func<PluginIdentity,string,bool> _authorize;
+    private readonly Func<PluginIdentity,string,uint,AbiValue,InvocationOptions,ValueTask<AbiReply<AbiValue>>> _invokeAdmitted;
     private readonly Func<HostInvocation, ImmutableArray<string>, bool> _capabilities;
     private readonly Func<SchemaRef, AbiValue, bool> _validate;
     private readonly Func<PluginIdentity, ulong, AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>> _dispatch;
@@ -25,8 +28,9 @@ public sealed partial class PluginRuntimeServices
     private sealed record Binding(PluginIdentity Owner, ServiceBinding Reference, Entry Provider, bool Required);
     internal PluginRuntimeServices(object gate, Func<SchemaRef, AbiValue, bool> validate,
         Func<PluginIdentity, ulong, AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>> dispatch,
-        Func<HostInvocation, ImmutableArray<string>, bool> capabilities, string workflowStore)
-    { _gate = gate; _validate = validate; _dispatch = dispatch; _capabilities = capabilities; _workflowStore=workflowStore; }
+        Func<HostInvocation, ImmutableArray<string>, bool> capabilities, string workflowStore, PluginRuntimeOptions options,
+        Func<PluginIdentity,string,uint,AbiValue,InvocationOptions,ValueTask<AbiReply<AbiValue>>> invokeAdmitted, Func<PluginIdentity,string,bool> authorize)
+    { _gate = gate; _validate = validate; _dispatch = dispatch; _capabilities = capabilities; _workflowStore=workflowStore; _options=options; _invokeAdmitted=invokeAdmitted; _authorize=authorize; }
     private static Revision NewRevision() => new(Guid.NewGuid().ToString("N"));
     private static LocalizedText Text(string key) => new(key, []);
     private static ValidationReport Validation(bool valid, string code = "SCHEMA_INVALID") => new(valid, valid ? [] : [new(code, Text(code), "", true)]);
@@ -73,6 +77,7 @@ public sealed partial class PluginRuntimeServices
     }
     internal void ValidateCommit(Guid group)
     {
+        ValidateSchedules(group);
         lock (_gate)
         foreach (var entry in _entries.Where(p=>p.Key.Item1=="service" && p.Value.Group==group).Select(p=>p.Value))
         {
@@ -90,7 +95,7 @@ public sealed partial class PluginRuntimeServices
             foreach(var subscription in _subscriptions.Values.Where(s=>s.Group==group))subscription.Active=true;
             foreach(var pair in _entries.Where(p=>p.Value.Group==group).ToArray())
                 _entries[pair.Key]=pair.Value with {Registration=pair.Value.Registration with {State=RegistrationState.Active}};
-            _revision=NewRevision();
+            _revision=NewRevision();RefreshAvailability();
         }
     }
     internal void Abort(Guid group)
@@ -103,9 +108,9 @@ public sealed partial class PluginRuntimeServices
             foreach(var pair in _entries.Where(p=>p.Value.Owner.LoadInstanceId==instance).ToArray()) { _entries.Remove(pair.Key);_bytes-=pair.Value.Bytes; }
             foreach(var pair in _bindings.Where(p=>p.Value.Owner.LoadInstanceId==instance || p.Value.Reference.ProviderLoadInstance==instance).ToArray()) _bindings.Remove(pair.Key);
             foreach(var key in _states.Keys.Where(k=>!_entries.ContainsKey(("state",k.Item1))).ToArray()) { _stateBytes-=AbiValueBinary.Encode(StateSnapshot.Write(_states[key])).Length; _states.Remove(key); }
-            RetireSubscriptions(instance); RetireOperations(instance);
+            _runtimeReady.Remove(instance);RetireWaiters(instance);RetireSchedules(instance); RetireSubscriptions(instance); RetireOperations(instance);
             foreach(var key in _actionMemo.Keys.Where(k=>k.Item1==instance).ToArray())_actionMemo.Remove(key);
-            if(_diagnostics.Remove(instance,out var reports)) _diagnosticBytes-=reports.Sum(r=>(long)AbiValueBinary.Encode(DiagnosticReport.Write(r)).Length);_lifetimes.Remove(instance,out lifetime);_revision=NewRevision();
+            if(_diagnostics.Remove(instance,out var reports)) _diagnosticBytes-=reports.Sum(r=>(long)AbiValueBinary.Encode(DiagnosticReport.Write(r)).Length);_lifetimes.Remove(instance,out lifetime);_revision=NewRevision();RefreshAvailability();
         }
         if(lifetime is not null) { lifetime.Cancel(); lifetime.Dispose(); }
     }
@@ -181,5 +186,5 @@ public sealed partial class PluginRuntimeServices
             Notify("state",request.Id.Value,StateSnapshot.Write(updated));return updated;
         }
     }
-    public IEnumerable<HostCapabilityRoute> Routes => BasicRoutes.Concat(ServiceRoutes).Concat(EventRoutes).Concat(TaskRoutes).Concat(ActionRoutes).Concat(WorkflowRoutes);
+    public IEnumerable<HostCapabilityRoute> Routes => BasicRoutes.Concat(ServiceRoutes).Concat(EventRoutes).Concat(TaskRoutes).Concat(ActionRoutes).Concat(WorkflowRoutes).Concat(ScheduleRoutes).Concat(AvailabilityRoutes);
 }
