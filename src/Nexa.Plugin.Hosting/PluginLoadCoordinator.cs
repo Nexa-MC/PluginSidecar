@@ -146,7 +146,7 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
                     }
                 }
             }
-            return attempts.Select(a => new PluginLoadReport(a.Identity, a.State, a.Stage, a.Failure, a.Cleanup.ToImmutableArray()) { Diagnostics = a.Diagnostics.ToImmutableArray() }).ToImmutableArray();
+            return attempts.Select(a => new PluginLoadReport(a.Identity, a.State, a.Stage, a.Failure, a.Cleanup.ToImmutableArray()) { Diagnostics = Findings(a) }).ToImmutableArray();
         }
         finally { _gate.Release(); }
     }
@@ -225,6 +225,7 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
             case LoadStage.Checkup:
                 var check = await member.Entry!.OnCheckup(member.Final!, stage).ConfigureAwait(false);
                 if (!check.Success) return AbiReply<Unit>.Fail(check.Error!);
+                if(!AddFindings(member,check.Value.Findings))return AbiReply<Unit>.Fail(Error(member,AbiErrors.MESSAGE_TOO_LARGE));
                 return check.Value.Status == CheckupStatus.Failed || check.Value.Findings.Any(f => f.Fatal) ? AbiReply<Unit>.Fail(Error(member, AbiErrors.CHECKUP_FAILED)) : AbiReply<Unit>.Ok(new());
             default: throw new InvalidOperationException();
         }
@@ -306,8 +307,7 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
     {
         public ValueTask<AbiReply<Unit>> ReportDiagnostic(Finding finding, InvocationOptions options)
         {
-            if (member.Diagnostics.Count >= 1024) return ValueTask.FromResult(AbiReply<Unit>.Fail(Error(member, AbiErrors.MESSAGE_TOO_LARGE)));
-            member.Diagnostics.Add(finding); return ValueTask.FromResult(AbiReply<Unit>.Ok(new()));
+            return ValueTask.FromResult(AddFindings(member,[finding])?AbiReply<Unit>.Ok(new()):AbiReply<Unit>.Fail(Error(member,AbiErrors.MESSAGE_TOO_LARGE)));
         }
         public ValueTask<AbiReply<RegistrationHandle>> RegisterCleanup(CallbackHandle callback,InvocationOptions options)
         {

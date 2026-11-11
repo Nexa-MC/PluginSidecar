@@ -10,7 +10,12 @@ The six normal stages are Checksum (loader only), PreInitialize, Initialize, Pos
 
 Host owns permission checks, handle/session ownership, final Make decisions, idempotency, staged registry and commit decisions. The SDK never implements a local Make success fallback. Experimental IDs and supported old base combinations are permanent; promotion never removes an adapter. Error codes are authoritative; exceptions do not cross the transport boundary.
 
-Implemented here: public contracts, ABI 100 typed dispatch wrappers, CoreCLR in-memory entry loading, package generation and an example. Host permits, group scheduler, Host broker/registry, binary transport integration, UI renderer integration and telemetry remain implementation work. No signed installable .nsc is produced by this change.
+Implemented here: public contracts, C#/C ABI 100 bindings, controlled Wasm loading,
+the local authority/coordinator, atomic registries, runtime services and SDK packages.
+Authenticated Desktop composition, business/UI adapters and production Market
+admission remain integration work. See the [current acceptance status](roadmap.md).
+The dated decisions below record the preview's evolution. No signed installable
+`.nsc` is produced by the SDK build.
 
 ## Market delivery and offline authorization
 
@@ -38,8 +43,9 @@ and remaining budget. Disposing that view retires its saved proxies; runtime vie
 carry no completed-stage ID or deadline. The future coordinator must invalidate
 IDs when callbacks return, and Host must enforce ownership, lifecycle state,
 permission and experiment confirmation on EVERY call, including raw facade calls.
-SDK guards and Info metadata never replace that authority. This revision does not
-implement the coordinator, Host registry or a local successful Make fallback.
+SDK guards and Info metadata never replace that authority. This original context
+revision preceded the coordinator and Host registry implemented below. It never
+introduced a local successful Make fallback.
 
 Event method 3 is reserved. Service export is InterPlugin method 6; diagnostic
 probe is InterPlugin method 7. Diagnostic methods 1–4 and resource method 1 use
@@ -253,3 +259,24 @@ coalesces concurrent confirmations as well as execution; a declined request need
 a new key to prompt again. Persistent workflow effect markers are flushed only
 after approval, immediately before dispatch, so declining a prompt does not leave
 an uncertain business effect. Desktop still supplies the actual state/intent UI.
+
+## Service probes (2026-11-11)
+
+A service may name an owned predicate as its Checkup probe. Binding ownership,
+the declared probe ID and input schema are checked before dispatch. A literal
+predicate runs without guest code; handler predicates use an optional local
+`IPluginProbeInvocationV1` execution adapter. Probes may target a prepared member
+of the same atomic group or an active provider. They cannot start normal service
+work before activation.
+
+The authority installs a revocable, query-only execution scope for the admitted
+provider. Only catalog queries allowed in Checkup can execute; registration,
+subscriptions and effects are denied even through saved ABI facades. The scope
+expires at callback return or deadline, including in detached continuations.
+Caller/provider cancellation and causal cycle limits apply. Wasm uses its existing
+handler envelope with phase Checkup; no new IPC message number is introduced.
+
+The load-report query returns only the admitted caller's identity, current phase,
+retained load findings and required dependency IDs. Checkup findings survive into
+the final report. It has no caller-supplied target plugin and cannot inspect an
+unrelated plugin's private diagnostics.

@@ -78,3 +78,10 @@ public interface IPluginCleanupInvocationV1
 {
     ValueTask<AbiReply<AbiValue>> InvokeCleanup(ABIContext abi, ulong handler, string phase, InvocationOptions options);
 }
+
+/// <summary>Optional local adapter for a bounded Checkup handler. The Host must
+/// enforce query-only capability access for the entire invocation lifetime.</summary>
+public interface IPluginProbeInvocationV1
+{
+    ValueTask<AbiReply<AbiValue>> InvokeProbe(ABIContext abi, ulong handler, AbiValue input, InvocationContext invocation);
+}

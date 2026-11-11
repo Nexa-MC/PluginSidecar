@@ -5,7 +5,7 @@ using Nexa.Plugin.Sdk.Abi100.Data;
 namespace PluginSidecar.Packages;
 
 /// <summary>Static content and optional code share one context and one registration transaction.</summary>
-public sealed class DeclarativePluginEntry(PluginManifest manifest, DeclarativeContentPack content, IPluginBootstrapV1? code = null) : IPluginBootstrapV1, IPluginInvocationV1, IPluginCleanupInvocationV1
+public sealed class DeclarativePluginEntry(PluginManifest manifest, DeclarativeContentPack content, IPluginBootstrapV1? code = null) : IPluginBootstrapV1, IPluginInvocationV1, IPluginCleanupInvocationV1, IPluginProbeInvocationV1
 {
     public async ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext context)
     {
@@ -32,6 +32,9 @@ public sealed class DeclarativePluginEntry(PluginManifest manifest, DeclarativeC
     public ValueTask<AbiReply<Unit>> OnActivated(ABIContext abi, InvocationContext invocation) => code?.OnActivated(abi, invocation) ?? Ok();
     public ValueTask<AbiReply<Unit>> OnStop(StopContext context) => code?.OnStop(context) ?? Ok();
     public ValueTask<AbiReply<Unit>> OnAbort(AbortContext context) => code?.OnAbort(context) ?? Ok();
+    public ValueTask<AbiReply<AbiValue>> InvokeProbe(ABIContext abi,ulong handler,AbiValue input,InvocationContext invocation)=>
+        code is IPluginProbeInvocationV1 probe?probe.InvokeProbe(abi,handler,input,invocation):
+        ValueTask.FromResult(AbiReply<AbiValue>.Fail(new(AbiErrors.CAPABILITY_UNAVAILABLE,AbiErrors.CAPABILITY_UNAVAILABLE,"Checkup","service.probe",invocation.Identity.PluginId,invocation.Identity.LoadInstanceId,invocation.CorrelationId,false,ImmutableDictionary<string,string>.Empty)));
     public ValueTask<AbiReply<AbiValue>> InvokeCleanup(ABIContext abi,ulong handler,string phase,InvocationOptions options)=>
         code is IPluginCleanupInvocationV1 cleanup?cleanup.InvokeCleanup(abi,handler,phase,options):
         ValueTask.FromResult(AbiReply<AbiValue>.Fail(new(AbiErrors.HANDLE_INVALID,AbiErrors.HANDLE_INVALID,phase,"cleanup",abi.Info.Identity.PluginId,abi.Info.Identity.LoadInstanceId,options.CorrelationId,false,ImmutableDictionary<string,string>.Empty)));

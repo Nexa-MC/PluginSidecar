@@ -11,6 +11,7 @@
     <Compile Include="../PluginSidecar.Tests/DurableEventTests.cs" Link="DurableEventTests.cs" />
     <Compile Include="../PluginSidecar.Tests/ScheduleWorkflowTests.cs" Link="ScheduleWorkflowTests.cs" />
     <Compile Include="../PluginSidecar.Tests/ActionConfirmationTests.cs" Link="ActionConfirmationTests.cs" />
+    <Compile Include="../PluginSidecar.Tests/ServiceProbeTests.cs" Link="ServiceProbeTests.cs" />
     <Compile Include="../PluginSidecar.Tests/RuntimeServicesTests.cs" Link="RuntimeServicesTests.cs" />
     <Compile Include="../PluginSidecar.Tests/DefinitionTests.cs" Link="DefinitionTests.cs" />
     <Compile Include="../PluginSidecar.Tests/GuestSdkTests.cs" Link="GuestSdkTests.cs" />

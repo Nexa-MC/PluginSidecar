@@ -37,6 +37,9 @@ internal static class CallbackSdkTests
         var invocation = new InvocationContext(identity, Guid.NewGuid(), correlation, cause, default, TimeSpan.FromSeconds(5));
         var input = DataCodec.Map(("text", DataCodec.WriteString("回调\0🌟")), ("number", DataCodec.WriteUInt64(ulong.MaxValue)));
         Check((await entry.InvokeHandler(abi, 1, input, invocation)).Error?.Code == AbiErrors.PLUGIN_STOPPED);
+        var probeRequest=new PredicateRequest(new("example.callback:probe"),Empty.Write(new()),new("probe-revision"));
+        var probeResult=await entry.InvokeProbe(abi,5,PredicateRequest.Write(probeRequest),invocation);
+        Check(probeResult.Success&&PredicateResult.Read(probeResult.Value).Outcome==PredicateOutcome.True&&PredicateResult.Read(probeResult.Value).InputRevision==probeRequest.Consistency);
         foreach (var phase in new[] { LoadStage.Initialize, LoadStage.PostInitialize, LoadStage.Checkup, LoadStage.Finalize })
         {
             var stage = new StageContext(identity, phase, Guid.NewGuid(), group, default, TimeSpan.FromSeconds(5)); admission.Enter(stage);
@@ -60,6 +63,7 @@ internal static class CallbackSdkTests
         Check((await entry.InvokeCleanup(abi,1,"Stop",new(Guid.NewGuid(),TimeSpan.FromSeconds(5),default))).Success);
         admission.CompleteStop();
         Check((await entry.InvokeHandler(abi, 1, input, invocation)).Error?.Code == AbiErrors.PLUGIN_STOPPED);
+        Check((await entry.InvokeProbe(abi,5,PredicateRequest.Write(probeRequest),invocation)).Error?.Code==AbiErrors.HANDLE_OWNER_MISMATCH);
         Console.WriteLine("PASS: typed managed callbacks, compiled Wasm handlers, context metadata, Host continuations, causation, owner checks and activation/stop fencing.");
     }
     private static void Check(bool ok, [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(ok))] string? expression = null) { if (!ok) throw new InvalidOperationException(expression); }

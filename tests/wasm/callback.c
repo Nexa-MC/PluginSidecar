@@ -13,6 +13,13 @@ NX_EXPORT("nexa_resume") nx_u64 resume(nx_u32 address,nx_u32 size) {
             nx_require(nx_has_capability(message,"nexa.platform/100"));
             nx_call_options options={"12345678-1234-1234-1234-123456789abc",0,0,handler==4?"12345678-1234-1234-1234-123456789def":0,1000};
             nx_Platform_Describe(&writer,nx_Empty_read(nx_handler_input(message)),&options); pending=1;
+        } else if(handler==5) {
+            nx_require(nx_is_string(nx_field(message,"phase"),"Checkup"));
+            nx_PredicateRequest request=nx_PredicateRequest_read(nx_handler_input(message));
+            nx_u8 arguments[4096]; nx_writer args={arguments,0,sizeof arguments};
+            nx_ValidationIssueArray issues=nx_ValidationIssueArray_write(&args,0,0);
+            nx_PredicateResult result=nx_PredicateResult_write(&args,nx_PredicateOutcome_True,nx_PredicateRequest_Consistency(request),issues);
+            nx_handler_success(&writer,result.value);
         } else if(handler==3) nx_handler_error(&writer,nx_handler_input(message)); else __builtin_trap();
     } else nx_complete(&writer,1);
     return nx_result(&writer);

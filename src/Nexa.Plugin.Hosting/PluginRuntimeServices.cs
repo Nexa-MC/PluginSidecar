@@ -12,6 +12,8 @@ public sealed partial class PluginRuntimeServices
     internal Func<ulong> AllocateRegistrationHandle=null!;
     internal Func<HostInvocation,ulong,RegistrationRef> RegisterCleanup=null!;
     internal Func<HostInvocation,RegistrationRef,ValueTask<bool>> ReleaseCleanup=null!;
+    internal Func<HostInvocation,PluginIdentity,ulong,AbiValue,InvocationOptions,ValueTask<AbiReply<AbiValue>>> DispatchProbe=null!;
+    internal Func<HostInvocation,LoadReport> OwnLoadReport=null!;
     private readonly string _workflowStore;
     private readonly PluginRuntimeOptions _options;
     private readonly Func<PluginIdentity,string,bool> _authorize;
@@ -89,6 +91,8 @@ public sealed partial class PluginRuntimeServices
                 contract.Registration.State!=RegistrationState.Active && contract.Group!=group ||
                 !AbiValueBinary.Encode(contract.Value).SequenceEqual(AbiValueBinary.Encode(PublicContract.Write(service.Contract))))
                 throw new AbiHostException(AbiErrors.SERVICE_CONTRACT_MISMATCH);
+            if(service.Probe is { } probe&&(!_entries.TryGetValue(("predicate",probe),out var predicate)||predicate.Owner!=entry.Owner))
+                throw new AbiHostException(AbiErrors.DEPENDENCY_MISSING);
         }
     }
     internal void Publish(Guid group)

@@ -42,7 +42,7 @@ dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 
 参阅[架构](docs/architecture.md)、[验收状态](docs/roadmap.md)、[Market 与离线](docs/market-offline.md)、[贡献指南](CONTRIBUTING.zh-CN.md)。Apache-2.0。
 
-组合运行库现已实现 13 个分组的 88 项操作，包含内容注册表、标签、覆盖解析与订阅、状态/CAS、持久事件回调、公开服务、动作、条件、任务，以及支持原子检查点、显式重启恢复、调度、并发策略与等待节点的工作流。C 示例和跨语言调用经过真实编译及加载验证；新增工作流示例串起连续注册、动作回调、定时触发和停用清理，CI 在 Windows、Linux、macOS 执行 NativeAOT 测试。Desktop 业务适配、UI 消费者等剩余项明确记录在[验收状态](docs/roadmap.md)。
+组合运行库现已实现 13 个分组的 90 项操作，包含内容注册表、标签、覆盖解析与订阅、状态/CAS、持久事件回调、公开服务、动作、条件、任务，以及支持原子检查点、显式重启恢复、调度、并发策略与等待节点的工作流。C 示例和跨语言调用经过真实编译及加载验证；新增工作流示例串起连续注册、动作回调、定时触发和停用清理，CI 在 Windows、Linux、macOS 执行 NativeAOT 测试。Desktop 业务适配、UI 消费者等剩余项明确记录在[验收状态](docs/roadmap.md)。
 
 CI 同时打包 Hosting、WasmRuntime、Packages 和仅用于可信开发的 RuntimeAdapter，并包含版本化依赖；宿主开发者无需直接引用本仓库源码项目。
 

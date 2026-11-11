@@ -48,7 +48,7 @@ public sealed partial class PluginRuntimeServices
     }
     private static bool References(string kind,Entry entry,string targetKind,QualifiedId id)=>kind switch
     {
-        "service"=>targetKind=="contract"&&ServiceDefinition.Read(entry.Value).Contract.Id==id,
+        "service"=>targetKind=="contract"&&ServiceDefinition.Read(entry.Value).Contract.Id==id||targetKind=="predicate"&&ServiceDefinition.Read(entry.Value).Probe==id,
         "provider-kind"=>targetKind=="contract"&&ProviderKindDefinition.Read(entry.Value).Contract.Id==id,
         "consumer"=>targetKind=="contract"&&ConsumerDefinition.Read(entry.Value).Contract==id,
         "workflow"=>NodesReference(WorkflowDefinition.Read(entry.Value).Nodes,targetKind,id),

@@ -10,14 +10,14 @@ working launcher integration are distinct acceptance milestones.
 | Content | Wasm and static content packages share one registry; all 15 definition routes, trusted consumers, tags, resolved overlays, previews, watches, CAS and reference-protected deletion | Desktop/plugin consumer adapters, additional merge/deletion policies and product content scenarios |
 | Storage | Seven private namespace operations, durable atomic writes, transactions, CAS, ownership and restart tests | Workflow-backed migration and application key/storage policy |
 | Workflows | Executable action/predicate callbacks, trusted action confirmation, bounded workflow interpreter, trace, cancel, atomic persistent checkpoints, explicit safe recovery, durable event waits, schedules, all concurrency policies and waiting nodes | Desktop user-interaction port, migration consumers and product workflows |
-| Providers/UI | Published public contracts, owned service binding/calls, typed results, callback scheduling, availability streams and required-consumer stop closure | Provider selection, UI renderer/consumers and protected recovery controls |
+| Providers/UI | Published public contracts, owned service binding/calls, read-only Checkup probes, owned load reports, typed results, callback scheduling, availability streams and required-consumer stop closure | Provider selection, UI renderer/consumers and protected recovery controls |
 | Business | Typed Minecraft/Catalog/Accounts/Settings/Themes/Backups/Files/Network APIs | Actual Host adapters and end-to-end author scenarios |
 | Market/offline | Signed encrypted delivery, device binding, atomic cache and offline-restart package loading | Real acquisition endpoint/UI, protected key custody and final Host admission |
 | Controlled execution | Import-free Wasmtime runner, fuel/memory/request limits, async continuations, native/WASI import rejection | Business effect policies and deployed integration |
 | Guest authoring | Full C/Wasm model/build/result bindings for 363 calls; compiled cross-language conformance and lifecycle callback tests | Additional language SDKs are outside the current C#/C SDK scope |
 | Distribution | SDK packaging, C sample build and three-OS NativeAOT runtime CI | Published signed `.nsc`, product integration and architecture certification |
 
-The default kernel exposes 88 implemented routes across 13 groups, including
+The default kernel exposes 90 implemented routes across 13 groups, including
 state/CAS, durable/resumable event callbacks, subscription read/release, owned tasks,
 diagnostics, contracts, services, actions, predicates and workflows in addition to
 definitions/storage. See [runtime behavior and limits](runtime-services.md).

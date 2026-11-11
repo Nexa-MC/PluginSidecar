@@ -5,7 +5,7 @@ using Nexa.Plugin.Sdk.Abi100.Data;
 namespace PluginSidecar.WasmRuntime;
 
 /// <summary>Bootstrap and business callback adapter for import-free WebAssembly.</summary>
-public sealed class WasmPluginEntry(PluginManifest manifest, WasmPluginMachine machine) : IPluginBootstrapV1, IPluginInvocationV1, IPluginCleanupInvocationV1, IAsyncDisposable
+public sealed class WasmPluginEntry(PluginManifest manifest, WasmPluginMachine machine) : IPluginBootstrapV1, IPluginInvocationV1, IPluginCleanupInvocationV1, IPluginProbeInvocationV1, IAsyncDisposable
 {
     private PluginIdentity? _identity;
     private ABIContext? _abi;
@@ -65,6 +65,24 @@ public sealed class WasmPluginEntry(PluginManifest manifest, WasmPluginMachine m
         }
         catch (OperationCanceledException) { return AbiReply<AbiValue>.Fail(Error(lifetime.IsCancellationRequested ? AbiErrors.CANCELLED : AbiErrors.DEADLINE_EXCEEDED, "Active", invocation)); }
         catch (Exception e) when (e is not OutOfMemoryException and not AccessViolationException) { return AbiReply<AbiValue>.Fail(Error(AbiErrors.PLUGIN_EXCEPTION, "Active", invocation)); }
+    }
+
+    public async ValueTask<AbiReply<AbiValue>> InvokeProbe(ABIContext abi,ulong handler,AbiValue input,InvocationContext invocation)
+    {
+        const string phase="Checkup";
+        if(!ReferenceEquals(abi,_abi)||invocation.Identity!=_identity||handler==0||invocation.InvocationId==Guid.Empty||Volatile.Read(ref _retired)!=0)
+            return AbiReply<AbiValue>.Fail(Error(AbiErrors.HANDLE_OWNER_MISMATCH,phase,invocation));
+        using var lifetime=CancellationTokenSource.CreateLinkedTokenSource(invocation.Cancellation,_activeLifetime.Token);
+        try
+        {
+            DataCodec.Validate(input);
+            var message=Message("handler",phase,abi,invocation.Budget,invocation);
+            message=new(message.Value.Add("handler",DataCodec.WriteUInt64(handler)).Add("input",input));
+            var fields=DataCodec.ReadMap(await Run(message,abi,null,invocation.Budget,lifetime.Token,invocation).ConfigureAwait(false));
+            return DataCodec.ReadBoolean(DataCodec.Field(fields,"success"))?AbiReply<AbiValue>.Ok(DataCodec.Field(fields,"value")):AbiReply<AbiValue>.Fail(GuestError(fields,phase,invocation));
+        }
+        catch(OperationCanceledException){return AbiReply<AbiValue>.Fail(Error(AbiErrors.CANCELLED,phase,invocation));}
+        catch(Exception error)when(error is not OutOfMemoryException and not AccessViolationException){return AbiReply<AbiValue>.Fail(Error(AbiErrors.PLUGIN_EXCEPTION,phase,invocation));}
     }
 
     public async ValueTask<AbiReply<AbiValue>> InvokeCleanup(ABIContext abi,ulong handler,string phase,InvocationOptions options)

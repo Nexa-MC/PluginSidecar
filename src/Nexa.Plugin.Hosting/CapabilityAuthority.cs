@@ -222,14 +222,20 @@ public sealed class CapabilityAuthority
             TaskCompletionSource<AbiReply<AbiValue>>? completion = null;
             Task<AbiReply<AbiValue>>? replay = null;
             bool reserved = false;
+            var probe=ProbeExecution.Current.Value;
             lock (Gate)
             {
+                if(probe is not null&&(probe.Closed||probe.Cancellation.IsCancellationRequested))return Fail<AbiValue>(AbiErrors.STAGE_FROZEN,options);
+                if(probe is not null&&(!ReferenceEquals(probe.Authority,owner)||probe.Identity!=Info.Identity))return Fail<AbiValue>(AbiErrors.HANDLE_OWNER_MISMATCH,options);
                 var available = GetAbility(contractId); if (!available.Success) return AbiReply<AbiValue>.Fail(available.Error!);
                 if (!owner._routes.TryGetValue((contractId, methodId), out route!)) return Fail<AbiValue>(AbiErrors.CAPABILITY_UNAVAILABLE, options);
                 if (!Info.Permissions.Contains(route.Descriptor.Permission)) return Fail<AbiValue>(AbiErrors.CAPABILITY_DENIED, options);
-                if (!route.Descriptor.Phases.Contains(Phase)) return Fail<AbiValue>(Phase is "Stop" or "Stopped" ? AbiErrors.PLUGIN_STOPPED : AbiErrors.STAGE_DENIED, options);
+                if(probe is not null&&(route.Descriptor.Kind!="Query"||route.Descriptor.Idempotency!="ReadOnly"))return Fail<AbiValue>(AbiErrors.STAGE_DENIED,options);
+                string phase=probe is null?Phase:"Checkup";
+                if (!route.Descriptor.Phases.Contains(phase)) return Fail<AbiValue>(Phase is "Stop" or "Stopped" ? AbiErrors.PLUGIN_STOPPED : AbiErrors.STAGE_DENIED, options);
                 if (options.OperationId == Guid.Empty || options.Budget <= TimeSpan.Zero || options.Budget > TimeSpan.FromMinutes(5)) return Fail<AbiValue>(AbiErrors.SCHEMA_INVALID, options);
-                if (Stage is { } stage)
+                if(probe is not null)stageCancellation=probe.Cancellation;
+                else if (Stage is { } stage)
                 {
                     if (options.StageInvocationId != stage.StageInvocationId) return Fail<AbiValue>(AbiErrors.STAGE_FROZEN, options);
                     if (stage.RemainingBudget <= TimeSpan.Zero) return Fail<AbiValue>(AbiErrors.DEADLINE_EXCEEDED, options);
@@ -272,7 +278,7 @@ public sealed class CapabilityAuthority
                     _inflight++; owner._inflight++;
                     if (completion is not null) { reserved = true; _reservedBytes += route.MaximumReplyBytes; owner._reservedBytes += route.MaximumReplyBytes; }
                 }
-                invocation = new(Info.Identity, GroupId, Phase, options);
+                invocation = new(Info.Identity, GroupId, phase, options);
             }
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(options.Cancellation, stageCancellation);
             linked.CancelAfter(options.Budget);

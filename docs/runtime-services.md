@@ -1,6 +1,6 @@
 # Runtime services
 
-`PluginHostRuntime` installs 88 implemented operations from the ABI catalog. The
+`PluginHostRuntime` installs 90 implemented operations from the ABI catalog. The
 embedding Host still supplies schema policy, verified acquisition, grants and
 launcher business adapters. This is a runnable library kernel, not an installed
 Desktop Sidecar. The CLI remains a scaffold. No production signing key or live
@@ -203,3 +203,26 @@ content or availability state. PreInitialize routes declared by the catalog are
 callable after Make; returning from PreInitialize freezes that call scope.
 Synchronous lifecycle/cleanup callbacks run behind the same deadline as async
 callbacks. A timed-out effect remains an unknown outcome and is not re-executed.
+
+## Service Checkup and load reports
+
+All eight Plugins routes execute in the kernel. `ServiceDefinition.Probe` names
+an owned predicate. `ProbeService` checks the caller-owned binding, exact probe ID
+and input schema. Pure predicates evaluate directly; callback predicates receive
+a `PredicateRequest` and return a revision-bound `PredicateResult`. False/Unknown/
+Error results produce a failed validation report. Fatal findings cannot become a
+successful report even if the predicate returns True.
+
+The coordinator admits prepared providers in the same atomic group and existing
+active providers through `IPluginProbeInvocationV1` (or registered development
+callbacks). Only catalog queries permitted in Checkup can run inside the probe.
+Saved contexts cannot bypass that boundary; detached continuations retain a revoked
+lease after callback return. Deadlines, cancellation, provider identity and causal
+cycle checks apply. Self/cyclic probes return CONFLICT rather than reentering a
+suspended Wasm instance. Ordinary service calls still require Active.
+
+`ReadOwnLoadReport` returns the caller's identity, current phase, retained bootstrap
+and Checkup findings and required dependency IDs. Findings are bounded and preserved
+in the final trusted load report, including failed group loads. Other plugins'
+private findings are not exposed. Service probes also protect their predicate
+registration from release while referenced.

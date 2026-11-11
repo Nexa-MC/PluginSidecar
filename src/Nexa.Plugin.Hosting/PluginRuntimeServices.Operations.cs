@@ -139,6 +139,8 @@ public sealed partial class PluginRuntimeServices
         {lock(_gate){var entry=Lookup(c,v);var service=ServiceDefinition.Read(entry.Value);if(_bindings.Count>=8192)throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);var result=new ServiceBinding(++_next,entry.Owner.PluginId,entry.Owner.LoadInstanceId,service.Contract.Id,service.Contract.Version);_bindings.Add(result.Handle,new(c.Identity,result,entry,v.Required));return ValueTask.FromResult(result);}}),
         HostRoutes.Typed<ServiceBinding,Empty>("Plugins","ReleaseBinding",(c,v)=>
         {lock(_gate){BindingFor(c,v);_bindings.Remove(v.Handle);return ValueTask.FromResult(new Empty());}}),
+        HostRoutes.Typed<ServiceProbe,ValidationReport>("Plugins","ProbeService",ProbeService),
+        HostRoutes.Typed<Empty,LoadReport>("Plugins","ReadOwnLoadReport",(c,_)=>ValueTask.FromResult(OwnLoadReport(c))),
         HostRoutes.Typed<ServiceCall,OperationRef>("Plugins","CallService",(c,v)=>
         {
             var binding=BindingFor(c,v.Binding);var definition=ServiceDefinition.Read(binding.Provider.Value);
@@ -151,4 +153,32 @@ public sealed partial class PluginRuntimeServices
                 c.Options with {OperationId=Guid.NewGuid(),CausationId=c.Options.OperationId,Cancellation=token}),_=>HoldRegistration(binding.Provider),exit:()=>DropRegistration(binding.Provider)));
         })
     ];
+
+    private async ValueTask<ValidationReport> ProbeService(HostInvocation caller,ServiceProbe request)
+    {
+        Binding binding;Entry entry;PredicateDefinition predicate;Revision revision;
+        lock(_gate)
+        {
+            binding=BindingFor(caller,request.Binding);
+            var service=ServiceDefinition.Read(binding.Provider.Value);
+            if(service.Probe!=request.Probe)throw new AbiHostException(AbiErrors.CAPABILITY_DENIED);
+            entry=Find(caller,"predicate",request.Probe);
+            if(entry.Owner!=binding.Provider.Owner)throw new AbiHostException(AbiErrors.CAPABILITY_DENIED);
+            predicate=PredicateDefinition.Read(entry.Value);Validate(predicate.Input,request.Input);
+            revision=_revision;HoldRegistration(entry);HoldRegistration(binding.Provider);
+        }
+        try
+        {
+            if(predicate.Handler is null)return Validation(DataCodec.ReadBoolean(Expression(predicate.Expression,request.Input,0,false)),AbiErrors.CHECKUP_FAILED);
+            var input=new PredicateRequest(predicate.Id,request.Input,revision);
+            var reply=await DispatchProbe(caller,entry.Owner,predicate.Handler.Value,PredicateRequest.Write(input),caller.Options with
+                {OperationId=Guid.NewGuid(),CausationId=caller.Options.OperationId}).ConfigureAwait(false);
+            if(!reply.Success)throw new AbiHostException(reply.Error!.Code);
+            var result=PredicateResult.Read(reply.Value);
+            if(result.InputRevision!=revision)throw new AbiHostException(AbiErrors.STALE_REVISION);
+            return new(result.Outcome==PredicateOutcome.True&&!result.Issues.Any(i=>i.Fatal),result.Outcome==PredicateOutcome.True?result.Issues:
+                result.Issues.IsEmpty?[new(AbiErrors.CHECKUP_FAILED,Text("service.probe.failed"),"",true)]:result.Issues);
+        }
+        finally{DropRegistration(entry);DropRegistration(binding.Provider);}
+    }
 }

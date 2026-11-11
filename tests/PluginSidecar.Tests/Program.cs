@@ -15,6 +15,7 @@ await WasmTests.Run();
 await EndToEndTests.Run();
 await DefinitionTests.Run();
 await RuntimeServicesTests.Run();
+await ServiceProbeTests.Run();
 await ActionConfirmationTests.Run();
 await ScheduleWorkflowTests.Run();
 await DurableEventTests.Run();

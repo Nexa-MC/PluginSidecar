@@ -71,7 +71,7 @@ cleanup. This SDK does not create another cleanup registry.
 public async ValueTask<AbiReply<CheckupResult>> OnCheckup(ABIContext abi, StageContext stage)
 {
     using var api = abi.ForStage100(stage);
-    var result = await api.Diagnostics.QueryBindingStatus(
+    var result = await api.Plugins.ReadOwnLoadReport(new Empty(),
         new(Guid.NewGuid(), stage.Budget, stage.Cancellation));
     return result.Success
         ? AbiReply<CheckupResult>.Ok(new(CheckupStatus.Passed, [], []))
@@ -130,7 +130,9 @@ No automatic retry is performed; uncertain external outcomes remain explicit.
 
 `InvocationOptions` carries expected revision, idempotency key, correlation and
 causation IDs. `AbiError` carries localized message parameters and operation ID.
-The SDK does not implement durable idempotency or mutation-plan confirmation.
+The SDK facade does not implement durable idempotency or mutation-plan confirmation.
+The Host kernel separately owns per-load replay, persistent workflow checkpoints
+and the trusted action-confirmation port described in [runtime services](runtime-services.md).
 Opaque FileRef/BlobRef and service bindings retain their load-instance identity.
 
 OnActivated receives an InvocationContext only after atomic commit. It is not a
