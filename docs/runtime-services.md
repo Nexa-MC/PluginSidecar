@@ -88,3 +88,9 @@ closures. A separate test restarts the Host and resumes a checkpoint, then prove
 that an uncertain effect is not executed again. These run under NativeAOT too.
 C/Wasm conformance independently covers all 363 current/legacy SDK slots and 292
 model/collection shapes; that count is not a claim of 363 launcher integrations.
+
+On Windows, the Wasm adapter uses explicit trap checks (`WithSignalsBasedTraps(false)`).
+This preserves .NET apphost CET shadow-stack protection while avoiding Wasmtime's
+incompatible signal-based trap recovery ([upstream issue 374](https://github.com/bytecodealliance/wasmtime-dotnet/issues/374)).
+CI exercises unreachable instructions, memory bounds, division by zero and fuel
+exhaustion as well as compiled C decoder rejection, in managed and NativeAOT hosts.

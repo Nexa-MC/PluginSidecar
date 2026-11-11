@@ -47,7 +47,7 @@ internal static class WasmTests
         try { await using var invalid = new WasmPluginMachine(Module.ConvertText("(module (import \"wasi_snapshot_preview1\" \"proc_exit\" (func (param i32))))")); }
         catch (InvalidDataException) { rejected = true; }
         Check(rejected);
-        foreach (var body in new[] { "(loop $again br $again) i64.const 0", "i64.const 9223372036854775807" })
+        foreach (var body in new[] { "(loop $again br $again) i64.const 0", "i64.const 9223372036854775807", "unreachable", "i32.const 65536 i64.load", "i64.const 1 i64.const 0 i64.div_u" })
         {
             string invalid = $$"""
             (module (memory (export "memory") 1 1)
@@ -68,7 +68,7 @@ internal static class WasmTests
         for (int i = 0; i < binary.Length; i++)
         { rejected = false; try { AbiValueBinary.Decode(binary.AsSpan(0, i)); } catch (FormatException) { rejected = true; } Check(rejected); }
         try { AbiValueBinary.Decode([1, 0, 0, 0, 1, 2]); throw new Exception("Noncanonical boolean accepted."); } catch (FormatException) { }
-        Console.WriteLine("PASS: real import-free Wasm execution, asynchronous Host continuation, fuel traps, bounded memory replies, fault retirement and strict binary decoding.");
+        Console.WriteLine("PASS: real import-free Wasm execution, asynchronous Host continuation, fuel/unreachable/out-of-bounds/division traps, bounded memory replies, fault retirement and strict binary decoding.");
     }
     private static string Escaped(byte[] bytes) => string.Concat(bytes.Select(b => "\\" + b.ToString("x2")));
     private static void Check(bool value) { if (!value) throw new InvalidOperationException("Wasm assertion failed."); }

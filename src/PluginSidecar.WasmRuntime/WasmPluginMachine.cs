@@ -28,7 +28,9 @@ public sealed class WasmPluginMachine : IAsyncDisposable
         if (_limits.MemoryBytes is < 65536 or > 256 * 1024 * 1024 || _limits.FuelPerCallback is < 1 or > 100_000_000 || _limits.MaximumHostCalls is < 1 or > 16384)
             throw new ArgumentOutOfRangeException(nameof(limits));
         if (verifiedWasm.Length is < 8 or > 25 * 1024 * 1024) throw new InvalidDataException(AbiErrors.PACKAGE_INVALID);
-        _engine = new Engine(new Config().WithFuelConsumption(true));
+        // .NET 9+ Windows apphosts enable CET. Signal-based trap recovery is not
+        // shadow-stack compatible; explicit Wasm checks preserve process protections.
+        _engine = new Engine(new Config().WithFuelConsumption(true).WithSignalsBasedTraps(!OperatingSystem.IsWindows()));
         try
         {
             _module = Module.FromBytes(_engine, "plugin", verifiedWasm);
