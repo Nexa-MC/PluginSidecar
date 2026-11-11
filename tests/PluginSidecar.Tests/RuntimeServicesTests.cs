@@ -24,6 +24,19 @@ internal static class RuntimeServicesTests
             var reports=await runtime.LoadAsync([provider.Source(),consumer.Source()]);
             Check(reports.All(r=>r.State==LoadState.Active));
             using var p=provider.Context!.AsAbi100();using var c=consumer.Context!.AsAbi100();
+            var hostCaller = new HostInvocation(provider.Identity!, Guid.NewGuid(), "Active", Options());
+            var hostWatch = runtime.Services.CreateHostSubscription(hostCaller, "nexa.events/100", "nexa.events.read", TextResult.Write(new("initial")), 1);
+            Check(runtime.Services.PublishHostSubscription(provider.Identity!, hostWatch, TextResult.Write(new("overflow"))));
+            var hostBatch = runtime.Services.ReadSubscription(provider.Identity!, hostWatch);
+            Check(hostBatch.ResyncRequired && TextResult.Read(hostBatch.Items.Single()).Text == "initial");
+            try { runtime.Services.PublishHostSubscription(consumer.Identity!, hostWatch, Empty.Write(new())); throw new InvalidOperationException("Foreign Host subscription published."); }
+            catch (AbiHostException e) when (e.Code == AbiErrors.HANDLE_OWNER_MISMATCH) { }
+            runtime.Services.ReleaseSubscription(provider.Identity!, hostWatch);
+            Check(!runtime.Services.PublishHostSubscription(provider.Identity!, hostWatch, Empty.Write(new())));
+            var hostOperation = runtime.Services.StartHostOperation(hostCaller, "nexa.events.write", Abi100Schemas.TextResult,
+                _ => ValueTask.FromResult(AbiReply<AbiValue>.Ok(TextResult.Write(new("host-complete")))));
+            Check(TextResult.Read((await Completed(p, hostOperation.Id)).Result).Text == "host-complete");
+
             var availability=Success(await c.Plugins.WatchAvailability(new("provider",new("provider:service"),1,1,false),Options()));
             var contractWatch=Success(await c.Contracts.WatchAvailability(new(new("provider:echo")),Options()));
             foreach(var subscription in new[]{availability,contractWatch})

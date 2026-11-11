@@ -1,6 +1,6 @@
 using Nexa.Sidecar.Transport;
 using PluginSidecar;
-if(args is ["--version"]){Console.WriteLine("PluginSidecar 0.2.0-alpha.5");return 0;}
+if(args is ["--version"]){Console.WriteLine("PluginSidecar 0.2.0-alpha.6");return 0;}
 if(args is not ["--nexa-sidecar","--endpoint",var endpoint])
 {Console.Error.WriteLine("Usage: PluginSidecar --nexa-sidecar --endpoint <host-endpoint>");return 2;}
 try

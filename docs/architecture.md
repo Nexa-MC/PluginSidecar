@@ -312,3 +312,13 @@ OS path. `VerifiedPluginPackage.CopyPayload` is a trusted embedding API: callers
 own and clear copies. Host presentation dispatch uses `PluginHostRuntime.InvokeAsync`
 and retains the original plugin identity, stage, capability and permission checks.
 The Desktop authoring example exercises package files, staged UI and a confirmed action.
+
+## Trusted application adapters
+
+Host adapters can create bounded subscriptions and tracked operations in the existing
+runtime service ledger, publish snapshots and dispatch registered callbacks. These
+are trusted embedding ports, never new guest calls or transport messages. Creation
+requires the admitted context/capability; publication and callbacks remain permission
+and load scoped. Retirement releases queues and cancels operations. This lets Desktop
+UI and domain services use the existing Resources/Tasks APIs rather than parallel
+subscription or operation stores.

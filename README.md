@@ -5,7 +5,7 @@ English | [简体中文](README.zh-CN.md)
 NexaCL plugin contracts and SDK for derivative developers and contributors.
 The current design is [Plugin ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md).
 
-## SDK 0.2.0-alpha.5
+## SDK 0.2.0-alpha.6
 
 - `Nexa.Plugin.Bootstrap.V1`: unified ABIContext, required/optional capability negotiation, six loading stages, activation/cleanup callbacks, errors and Host commit ports.
 - `Nexa.Plugin.Sdk.Abi100`: 33 capability groups, 342 new typed operations, 239 data models, bounded codecs, opaque IDs/revisions, and the 22 previous preview dispatch slots.
@@ -60,7 +60,7 @@ RuntimeAdapter with their versioned dependencies. Host embedders can use those
 packages without a private project reference.
 
 Use `artifacts/packages` as a local NuGet source and reference
-`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.5`. Edit
+`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.6`. Edit
 [contracts/abi100.json](contracts/abi100.json), then run the generator without
 `--verify`; do not edit generated sources. CI checks reproducibility on all three
 supported operating systems. The managed sample demonstrates Get/Make negotiation and
