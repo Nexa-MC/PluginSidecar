@@ -36,3 +36,10 @@ with zipfile.ZipFile(args.out / 'plugin.zip', 'w', compression=zipfile.ZIP_DEFLA
         entry.external_attr = 0o100644 << 16
         archive.writestr(entry, data)
 print(args.out / 'plugin.zip')
+
+# Compile every generated SDK call/model, plus the callback lifecycle fixture.
+for source, output in [('tests/wasm/conformance.c', 'conformance.wasm'), ('tests/wasm/callback.c', 'callback.wasm'), ('tests/wasm/codec.c', 'codec.wasm')]:
+    subprocess.run([args.clang, '--target=wasm32-unknown-unknown', '-std=c11', '-O1', '-Wall', '-Wextra', '-Werror',
+                    '-ffreestanding', '-fno-builtin', '-nostdlib', '-I', str(root / 'sdk/wasm/include'), str(root / source),
+                    '-Wl,--no-entry', '-Wl,--export-memory', '-Wl,-z,stack-size=131072',
+                    '-Wl,--initial-memory=1048576', '-Wl,--max-memory=1048576', '-o', str(args.out / output)], check=True)

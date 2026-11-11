@@ -42,6 +42,11 @@ public sealed record CheckupResult(CheckupStatus Status, ImmutableArray<Finding>
 public sealed record AbortContext(PluginIdentity Identity, LoadStage FailedStage, AbiError RootCause, ImmutableArray<LoadStage> CompletedStages, AbiValue Resources, CancellationToken Cancellation, TimeSpan Budget, ABIContext? ABI = null);
 public sealed record StopContext(PluginIdentity Identity, ABIContext ABI, string ReasonCode, CancellationToken Cancellation, TimeSpan Budget);
 public sealed record InvocationContext(PluginIdentity Identity, Guid InvocationId, Guid CorrelationId, Guid? CausationId, CancellationToken Cancellation, TimeSpan Budget);
+/// <summary>Local execution adapter port. The trusted dispatcher supplies identity and the admitted ABI context.</summary>
+public interface IPluginInvocationV1
+{
+    ValueTask<AbiReply<AbiValue>> InvokeHandler(ABIContext abi, ulong handler, AbiValue input, InvocationContext invocation);
+}
 public interface IPluginBootstrapV1
 {
     ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext context);

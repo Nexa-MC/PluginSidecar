@@ -84,6 +84,7 @@ catalog+='    ];\n}\n'
 
 # Each fingerprint includes the transitive model/enum closure, not unrelated models.
 schemas = header + 'using Nexa.Plugin.Sdk.Abi100.Data;\nnamespace Nexa.Plugin.Sdk.Abi100;\n\npublic static class Abi100Schemas\n{\n'
+schema_fingerprints = {}
 for name in spec['models']:
     closure = {}; pending = [name]
     while pending:
@@ -94,6 +95,7 @@ for name in spec['models']:
             for field in closure[item]: pending.extend(re.findall(r'[A-Za-z][A-Za-z0-9]*', field['type']))
         elif item in spec['enums']: closure[item] = spec['enums'][item]
     fingerprint = hashlib.sha256(json.dumps({'root':name,'types':closure,'codec':'nexa-abi-value-1','scalarContract':1}, sort_keys=True, separators=(',',':')).encode()).hexdigest()
+    schema_fingerprints[name] = fingerprint
     schemas += f'    public static SchemaRef {name} {{ get; }} = new(new("nexa:abi100/{name.lower()}"), 1, "{fingerprint}");\n'
 schemas += '    public static bool Validate(SchemaRef schema, AbiValue value)\n    {\n        try\n        {\n            DataCodec.Validate(value);\n            switch (schema.Id.Value)\n            {\n'
 for name in spec['models']:
@@ -122,4 +124,14 @@ if args.verify:
     if not guest_path.exists() or guest_path.read_text() != guest: raise SystemExit('Stale guest dispatch constants')
 else:
     guest_path.parent.mkdir(parents=True, exist_ok=True); guest_path.write_text(guest)
+from guest_bindings import generate as generate_guest_bindings
+legacy = json.loads((ROOT / 'contracts/abi100-legacy.json').read_text())
+guest_spec = dict(spec, models=spec['models'] | legacy['models'], groups=spec['groups'] + legacy['groups'])
+bindings, conformance = generate_guest_bindings(guest_spec, schema_fingerprints)
+for relative, body in [('sdk/wasm/include/nexa/abi100.h', bindings), ('tests/wasm/conformance.c', conformance)]:
+    destination = ROOT / relative
+    if args.verify:
+        if not destination.exists() or destination.read_text() != body: raise SystemExit(f'Stale generated file: {relative}')
+    else:
+        destination.parent.mkdir(parents=True, exist_ok=True); destination.write_text(body)
 print(f'ABI 100: {len(spec["models"])} models, {len(spec["groups"])} groups, {len(seen)} draft operations; generated files '+('verified' if args.verify else 'updated'))

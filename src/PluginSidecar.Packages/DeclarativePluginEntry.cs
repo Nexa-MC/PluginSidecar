@@ -4,7 +4,7 @@ using Nexa.Plugin.Sdk.Abi100.Data;
 namespace PluginSidecar.Packages;
 
 /// <summary>Static content and optional code share one context and one registration transaction.</summary>
-public sealed class DeclarativePluginEntry(PluginManifest manifest, DeclarativeContentPack content, IPluginBootstrapV1? code = null) : IPluginBootstrapV1
+public sealed class DeclarativePluginEntry(PluginManifest manifest, DeclarativeContentPack content, IPluginBootstrapV1? code = null) : IPluginBootstrapV1, IPluginInvocationV1
 {
     public async ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext context)
     {
@@ -31,5 +31,9 @@ public sealed class DeclarativePluginEntry(PluginManifest manifest, DeclarativeC
     public ValueTask<AbiReply<Unit>> OnActivated(ABIContext abi, InvocationContext invocation) => code?.OnActivated(abi, invocation) ?? Ok();
     public ValueTask<AbiReply<Unit>> OnStop(StopContext context) => code?.OnStop(context) ?? Ok();
     public ValueTask<AbiReply<Unit>> OnAbort(AbortContext context) => code?.OnAbort(context) ?? Ok();
+    public ValueTask<AbiReply<AbiValue>> InvokeHandler(ABIContext abi, ulong handler, AbiValue input, InvocationContext invocation) =>
+        code is IPluginInvocationV1 callbacks ? callbacks.InvokeHandler(abi, handler, input, invocation) :
+        ValueTask.FromResult(AbiReply<AbiValue>.Fail(new(AbiErrors.CAPABILITY_UNAVAILABLE, AbiErrors.CAPABILITY_UNAVAILABLE, "Active", "plugin.callback",
+            invocation.Identity.PluginId, invocation.Identity.LoadInstanceId, invocation.CorrelationId, false, System.Collections.Immutable.ImmutableDictionary<string, string>.Empty)));
     private static ValueTask<AbiReply<Unit>> Ok() => ValueTask.FromResult(AbiReply<Unit>.Ok(new()));
 }

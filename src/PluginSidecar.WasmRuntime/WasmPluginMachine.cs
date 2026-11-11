@@ -4,7 +4,7 @@ using Nexa.Plugin.Sdk.Abi100.Data;
 using Wasmtime;
 namespace PluginSidecar.WasmRuntime;
 
-public sealed record WasmHostCall(string Contract, uint Method, AbiValue Arguments, Guid OperationId, string? IdempotencyKey, string? ExpectedRevision);
+public sealed record WasmHostCall(string Contract, uint Method, AbiValue Arguments, Guid OperationId, string? IdempotencyKey, string? ExpectedRevision, Guid? ExperimentId = null, TimeSpan? Budget = null);
 
 public sealed record WasmLimits(long MemoryBytes = 32 * 1024 * 1024, ulong FuelPerCallback = 10_000_000, int MaximumHostCalls = 1024);
 
@@ -83,7 +83,9 @@ public sealed class WasmPluginMachine : IAsyncDisposable
                 var call = new WasmHostCall(contract, method, DataCodec.Field(fields, "arguments"),
                     fields.TryGetValue("operationId", out var operation) ? DataCodec.ReadGuid(operation) : Guid.NewGuid(),
                     fields.TryGetValue("idempotencyKey", out var key) && key is not AbiValue.Null ? DataCodec.ReadString(key) : null,
-                    fields.TryGetValue("expectedRevision", out var revision) && revision is not AbiValue.Null ? DataCodec.ReadString(revision) : null);
+                    fields.TryGetValue("expectedRevision", out var revision) && revision is not AbiValue.Null ? DataCodec.ReadString(revision) : null,
+                    fields.TryGetValue("experimentId", out var experiment) && experiment is not AbiValue.Null ? DataCodec.ReadGuid(experiment) : null,
+                    fields.TryGetValue("budgetMilliseconds", out var milliseconds) ? CallBudget(milliseconds) : null);
                 var pending = invoke(call, deadline.Token).AsTask();
                 AbiReply<AbiValue> result;
                 try { result = await pending.WaitAsync(deadline.Token).ConfigureAwait(false); }
@@ -98,6 +100,12 @@ public sealed class WasmPluginMachine : IAsyncDisposable
     }
     private static async Task Observe(Task task)
     { try { await task.ConfigureAwait(false); } catch (Exception error) when (error is not OutOfMemoryException and not AccessViolationException) { } }
+    private static TimeSpan CallBudget(AbiValue value)
+    {
+        ulong milliseconds = DataCodec.ReadUInt64(value);
+        if (milliseconds is < 1 or > 300000) throw new FormatException("Invalid guest call budget.");
+        return TimeSpan.FromMilliseconds(milliseconds);
+    }
 
     private AbiValue Step(byte[] message)
     {
@@ -109,6 +117,8 @@ public sealed class WasmPluginMachine : IAsyncDisposable
         return AbiValueBinary.Decode(_memory.GetSpan(outputAddress, checked((int)size)));
     }
     private static AbiValue EncodeError(AbiError error) => DataCodec.Map(("code", DataCodec.WriteString(error.Code)),
+        ("message", DataCodec.WriteString(error.Message)), ("stage", DataCodec.WriteString(error.Stage)),
+        ("operation", DataCodec.WriteString(error.Operation)), ("pluginId", DataCodec.WriteString(error.PluginId)), ("loadInstanceId", DataCodec.WriteGuid(error.LoadInstanceId)),
         ("messageKey", DataCodec.WriteString(error.MessageKey)), ("operationId", DataCodec.WriteGuid(error.OperationId)),
         ("correlationId", DataCodec.WriteGuid(error.CorrelationId)), ("retryable", DataCodec.WriteBoolean(error.Retryable)),
         ("parameters", new AbiValue.Map(error.Parameters.ToImmutableDictionary(pair => pair.Key, pair => DataCodec.WriteString(pair.Value)))),

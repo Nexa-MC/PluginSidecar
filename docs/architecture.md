@@ -139,3 +139,17 @@ imports, host object handles, ambient filesystem or network access. Its generate
 contract/method constants come from `contracts/abi100.json`. The compiled example
 is loaded by the same package/runtime path used in the end-to-end tests. NativeAOT
 validation runs the kernel and Wasmtime, not only the version-printing CLI.
+
+## Complete SDK language bindings (2026-11-11)
+
+SDK completeness is checked independently from application business availability.
+The ABI catalog generates C# facades and C/Wasm typed model views, constructors,
+array/optional accessors, operation continuations and typed result readers.
+Both use the existing closed value codec and numeric method slots. Cross-language
+fixtures exercise every catalog operation through an actual compiled guest.
+
+The guest invocation adapter also exposes negotiated context metadata and a
+separate typed callback port for events, services and other Host-dispatched
+handlers. The embedding Host must authorize dispatch and provide its context;
+the guest cannot supply identity, phase or deadline. This is an SDK/adapter
+boundary and does not install business handlers, subscriptions or UI in Desktop.

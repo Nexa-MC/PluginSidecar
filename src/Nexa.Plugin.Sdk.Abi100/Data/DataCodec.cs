@@ -13,6 +13,12 @@ public interface IAbiData<TSelf> where TSelf : IAbiData<TSelf>
 /// <summary>Bounded closed-value codecs. These SDK limits do not replace Host quotas.</summary>
 public static class DataCodec
 {
+    private static readonly System.Text.UTF8Encoding StrictUtf8 = new(false, true);
+    private static int StringBytes(string value)
+    {
+        try { return StrictUtf8.GetByteCount(value); }
+        catch (System.Text.EncoderFallbackException) { throw Invalid(); }
+    }
     [ThreadStatic] private static CodecBudget? _budget;
     private sealed class CodecBudget { internal int Users, Nodes, Bytes; }
     private sealed class BudgetScope(CodecBudget budget) : IDisposable
@@ -40,13 +46,13 @@ public static class DataCodec
     public static AbiValue WriteString(string value)
     {
         if (value is null || value.Length > MaximumStringLength) throw new FormatException("Invalid ABI string.");
-        Charge(0, System.Text.Encoding.UTF8.GetByteCount(value));
+        Charge(0, StringBytes(value));
         return new AbiValue.Utf8String(value);
     }
     public static string ReadString(AbiValue value)
     {
         if (value is not AbiValue.Utf8String s || s.Value is null || s.Value.Length > MaximumStringLength) throw Invalid();
-        Charge(0, System.Text.Encoding.UTF8.GetByteCount(s.Value)); return s.Value;
+        Charge(0, StringBytes(s.Value)); return s.Value;
     }
     public static AbiValue WriteBoolean(bool value) => new AbiValue.Bool(value);
     public static bool ReadBoolean(AbiValue value) => value is AbiValue.Bool b ? b.Value : throw Invalid();

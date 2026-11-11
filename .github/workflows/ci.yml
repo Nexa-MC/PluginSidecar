@@ -12,11 +12,14 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wasm-guest-sample
-          path: artifacts/wasm-sample/plugin.zip
+          path: artifacts/wasm-sample/*
   build:
     needs: guest-sdk
     env:
       NEXA_WASM_SAMPLE: artifacts/wasm-sample/plugin.zip
+      NEXA_WASM_CONFORMANCE: artifacts/wasm-sample/conformance.wasm
+      NEXA_WASM_CALLBACK: artifacts/wasm-sample/callback.wasm
+      NEXA_WASM_CODEC: artifacts/wasm-sample/codec.wasm
     strategy:
       fail-fast: false
       matrix:
@@ -49,13 +52,14 @@ jobs:
           $binary = if ($IsWindows) { './artifacts/aot-smoke/PluginSidecar.AotSmoke.exe' } else { './artifacts/aot-smoke/PluginSidecar.AotSmoke' }
           & $binary
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run: python eng/package_sdk.py
       - run: dotnet pack src/Nexa.Plugin.Bootstrap.V1 -c Release -o artifacts/packages
       - run: dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
       - run: dotnet pack src/Nexa.Plugin.MarketDelivery -c Release -o artifacts/packages
       - uses: actions/upload-artifact@v4
         with:
           name: plugin-sdk-${{ matrix.rid }}
-          path: artifacts/packages/*.nupkg
+          path: artifacts/packages/*
       - run: dotnet publish src/PluginSidecar -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o artifacts/${{ matrix.rid }}
       - shell: pwsh
         run: |

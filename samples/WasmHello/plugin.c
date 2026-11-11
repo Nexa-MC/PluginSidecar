@@ -1,5 +1,5 @@
 #include <nexa/guest.h>
-#include <nexa/abi100_ids.h>
+#include <nexa/abi100.h>
 
 static nx_u8 input[65536], output[65536], argument[4096];
 static int awaiting_registration;
@@ -19,17 +19,15 @@ NX_EXPORT("nexa_resume") nx_u64 nexa_resume(nx_u32 address, nx_u32 size)
         nx_complete(&reply, nx_is_true(nx_field(message, "success")));
     } else if (nx_is_string(nx_field(message, "phase"), "Initialize")) {
         nx_writer args = {argument, 0, sizeof argument};
-        nx_map(&args, 5);
-        nx_key(&args, "body"); nx_string(&args, "Hello from the C WebAssembly SDK");
-        nx_key(&args, "id"); nx_string(&args, "example.wasm:hello");
-        nx_key(&args, "references"); nx_array(&args, 0);
-        nx_key(&args, "registry"); nx_string(&args, "example.wasm:messages");
-        nx_key(&args, "schema"); nx_map(&args, 3);
-        nx_key(&args, "digest"); nx_string(&args, "example-string-v1");
-        nx_key(&args, "id"); nx_string(&args, "example.wasm:message");
-        nx_key(&args, "version"); nx_unsigned(&args, 1);
-        nx_value value = {argument, args.size};
-        nx_invoke(&reply, NEXA_DEFINITIONS_CONTRACT, NEXA_DEFINITIONS_REGISTER, "hello-definition", value);
+        nx_SchemaRef schema = nx_SchemaRef_write(&args, nx_literal("example.wasm:message"), 1, nx_literal("example-string-v1"));
+        nx_ReferenceArray references = nx_ReferenceArray_write(&args, 0, 0);
+        nx_u32 body_start = args.size;
+        nx_string(&args, "Hello from the C WebAssembly SDK");
+        nx_value body = nx_written(&args, body_start);
+        nx_Definition definition = nx_Definition_write(&args, nx_literal("example.wasm:hello"),
+            nx_literal("example.wasm:messages"), schema, body, references);
+        nx_call_options options = {0}; options.idempotency_key = "hello-definition";
+        nx_Definitions_Register(&reply, definition, &options);
         awaiting_registration = 1;
     } else nx_complete(&reply, 1);
     return nx_result(&reply);

@@ -83,3 +83,69 @@ Schema fingerprints include each model's transitive model/enum closure and
 codec/scalar contract version. `Abi100Schemas.Validate` uses static readers and
 checks exact ID/version/digest. Custom business schemas still require a trusted
 schema policy or a future validated dynamic schema implementation.
+
+## Complete typed bindings
+
+Include `nexa/abi100.h` to use the generated C API. It contains 339 current
+operations plus 22 compatibility operations under `nx_Legacy_*`. Each model has
+`nx_Type_read`, named field accessors and `nx_Type_write`; arrays have typed
+`_count`, `_at`, `_write`, and nullable wrappers have `_has_value`, `_value`,
+`_none`, `_some`. Enum values have named C constants and exact wire-name codecs.
+Models are borrowed byte views; builders append into caller-owned buffers.
+Use separate argument and continuation-output buffers to avoid overwriting an
+argument while serializing a call. The example demonstrates this ownership.
+
+`nx_Group_Method(writer, request, options)` writes a continuation.
+`nx_Group_Method_result(reply, &result)` decodes a successful typed result or
+returns false and clears the output. `nx_reply_error(reply)` preserves the full
+structured Host error. No automatic fallback, mutation retry or permission grant
+occurs. Initialize options with `{0}` and set named fields:
+
+- `operation_id`: optional UUID; the runner assigns one when absent;
+- `idempotency_key`: required for catalog mutation operations;
+- `expected_revision`: optional optimistic concurrency token;
+- `experiment_id`: explicit negotiated experiment, never a stable-call fallback;
+- `budget_milliseconds`: optional positive duration up to 300,000 ms. Zero omits
+  it. The adapter forwards the smaller requested/remaining callback budget.
+
+`nx_operation_count/at` provide operation metadata. `nx_schema_Type` writes the
+same schema reference/fingerprint as `Abi100Schemas.Type` in C#.
+`nx_has_capability/permission/experiment` inspect the negotiated snapshot, not
+live authorization. A positive result cannot override a revoked grant.
+
+## Typed callbacks
+
+C# authors can use `ICallbacksV1.Register<TInput,TOutput>` from `TypedCallbacks`.
+The lease exposes the callback handle and releases it exactly once on Dispose.
+Input/output use static codecs, malformed input never reaches the handler, and
+structured handler failures are preserved. Registration is inert; a separate
+ABI subscription/provider/action registration connects the handler to business
+work.
+
+The execution adapter's `IPluginInvocationV1.InvokeHandler` accepts a trusted
+Host-supplied context, handler ID, input and invocation scope. Wasm receives
+`kind=handler`, `handler`, `input`, `invocationId`, `correlationId`, `causationId`,
+remaining `budgetMilliseconds`, and negotiated `abi` metadata. Use
+`nx_handler_id/input` and return `nx_handler_success` or `nx_handler_error`.
+Handler failures may supply code, message key, parameters and details; identity
+and correlation are assigned by the adapter. Normal ABI continuations may be
+issued before returning the handler result. Calls before activation, after stop,
+or with a foreign context/instance are rejected. Stopping cancels in-flight
+business callbacks. This port does not authorize arbitrary external dispatch;
+the embedding Host still owns service/event scheduling and target authorization.
+
+## Verification and distribution
+
+`eng/build_wasm_sample.py` builds the example, every generated binding, a callback
+fixture and malformed-codec fixture. Set the four `NEXA_WASM_*` variables used in
+CI to enable those checks. The suite exercises all 361 operations for success and
+failure, 290 model/collection shapes, typed callbacks, Unicode/NUL/exact 64-bit
+values and malformed data rejection. Fixture Host replies prove SDK contract
+behavior, not the availability of real launcher features. CI repeats these tests
+inside a NativeAOT executable on Windows, Linux and macOS.
+
+`eng/package_sdk.py` creates a reproducible standalone header/schema/example ZIP
+with file digests. It is a developer SDK artifact, not a signed plugin package.
+The C# NuGet package also contains the schemas and C headers. The additive
+`IPluginInvocationV1` interface preserves existing Bootstrap assembly identity;
+older entries can still implement only the original Bootstrap interface.

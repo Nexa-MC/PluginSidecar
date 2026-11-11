@@ -7,5 +7,10 @@
     <Compile Include="../PluginSidecar.Tests/WasmTests.cs" Link="WasmTests.cs" />
     <Compile Include="../PluginSidecar.Tests/DefinitionTests.cs" Link="DefinitionTests.cs" />
     <Compile Include="../PluginSidecar.Tests/GuestSdkTests.cs" Link="GuestSdkTests.cs" />
+    <Compile Include="../PluginSidecar.Tests/GuestConformanceTests.cs" Link="GuestConformanceTests.cs" />
+    <Compile Include="../PluginSidecar.Tests/CallbackSdkTests.cs" Link="CallbackSdkTests.cs" />
+    <Compile Include="../PluginSidecar.Tests/GuestCodecTests.cs" Link="GuestCodecTests.cs" />
+    <None Include="../../contracts/abi100.json" Link="fixtures/abi100.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../contracts/abi100-legacy.json" Link="fixtures/abi100-legacy.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

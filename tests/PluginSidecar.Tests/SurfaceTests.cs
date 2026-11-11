@@ -59,6 +59,8 @@ internal static class SurfaceTests
         Check(!oversized.Success && before == port.Calls);
         Invalid(() => QualifiedId.Read(new AbiValue.Utf8String("../../host")));
         Invalid(() => DataCodec.ReadEnum<OperationState>(new AbiValue.Utf8String("0")));
+        Invalid(() => DataCodec.WriteString("\ud800"));
+        Invalid(() => DataCodec.ReadString(new AbiValue.Utf8String("\udfff")));
         Invalid(() => DataCodec.Validate(new AbiValue.Bytes(new byte[DataCodec.MaximumBytes + 1].ToImmutableArray())));
         AbiValue nested = new AbiValue.Null();
         for (int i = 0; i < DataCodec.MaximumDepth + 1; i++) nested = new AbiValue.Array([nested]);
