@@ -1,4 +1,6 @@
 if (args is ["--remote-only"]) { await RemoteExecutionTests.Run(); return; }
+if (args is ["--application-only"]) { await ApplicationTests.Run(); return; }
+await ApplicationTests.Run();
 await WasmTests.Run();
 await EndToEndTests.Run();
 await DefinitionTests.Run();

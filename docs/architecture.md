@@ -1,5 +1,16 @@
 # Loading contracts and SDK
 
+## Beta ownership target
+
+PluginSidecar owns plugin admission, SDK negotiation, grants, lifecycle, offline
+installation records, business adapters and management UI. NexaCL exposes general
+Sidecar Host capabilities and remains usable when this component is absent or
+failed. Plugin-specific state and dispatch must not remain in the launcher.
+`PluginSidecar.Packages/Application` now contains the portable application,
+resource and presentation owner. Its encrypted catalog takes an asynchronous key
+protection port, with no dependency on launcher account implementation classes.
+Migration of business and UI adapters must complete before the Beta release.
+
 Bootstrap 1 is a preview managed entry contract intended to freeze at formal publication. ABI 100 is a separate SDK package; future versions must not extend Bootstrap interfaces with version-specific members. The uploaded proposal is preserved under specifications as design input, not an assertion of implemented behavior.
 
 Decision: Host communication uses the existing NexaCL Sidecar binary ABI, authenticated transport and generated numeric dispatch. The proposal's JSON envelope, transport numbering and JSON framing are NOT adopted. No new wire IDs are allocated by this SDK. A Host adapter must map these logical calls to reviewed upstream operations. Existing Host binaries do not yet implement this new loading contract.
