@@ -181,7 +181,39 @@ public sealed partial class PluginRuntimeServices
             return reference;
         }
     }
+    private readonly Dictionary<ulong,PluginIdentity> _eventRegistrations=[];
+    private EventSubscriptionRegistration RegisterEventSubscription(HostInvocation c,EventSubscribeRequest request)
+    {
+        lock(_gate)
+        {
+            var subscription=SubscribeEvent(c,request);
+            RegistrationRef? registration=null;
+            try
+            {
+                registration=RegisterHostCleanupCore(c,_=>
+                {
+                    lock(_gate)
+                    {
+                        ReleaseSubscription(c.Identity,subscription);
+                        if(registration is not null)_eventRegistrations.Remove(registration.Handle);
+                    }
+                    return ValueTask.CompletedTask;
+                });
+                _eventRegistrations.Add(registration.Handle,c.Identity);
+                return new(registration,subscription);
+            }
+            catch {ReleaseSubscription(c.Identity,subscription);throw;}
+        }
+    }
     private IEnumerable<HostCapabilityRoute> EventRoutes => [
+        HostRoutes.Typed<EventSubscribeRequest,EventSubscriptionRegistration>("Events","RegisterSubscription",(c,v)=>ValueTask.FromResult(RegisterEventSubscription(c,v))),
+        HostRoutes.Typed<SubscriptionRef,Empty>("Events","UnsubscribeSubscription",(c,v)=>
+        {lock(_gate){if(_subscriptions.TryGetValue(v.Token,out var sub)&&sub.Kind!="event")throw new AbiHostException(AbiErrors.HANDLE_INVALID);ReleaseSubscription(c.Identity,v);return ValueTask.FromResult(new Empty());}}),
+        HostRoutes.Typed<RegistrationRequest,Empty>("Events","Unsubscribe",async(c,v)=>
+        {
+            lock(_gate)if(!_eventRegistrations.TryGetValue(v.Registration.Handle,out var owner)||owner!=c.Identity)throw new AbiHostException(AbiErrors.HANDLE_OWNER_MISMATCH);
+            if(!await ReleaseCleanup(c,v.Registration).ConfigureAwait(false))throw new AbiHostException(AbiErrors.HANDLE_EXPIRED);return new();
+        }),
         HostRoutes.Typed<SubscriptionRead,SubscriptionBatch>("Resources","ReadSubscription",(c,v)=>
         {if(v.Limit is <1 or >256)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);var batch=ReadSubscription(c.Identity,v.Subscription,(int)v.Limit);return ValueTask.FromResult(new SubscriptionBatch(batch.Items,batch.ResyncRequired));}),
         HostRoutes.Typed<SubscriptionRef,Empty>("Resources","ReleaseSubscription",(c,v)=>

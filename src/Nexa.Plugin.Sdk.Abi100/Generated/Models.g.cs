@@ -3857,3 +3857,83 @@ public sealed record PackageFileRequest(string Path) : IAbiData<PackageFileReque
         return new(DataCodec.ReadString(DataCodec.Field(map, "path")));
     }
 }
+
+public sealed record EventSubscriptionRegistration(global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRef Registration, global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef Subscription) : IAbiData<EventSubscriptionRegistration>
+{
+    public static AbiValue Write(EventSubscriptionRegistration value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("registration", global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRef.Write(value.Registration, depth + 1)), ("subscription", global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef.Write(value.Subscription, depth + 1)));
+    }
+    public static EventSubscriptionRegistration Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRef.Read(DataCodec.Field(map, "registration"), depth + 1), global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef.Read(DataCodec.Field(map, "subscription"), depth + 1));
+    }
+}
+
+public sealed record ManagedJavaOffer(global::Nexa.Plugin.Sdk.Abi100.Data.EntityId Id, global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId Provider, string Version, string Platform, long Files, long Bytes, ImmutableArray<global::Nexa.Plugin.Sdk.Abi100.Data.UriRef> Licenses, DateTimeOffset ExpiresAt, global::Nexa.Plugin.Sdk.Abi100.Data.Revision Revision) : IAbiData<ManagedJavaOffer>
+{
+    public static AbiValue Write(ManagedJavaOffer value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("id", global::Nexa.Plugin.Sdk.Abi100.Data.EntityId.Write(value.Id, depth + 1)), ("provider", global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId.Write(value.Provider, depth + 1)), ("version", DataCodec.WriteString(value.Version)), ("platform", DataCodec.WriteString(value.Platform)), ("files", DataCodec.WriteInt64(value.Files)), ("bytes", DataCodec.WriteInt64(value.Bytes)), ("licenses", DataCodec.WriteArray(value.Licenses, (item, nestedDepth) => global::Nexa.Plugin.Sdk.Abi100.Data.UriRef.Write(item, nestedDepth), depth + 1)), ("expiresAt", DataCodec.WriteTimestamp(value.ExpiresAt)), ("revision", global::Nexa.Plugin.Sdk.Abi100.Data.Revision.Write(value.Revision, depth + 1)));
+    }
+    public static ManagedJavaOffer Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(global::Nexa.Plugin.Sdk.Abi100.Data.EntityId.Read(DataCodec.Field(map, "id"), depth + 1), global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId.Read(DataCodec.Field(map, "provider"), depth + 1), DataCodec.ReadString(DataCodec.Field(map, "version")), DataCodec.ReadString(DataCodec.Field(map, "platform")), DataCodec.ReadInt64(DataCodec.Field(map, "files")), DataCodec.ReadInt64(DataCodec.Field(map, "bytes")), DataCodec.ReadArray(DataCodec.Field(map, "licenses"), (item, nestedDepth) => global::Nexa.Plugin.Sdk.Abi100.Data.UriRef.Read(item, nestedDepth), depth + 1), DataCodec.ReadTimestamp(DataCodec.Field(map, "expiresAt")), global::Nexa.Plugin.Sdk.Abi100.Data.Revision.Read(DataCodec.Field(map, "revision"), depth + 1));
+    }
+}
+
+public sealed record ManagedJavaInstallRequest(global::Nexa.Plugin.Sdk.Abi100.Data.EntityId Offer, global::Nexa.Plugin.Sdk.Abi100.Data.Revision ExpectedRevision) : IAbiData<ManagedJavaInstallRequest>
+{
+    public static AbiValue Write(ManagedJavaInstallRequest value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("offer", global::Nexa.Plugin.Sdk.Abi100.Data.EntityId.Write(value.Offer, depth + 1)), ("expectedRevision", global::Nexa.Plugin.Sdk.Abi100.Data.Revision.Write(value.ExpectedRevision, depth + 1)));
+    }
+    public static ManagedJavaInstallRequest Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(global::Nexa.Plugin.Sdk.Abi100.Data.EntityId.Read(DataCodec.Field(map, "offer"), depth + 1), global::Nexa.Plugin.Sdk.Abi100.Data.Revision.Read(DataCodec.Field(map, "expectedRevision"), depth + 1));
+    }
+}
+
+public sealed record StorageMigrationInput(global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId Namespace, ulong FromVersion, ulong ToVersion, ImmutableArray<global::Nexa.Plugin.Sdk.Abi100.Data.StorageEntry> Entries) : IAbiData<StorageMigrationInput>
+{
+    public static AbiValue Write(StorageMigrationInput value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("namespace", global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId.Write(value.Namespace, depth + 1)), ("fromVersion", DataCodec.WriteUInt64(value.FromVersion)), ("toVersion", DataCodec.WriteUInt64(value.ToVersion)), ("entries", DataCodec.WriteArray(value.Entries, (item, nestedDepth) => global::Nexa.Plugin.Sdk.Abi100.Data.StorageEntry.Write(item, nestedDepth), depth + 1)));
+    }
+    public static StorageMigrationInput Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId.Read(DataCodec.Field(map, "namespace"), depth + 1), DataCodec.ReadUInt64(DataCodec.Field(map, "fromVersion")), DataCodec.ReadUInt64(DataCodec.Field(map, "toVersion")), DataCodec.ReadArray(DataCodec.Field(map, "entries"), (item, nestedDepth) => global::Nexa.Plugin.Sdk.Abi100.Data.StorageEntry.Read(item, nestedDepth), depth + 1));
+    }
+}
+
+public sealed record StorageMigrationOutput(ImmutableArray<global::Nexa.Plugin.Sdk.Abi100.Data.StorageEntry> Entries) : IAbiData<StorageMigrationOutput>
+{
+    public static AbiValue Write(StorageMigrationOutput value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("entries", DataCodec.WriteArray(value.Entries, (item, nestedDepth) => global::Nexa.Plugin.Sdk.Abi100.Data.StorageEntry.Write(item, nestedDepth), depth + 1)));
+    }
+    public static StorageMigrationOutput Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(DataCodec.ReadArray(DataCodec.Field(map, "entries"), (item, nestedDepth) => global::Nexa.Plugin.Sdk.Abi100.Data.StorageEntry.Read(item, nestedDepth), depth + 1));
+    }
+}

@@ -246,6 +246,11 @@ public static class Abi100Schemas
     public static SchemaRef SubscriptionRead { get; } = new(new("nexa:abi100/subscriptionread"), 1, "2612bfb615b0faf1a440f8e316f37c1f9547177b7f4a6a6a8f91b09e957bf453");
     public static SchemaRef SubscriptionBatch { get; } = new(new("nexa:abi100/subscriptionbatch"), 1, "dad7176a95c7e2b80e79dd9db582b8d1ce7eed4c77e37a297f1ba739caed3513");
     public static SchemaRef PackageFileRequest { get; } = new(new("nexa:abi100/packagefilerequest"), 1, "c1da2809ce75f21a814b330adddabf5ee392d5ef1d70edb56cad61bd64b91f68");
+    public static SchemaRef EventSubscriptionRegistration { get; } = new(new("nexa:abi100/eventsubscriptionregistration"), 1, "24bfc2477d406a6f071e5a74ecf628099bdb633042e391871fa3fec78d296840");
+    public static SchemaRef ManagedJavaOffer { get; } = new(new("nexa:abi100/managedjavaoffer"), 1, "6934f6dcace1a266f624e454943d048885c7c2131db7ad607f1dd5cad3fe4960");
+    public static SchemaRef ManagedJavaInstallRequest { get; } = new(new("nexa:abi100/managedjavainstallrequest"), 1, "7e07e1846c475b6ade856519b85d8ef5c1822b523de6787970d60011a881d000");
+    public static SchemaRef StorageMigrationInput { get; } = new(new("nexa:abi100/storagemigrationinput"), 1, "6b8f0a199f5388275b21f7de7501ca5a2c99aa7f68f84bdde8e888d379a4e616");
+    public static SchemaRef StorageMigrationOutput { get; } = new(new("nexa:abi100/storagemigrationoutput"), 1, "dec5791b80baea70c486b4d7da462bf2da5127c2015e9b36ec6df088e41fbbd3");
     public static bool Validate(SchemaRef schema, AbiValue value)
     {
         try
@@ -492,6 +497,11 @@ public static class Abi100Schemas
                 case "nexa:abi100/subscriptionread": if (schema != SubscriptionRead) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRead.Read(value); return true;
                 case "nexa:abi100/subscriptionbatch": if (schema != SubscriptionBatch) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionBatch.Read(value); return true;
                 case "nexa:abi100/packagefilerequest": if (schema != PackageFileRequest) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.PackageFileRequest.Read(value); return true;
+                case "nexa:abi100/eventsubscriptionregistration": if (schema != EventSubscriptionRegistration) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.EventSubscriptionRegistration.Read(value); return true;
+                case "nexa:abi100/managedjavaoffer": if (schema != ManagedJavaOffer) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.ManagedJavaOffer.Read(value); return true;
+                case "nexa:abi100/managedjavainstallrequest": if (schema != ManagedJavaInstallRequest) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.ManagedJavaInstallRequest.Read(value); return true;
+                case "nexa:abi100/storagemigrationinput": if (schema != StorageMigrationInput) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.StorageMigrationInput.Read(value); return true;
+                case "nexa:abi100/storagemigrationoutput": if (schema != StorageMigrationOutput) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.StorageMigrationOutput.Read(value); return true;
                 default: return false;
             }
         }

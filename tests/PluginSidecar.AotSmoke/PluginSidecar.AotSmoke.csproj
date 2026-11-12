@@ -4,6 +4,7 @@
     <ProjectReference Include="../../src/PluginSidecar.Packages/PluginSidecar.Packages.csproj" />
     <Compile Include="../PluginSidecar.Tests/EndToEndTests.cs" Link="EndToEndTests.cs" />
     <Compile Include="../PluginSidecar.Tests/StorageTests.cs" Link="StorageTests.cs" />
+    <Compile Include="../PluginSidecar.Tests/StorageMigrationTests.cs" Link="StorageMigrationTests.cs" />
     <Compile Include="../PluginSidecar.Tests/WasmTests.cs" Link="WasmTests.cs" />
     <Compile Include="../PluginSidecar.Tests/WasmWorkflowTests.cs" Link="WasmWorkflowTests.cs" />
     <Compile Include="../PluginSidecar.Tests/ResourceRuntimeTests.cs" Link="ResourceRuntimeTests.cs" />

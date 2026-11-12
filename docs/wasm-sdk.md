@@ -86,7 +86,7 @@ schema policy or a future validated dynamic schema implementation.
 
 ## Complete typed bindings
 
-Include `nexa/abi100.h` to use the generated C API. It contains 342 current
+Include `nexa/abi100.h` to use the generated C API. It contains 346 current
 operations plus 22 compatibility operations under `nx_Legacy_*`. Each model has
 `nx_Type_read`, named field accessors and `nx_Type_write`; arrays have typed
 `_count`, `_at`, `_write`, and nullable wrappers have `_has_value`, `_value`,
@@ -138,8 +138,8 @@ the embedding Host still owns service/event scheduling and target authorization.
 
 `eng/build_wasm_sample.py` builds the example, every generated binding, a callback
 fixture and malformed-codec fixture. Set the four `NEXA_WASM_*` variables used in
-CI to enable those checks. The suite exercises all 364 operations for success and
-failure, 293 model/collection shapes, typed callbacks, Unicode/NUL/exact 64-bit
+CI to enable those checks. The suite exercises all 368 operations for success and
+failure, 299 model/collection shapes, typed callbacks, Unicode/NUL/exact 64-bit
 values and malformed data rejection. Fixture Host replies prove SDK contract
 behavior, not the availability of real launcher features. CI repeats these tests
 inside a NativeAOT executable on Windows, Linux and macOS.

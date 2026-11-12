@@ -7,6 +7,11 @@ namespace Nexa.Plugin.Hosting;
 public sealed partial class PluginRuntimeServices
 {
     private IEnumerable<HostCapabilityRoute> ActionRoutes => [
+        HostRoutes.Typed<PageRequest,Page<ActionDescriptor>>("Commands","List",(c,v)=>
+        {lock(_gate)return ValueTask.FromResult(Page(c,v,"commands",_entries.Where(p=>p.Key.Item1=="action"&&Visible(c,p.Value)).OrderBy(p=>p.Key.Item2.Value,StringComparer.Ordinal).Select(p=>ActionDescriptor.Read(p.Value.Value))));}),
+        HostRoutes.Typed<QualifiedRequest,ActionDescriptor>("Commands","Describe",(c,v)=>ValueTask.FromResult(ActionDescriptor.Read(Find(c,"action",v.Id).Value))),
+        HostRoutes.Typed<ActionRequest,OperationRef>("Commands","Execute",(c,v)=>
+        {var entry=Find(c,"action",v.Action);var action=ActionDescriptor.Read(entry.Value);AdmitAction(c,action,v,"nexa.commands.write");return ValueTask.FromResult(StartOperation(c,action.Output,token=>InvokeAction(c,entry,action,v,token,permission:"nexa.commands.write"),_=>HoldRegistration(entry),exit:()=>DropRegistration(entry)));}),
         HostRoutes.Typed<ActionDescriptor,RegistrationRef>("Actions","Register",(c,v)=>
         {if(v.Handler is null or 0)throw new AbiHostException(AbiErrors.HANDLE_INVALID);return ValueTask.FromResult(Stage(c,"action",v.Id,v));}),
         HostRoutes.Typed<QualifiedRequest,ActionDescriptor>("Actions","Describe",(c,v)=>ValueTask.FromResult(ActionDescriptor.Read(Find(c,"action",v.Id).Value))),
@@ -17,16 +22,16 @@ public sealed partial class PluginRuntimeServices
         HostRoutes.Typed<QualifiedRequest,PredicateDefinition>("Predicates","Describe",(c,v)=>ValueTask.FromResult(PredicateDefinition.Read(Find(c,"predicate",v.Id).Value))),
         HostRoutes.Typed<PredicateRequest,PredicateResult>("Predicates","Evaluate",EvaluatePredicate)
     ];
-    private void AdmitAction(HostInvocation c,ActionDescriptor action,ActionRequest request)
+    private void AdmitAction(HostInvocation c,ActionDescriptor action,ActionRequest request,string permission="nexa.actions.write")
     {
-        if(!_authorize(c.Identity,"nexa.actions.write"))throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
+        if(!_authorize(c.Identity,permission))throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
         Validate(action.Input,request.Inputs);
         if(!_capabilities(c,action.RequiredCapabilities)||action.Scopes.Length!=0&&!action.Scopes.Contains(request.Target.Scope))throw new AbiHostException(AbiErrors.CAPABILITY_DENIED);
         if(action.Confirmation!=ConfirmationRequirement.None&&_options.ActionConfirmation is null)throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
         if(action.Idempotency==IdempotencyMode.RequiredKey&&string.IsNullOrWhiteSpace(request.IdempotencyKey))throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
     }
     private readonly Dictionary<(Guid, QualifiedId, string), (string Digest, TaskCompletionSource<AbiReply<AbiValue>> Completion)> _actionMemo=[];
-    private async ValueTask<AbiReply<AbiValue>> InvokeAction(HostInvocation c,Entry entry,ActionDescriptor action,ActionRequest request,CancellationToken token,Action? beforeDispatch=null)
+    private async ValueTask<AbiReply<AbiValue>> InvokeAction(HostInvocation c,Entry entry,ActionDescriptor action,ActionRequest request,CancellationToken token,Action? beforeDispatch=null,string permission="nexa.actions.write")
     {
         TaskCompletionSource<AbiReply<AbiValue>>? completion=null;
         Task<AbiReply<AbiValue>>? replay=null;
@@ -51,7 +56,7 @@ public sealed partial class PluginRuntimeServices
         {
             await ConfirmAction(c,entry,action,request,token).ConfigureAwait(false);
             token.ThrowIfCancellationRequested();
-            AdmitAction(c,action,request);
+            AdmitAction(c,action,request,permission);
             lock(_gate)
             {
                 if(!_entries.TryGetValue(("action",action.Id),out var current)||current.Owner!=entry.Owner||

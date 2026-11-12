@@ -5,7 +5,7 @@ working launcher integration are distinct acceptance milestones.
 
 | Area | Implemented and tested | Remaining acceptance |
 | --- | --- | --- |
-| SDK | 33 groups, 342 new typed operations, 239 models; static schema fingerprints/validators; historical 22 slots retained | Desktop Host mapping and compatibility freeze |
+| SDK | 33 groups, 346 new typed operations, 244 models; static schema fingerprints/validators; historical 22 slots retained | Desktop Host mapping and compatibility freeze |
 | Loading | Authenticated independent worker, real authority, exact Make, phase leases, idempotency, dependency groups, atomic activation, hot-conflict stop closure and resource retirement | Production Market admission and persisted enablement |
 | Content | Wasm and static content packages share one registry; all 15 definition routes, trusted consumers, tags, resolved overlays, previews, watches, CAS and reference-protected deletion | Desktop/plugin consumer adapters, additional merge/deletion policies and product content scenarios |
 | Storage | Seven private namespace operations, durable atomic writes, transactions, CAS, ownership and restart tests | Workflow-backed migration and application key/storage policy |
@@ -14,7 +14,7 @@ working launcher integration are distinct acceptance milestones.
 | Business | Typed domain APIs; Desktop page/action slice and selected public instance/account adapters | Remaining domain adapters and product scenarios |
 | Market/offline | Signed encrypted delivery, device binding, atomic cache and offline-restart package loading | Real acquisition endpoint/UI, protected key custody and final Host admission |
 | Controlled execution | Import-free Wasmtime runner, fuel/memory/request limits, async continuations, native/WASI import rejection | Signed deployed integration and remaining business effect policies |
-| Guest authoring | Full C/Wasm model/build/result bindings for 364 calls; compiled cross-language conformance and lifecycle callback tests | Additional language SDKs are outside the current C#/C SDK scope |
+| Guest authoring | Full C/Wasm model/build/result bindings for 368 calls; compiled cross-language conformance and lifecycle callback tests | Additional language SDKs are outside the current C#/C SDK scope |
 | Distribution | SDK packaging, C sample build, independent NuGet-only consumer, checksummed bundles and three-OS NativeAOT runtime CI | Published signed `.nsc`, product integration and architecture certification |
 
 The default kernel exposes 90 implemented routes across 13 groups, including

@@ -6,7 +6,7 @@ using Nexa.Plugin.Sdk.Abi100.Data;
 namespace Nexa.Plugin.Hosting;
 
 /// <summary>Private namespace storage with atomic durable writes, revision CAS and owned transaction tokens.</summary>
-public sealed class DurablePluginStorage(string root, Func<SchemaRef, AbiValue, bool> validateSchema) : IAsyncDisposable
+public sealed partial class DurablePluginStorage(string root, Func<SchemaRef, AbiValue, bool> validateSchema) : IAsyncDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Dictionary<Guid, NamespaceLease> _namespaces = [];
@@ -25,7 +25,8 @@ public sealed class DurablePluginStorage(string root, Func<SchemaRef, AbiValue, 
         HostRoutes.Typed<StorageWrite, StorageValue>("Storage", "CompareExchange", Write),
         HostRoutes.Typed<StorageQuery, Page<StorageEntry>>("Storage", "Query", Query),
         HostRoutes.Typed<StorageNamespace, StorageTransaction>("Storage", "BeginTransaction", Begin),
-        HostRoutes.Typed<StorageCommit, StorageNamespace>("Storage", "Commit", Commit)
+        HostRoutes.Typed<StorageCommit, StorageNamespace>("Storage", "Commit", Commit),
+        HostRoutes.Typed<StorageMigration, OperationRef>("Storage", "Migrate", Migrate)
     ];
 
     public async ValueTask<StorageNamespace> Open(HostInvocation caller, NamespaceRequest request)

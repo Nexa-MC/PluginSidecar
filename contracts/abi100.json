@@ -4232,6 +4232,88 @@
         "name": "Path",
         "type": "string"
       }
+    ],
+    "EventSubscriptionRegistration": [
+      {
+        "name": "Registration",
+        "type": "RegistrationRef"
+      },
+      {
+        "name": "Subscription",
+        "type": "SubscriptionRef"
+      }
+    ],
+    "ManagedJavaOffer": [
+      {
+        "name": "Id",
+        "type": "EntityId"
+      },
+      {
+        "name": "Provider",
+        "type": "QualifiedId"
+      },
+      {
+        "name": "Version",
+        "type": "string"
+      },
+      {
+        "name": "Platform",
+        "type": "string"
+      },
+      {
+        "name": "Files",
+        "type": "long"
+      },
+      {
+        "name": "Bytes",
+        "type": "long"
+      },
+      {
+        "name": "Licenses",
+        "type": "UriRef[]"
+      },
+      {
+        "name": "ExpiresAt",
+        "type": "DateTimeOffset"
+      },
+      {
+        "name": "Revision",
+        "type": "Revision"
+      }
+    ],
+    "ManagedJavaInstallRequest": [
+      {
+        "name": "Offer",
+        "type": "EntityId"
+      },
+      {
+        "name": "ExpectedRevision",
+        "type": "Revision"
+      }
+    ],
+    "StorageMigrationInput": [
+      {
+        "name": "Namespace",
+        "type": "QualifiedId"
+      },
+      {
+        "name": "FromVersion",
+        "type": "ulong"
+      },
+      {
+        "name": "ToVersion",
+        "type": "ulong"
+      },
+      {
+        "name": "Entries",
+        "type": "StorageEntry[]"
+      }
+    ],
+    "StorageMigrationOutput": [
+      {
+        "name": "Entries",
+        "type": "StorageEntry[]"
+      }
     ]
   },
   "groups": [
@@ -5125,6 +5207,33 @@
           "phases": [
             "Active",
             "Stop"
+          ],
+          "permission": "nexa.events.write",
+          "idempotency": "RequiredKey",
+          "hostBinding": "HostMappingPending"
+        },
+        {
+          "name": "UnsubscribeSubscription",
+          "methodId": 11,
+          "input": "SubscriptionRef",
+          "output": "Empty",
+          "kind": "Mutation",
+          "phases": [
+            "Active",
+            "Stop"
+          ],
+          "permission": "nexa.events.write",
+          "idempotency": "RequiredKey",
+          "hostBinding": "HostMappingPending"
+        },
+        {
+          "name": "RegisterSubscription",
+          "methodId": 12,
+          "input": "EventSubscribeRequest",
+          "output": "EventSubscriptionRegistration",
+          "kind": "Registration",
+          "phases": [
+            "Initialize"
           ],
           "permission": "nexa.events.write",
           "idempotency": "RequiredKey",
@@ -6472,6 +6581,32 @@
           ],
           "permission": "nexa.minecraft.java.write",
           "idempotency": "RequiredKey",
+          "hostBinding": "HostMappingPending"
+        },
+        {
+          "name": "ListManagedDistributions",
+          "methodId": 13,
+          "input": "PageRequest",
+          "output": "Page<ManagedJavaOffer>",
+          "kind": "Query",
+          "phases": [
+            "Active"
+          ],
+          "permission": "nexa.minecraft.java.read",
+          "idempotency": "ReadOnly",
+          "hostBinding": "HostMappingPending"
+        },
+        {
+          "name": "PrepareManagedInstall",
+          "methodId": 14,
+          "input": "ManagedJavaInstallRequest",
+          "output": "MutationPlan",
+          "kind": "Query",
+          "phases": [
+            "Active"
+          ],
+          "permission": "nexa.minecraft.java.read",
+          "idempotency": "ReadOnly",
           "hostBinding": "HostMappingPending"
         }
       ]

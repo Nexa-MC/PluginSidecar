@@ -225,6 +225,12 @@ public sealed partial class Events100 : ICapabilityView<Events100>
     /// <summary>Draft Mutation; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
     public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.Empty>> Unsubscribe(global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRequest request, InvocationOptions options) =>
         AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRequest, global::Nexa.Plugin.Sdk.Abi100.Data.Empty>(ability, ContractId, 10, request, options);
+    /// <summary>Draft Mutation; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
+    public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.Empty>> UnsubscribeSubscription(global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef request, InvocationOptions options) =>
+        AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.SubscriptionRef, global::Nexa.Plugin.Sdk.Abi100.Data.Empty>(ability, ContractId, 11, request, options);
+    /// <summary>Draft Registration; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
+    public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.EventSubscriptionRegistration>> RegisterSubscription(global::Nexa.Plugin.Sdk.Abi100.Data.EventSubscribeRequest request, InvocationOptions options) =>
+        AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.EventSubscribeRequest, global::Nexa.Plugin.Sdk.Abi100.Data.EventSubscriptionRegistration>(ability, ContractId, 12, request, options);
 }
 
 public sealed partial class State100(IAbilityV1 ability) : ICapabilityView<State100>
@@ -535,6 +541,12 @@ public sealed partial class Java100(IAbilityV1 ability) : ICapabilityView<Java10
     /// <summary>Draft Registration; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
     public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRef>> RegisterDistributionProvider(global::Nexa.Plugin.Sdk.Abi100.Data.ProviderDescriptor request, InvocationOptions options) =>
         AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.ProviderDescriptor, global::Nexa.Plugin.Sdk.Abi100.Data.RegistrationRef>(ability, ContractId, 12, request, options);
+    /// <summary>Draft Query; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
+    public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.Page<global::Nexa.Plugin.Sdk.Abi100.Data.ManagedJavaOffer>>> ListManagedDistributions(global::Nexa.Plugin.Sdk.Abi100.Data.PageRequest request, InvocationOptions options) =>
+        AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.PageRequest, global::Nexa.Plugin.Sdk.Abi100.Data.Page<global::Nexa.Plugin.Sdk.Abi100.Data.ManagedJavaOffer>>(ability, ContractId, 13, request, options);
+    /// <summary>Draft Query; Host mapping pending. See Abi100Catalog for authority and phase requirements.</summary>
+    public ValueTask<AbiReply<global::Nexa.Plugin.Sdk.Abi100.Data.MutationPlan>> PrepareManagedInstall(global::Nexa.Plugin.Sdk.Abi100.Data.ManagedJavaInstallRequest request, InvocationOptions options) =>
+        AbiContractCall.Invoke<global::Nexa.Plugin.Sdk.Abi100.Data.ManagedJavaInstallRequest, global::Nexa.Plugin.Sdk.Abi100.Data.MutationPlan>(ability, ContractId, 14, request, options);
 }
 
 public sealed partial class Launch100(IAbilityV1 ability) : ICapabilityView<Launch100>

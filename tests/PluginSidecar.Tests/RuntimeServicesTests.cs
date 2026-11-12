@@ -22,7 +22,7 @@ internal static class RuntimeServicesTests
             var received=new TaskCompletionSource<EventEnvelope>(TaskCreationOptions.RunContinuationsAsynchronously);
             var provider=new Entry("provider",true,received);var consumer=new Entry("consumer",false,received);
             var reports=await runtime.LoadAsync([provider.Source(),consumer.Source()]);
-            Check(reports.All(r=>r.State==LoadState.Active));
+            if(reports.Any(r=>r.State!=LoadState.Active))throw new InvalidOperationException(string.Join(";",reports.Select(r=>r.Identity.PluginId+":"+r.State+":"+r.Error?.Code+":"+r.Error?.MessageKey+":"+r.Error?.Operation)));
             using var p=provider.Context!.AsAbi100();using var c=consumer.Context!.AsAbi100();
             var hostCaller = new HostInvocation(provider.Identity!, Guid.NewGuid(), "Active", Options());
             var hostWatch = runtime.Services.CreateHostSubscription(hostCaller, "nexa.events/100", "nexa.events.read", TextResult.Write(new("initial")), 1);
@@ -75,6 +75,13 @@ internal static class RuntimeServicesTests
             var ev=new EventEnvelope(Guid.NewGuid(),new("provider:changed"),Abi100Schemas.TextResult,null,changed.Revision,DateTimeOffset.UtcNow,Guid.NewGuid(),null,"spoofed",Scope,TextResult.Write(new("event")));
             Success(await p.Events.Publish(ev,Options()));
             var actual=await received.Task.WaitAsync(TimeSpan.FromSeconds(5));Check(actual.Origin=="provider"&&actual.EventId==ev.EventId);
+            Check(!(await p.Events.Unsubscribe(new RegistrationRequest(consumer.EventRegistration!.Registration),Options())).Success);
+            Success(await c.Events.Unsubscribe(new RegistrationRequest(consumer.EventRegistration!.Registration),Options()));
+            Check(!(await c.Resources.ReadSubscription(new(consumer.EventRegistration.Subscription,1),Options())).Success);
+            Check(!(await p.Events.UnsubscribeSubscription(consumer.SecondSubscription!,Options())).Success);
+            Success(await c.Events.UnsubscribeSubscription(consumer.SecondSubscription!,Options()));
+            Check(!(await c.Resources.ReadSubscription(new(consumer.SecondSubscription!,1),Options())).Success);
+
             var task=Success(await c.Tasks.CreateOwned(new(new("consumer:task"),new("task",[]),new("parent"),true),Options()));
             var record=Success(await c.Tasks.Read(new(task.Id),Options()));
             Success(await c.Tasks.Complete(new(task.Id,TextResult.Write(new("done")),Abi100Schemas.TextResult,record.Revision),Options()));
@@ -140,6 +147,7 @@ internal static class RuntimeServicesTests
     }
     private sealed class Entry(string id,bool provider,TaskCompletionSource<EventEnvelope> received):IPluginBootstrapV1
     {
+        internal EventSubscriptionRegistration? EventRegistration;internal SubscriptionRef? SecondSubscription;
         internal ABIContext? Context;internal PluginIdentity? Identity;internal ServiceBinding? Binding;internal bool FailFinalize,RequiredService;private ulong _handler,_action;internal int ActionCalls;internal TaskCompletionSource? ActionEntered;
         private static readonly string[] Groups=["Contracts","State","Events","Plugins","Tasks","Diagnostics","Resources","Actions","Predicates","Workflows"];
         private static readonly ImmutableArray<string> Permissions=Abi100Catalog.Operations.Where(o=>Groups.Contains(o.Group)).Select(o=>o.Permission).Where(p=>!string.IsNullOrEmpty(p)).Distinct().ToImmutableArray();
@@ -170,7 +178,12 @@ internal static class RuntimeServicesTests
                 Success(await api.State.DefineOwned(new(new("provider:value"),Abi100Schemas.TextResult,Scope),Options()));
                 Success(await api.Events.Define(new(new("provider:changed"),Abi100Schemas.TextResult,"entity",DeliveryGuarantee.BestEffortAtMostOnce,false,16),Options()));
             }
-            else Success(await api.Events.Subscribe(new EventSubscribeRequest(new("provider:changed"),Abi100Schemas.TextResult,null,_handler,false,true,Scope,SubscriptionLifetime.Transient,ReentryPolicy.Queue,16),Options()));
+            else
+            {
+                var request=new EventSubscribeRequest(new("provider:changed"),Abi100Schemas.TextResult,null,_handler,false,true,Scope,SubscriptionLifetime.Transient,ReentryPolicy.Queue,16);
+                EventRegistration=Success(await api.Events.RegisterSubscription(request,Options()));
+                SecondSubscription=Success(await api.Events.Subscribe(request,Options()));
+            }
             return AbiReply<Unit>.Ok(new());
         }
         public async ValueTask<AbiReply<Unit>> OnPostInitialize(ABIContext context,StageContext stage)

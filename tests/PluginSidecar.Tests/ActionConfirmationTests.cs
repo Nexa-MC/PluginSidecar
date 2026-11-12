@@ -119,6 +119,19 @@ internal static class ActionConfirmationTests
                 var replay=Success(await api.Actions.Invoke(Request("timeout"),Options()));
                 Check((await Terminal(api,replay.Id)).Failure?.Code==AbiErrors.DEADLINE_EXCEEDED&&entry.Calls==0);
             }
+            var commandPrompt=new Prompt();
+            await using(var commandRuntime=new PluginHostRuntime(root,_=>true,Abi100Schemas.Validate,options:new(){ActionConfirmation=commandPrompt}))
+            {
+                var provider=new Entry("confirm");var caller=new Entry("commands-only"){DenyActionEffects=true};
+                Check((await commandRuntime.LoadAsync([provider.Source(),caller.Source()])).All(r=>r.State==LoadState.Active));
+                using var api=caller.Context!.AsAbi100();
+                Check(Success(await api.Commands.List(new(null,16),Options())).Items.Length==1);
+                Check(Success(await api.Commands.Describe(new(new("confirm:effect")),Options())).Id.Value=="confirm:effect");
+                var run=Success(await api.Commands.Execute(Request("command"),Options()));
+                (await commandPrompt.Next()).Answer.SetResult(true);
+                Check((await Terminal(api,run.Id)).State==OperationState.Completed&&provider.Calls==1);
+                Check(!(await api.Actions.Invoke(Request("denied-action"),Options())).Success);
+            }
         }
         finally{if(Directory.Exists(root))Directory.Delete(root,true);}
         Console.WriteLine("PASS: trusted action confirmation, exact request identity, duplicate coalescing, decline/cancel, late approval fencing, provider retirement, synchronous timeout and clean workflow recovery.");
@@ -147,7 +160,7 @@ internal static class ActionConfirmationTests
         internal bool DenyActionEffects;
         internal ManualResetEventSlim? BlockingRelease;
         internal TaskCompletionSource HandlerEntered=new(TaskCreationOptions.RunContinuationsAsynchronously),HandlerExited=new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private static readonly string[] Groups=["Actions","Workflows","Tasks"];
+        private static readonly string[] Groups=["Actions","Commands","Workflows","Tasks"];
         private static readonly ImmutableArray<string> Permissions=Abi100Catalog.Operations.Where(o=>Groups.Contains(o.Group)).Select(o=>o.Permission).Where(p=>!string.IsNullOrEmpty(p)).Distinct().ToImmutableArray();
         private ImmutableArray<string> Grants=>DenyActionEffects?Permissions.Remove("nexa.actions.write"):Permissions;
         internal PluginLoadSource Source()=>new(new(1,id,"1.0.0",1,new("test","test"),new([],[],"fixture"),[100],[],[],[],Grants,[]),Grants,_=>ValueTask.FromResult<IPluginBootstrapV1>(this),()=>ValueTask.CompletedTask);

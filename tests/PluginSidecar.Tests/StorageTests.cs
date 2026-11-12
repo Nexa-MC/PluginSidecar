@@ -7,6 +7,7 @@ internal static class StorageTests
 {
     internal static async Task Run()
     {
+        await StorageMigrationTests.Run();
         string root = Path.Combine(Path.GetTempPath(), "nexa-storage-" + Guid.NewGuid().ToString("N"));
         var identity = new PluginIdentity("example.owner", "1.0.0", Guid.NewGuid());
         var caller = new HostInvocation(identity, Guid.NewGuid(), "Active", new(Guid.NewGuid(), TimeSpan.FromSeconds(5), default));

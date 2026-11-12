@@ -31,6 +31,7 @@ public sealed class PluginHostRuntime : IAsyncDisposable
         {
             definitions = new(owner, validateDefinition);definitions.ConfigureContent(options);
             services = new(owner.PublicationGate, validateStorage, (identity, handle, input, options) => coordinator!.InvokeHandler(identity, handle, input, options), owner.HasCapabilities, Path.Combine(Path.GetFullPath(storageDirectory), "workflow-runs"), options, owner.InvokeAdmitted, owner.IsAuthorized);
+            Storage.Runtime=services;
             services.AllocateRegistrationHandle=owner.AllocateRegistrationHandle;
             services.RegisterCleanup=(caller,callback)=>coordinator!.RegisterCleanup(caller,callback);
             services.RegisterHostCleanupCore=(caller,cleanup)=>coordinator!.RegisterHostCleanup(caller,cleanup);

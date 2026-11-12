@@ -330,3 +330,11 @@ lifetime. These registrations share the global registration-handle allocator and
 the Resources.Release operation, but keep callbacks separate from guest callback
 handles. Owner checks, bounded registration counts, explicit release, load abort
 and stop all apply. No numeric guest method or transport changes are introduced.
+
+Storage migration is an owned pure transform over a bounded immutable snapshot, followed
+by an atomic schema-version/data CAS. The migration Action must belong to the caller,
+use the dedicated migration input/output schemas and declare ReadOnly with no interactive
+confirmation. A concurrent write, cancellation, retired load or invalid output leaves the
+old schema/data intact. A successful migration retires all prior namespace/transaction
+handles and returns a fresh namespace handle. The existing Storage.Migrate signature is
+retained; only its callback data models are added.

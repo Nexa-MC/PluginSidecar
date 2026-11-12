@@ -1,6 +1,6 @@
 # Runtime services
 
-`PluginHostRuntime` installs 90 implemented operations from the ABI catalog. The
+`PluginHostRuntime` installs 97 implemented operations from the ABI catalog. The
 embedding Host still supplies schema policy, verified acquisition, grants and
 launcher business adapters. This is a runnable library kernel, not an installed
 Desktop Sidecar. The CLI remains a scaffold. No production signing key or live
@@ -106,8 +106,8 @@ service binding, state CAS/watch, event delivery, task ownership, action
 idempotency, workflow branching/early return/cancellation, rollback and stop
 closures. A separate test restarts the Host and resumes a checkpoint, then proves
 that an uncertain effect is not executed again. These run under NativeAOT too.
-C/Wasm conformance independently covers all 363 current/legacy SDK slots and 292
-model/collection shapes; that count is not a claim of 363 launcher integrations.
+C/Wasm conformance independently covers all 368 current/legacy SDK slots and 299
+model/collection shapes; that count is not a claim of 368 launcher integrations.
 
 On Windows, the Wasm adapter uses explicit trap checks (`WithSignalsBasedTraps(false)`).
 This preserves .NET apphost CET shadow-stack protection while avoiding Wasmtime's
@@ -237,3 +237,39 @@ The returned reference is owned by that exact load, can be released through the
 existing `Resources.Release`, and is automatically cleaned up on abort or stop.
 Host callbacks occupy a separate namespace from guest callback handles. A failed
 or timed-out cleanup is reported; its effect is never retried automatically.
+
+### Compatible Host integration additions
+
+Commands enumerate and execute the active Actions catalog through the same validation,
+confirmation, idempotency and provider lifetime rules. Command execution requires its
+own `nexa.commands.write` grant; it does not borrow an Actions capability handle.
+
+`Events.RegisterSubscription` returns both the subscription and an owned cleanup
+registration. The existing `Events.Unsubscribe(RegistrationRequest)` accepts that
+registration only. `Events.UnsubscribeSubscription` accepts the `SubscriptionRef`
+returned by the existing `Subscribe` method. Existing IDs, models and signatures
+are preserved; new slots and models are appended. Both forms use the same event
+queue/checkpoint cleanup and reject references belonging to another load.
+
+`Minecraft.Java.ListManagedDistributions` and `PrepareManagedInstall` are additive
+contracts for Host-managed, multi-file runtime manifests. Offers expose actual
+version/platform, file count, byte count, license URLs, expiry and a revision;
+manifest files and the managed target remain with the Java owner. The existing
+`Install(PlanRequest)` executes the resulting confirmed mutation plan. The old
+single-artifact `JavaDistribution` contract is unchanged.
+
+## Commands and private storage migration
+
+Commands list and describe the published action registry. Execute retains the
+command permission boundary and uses the same schema checks, trusted confirmation,
+provider lifetime and idempotency ledger as action invocation. A command-only
+caller does not acquire permission to call Actions.Invoke.
+
+Storage.Migrate invokes an owned read-only action with StorageMigrationInput and
+StorageMigrationOutput schemas. The callback receives at most 256 entries and must
+return unique, schema-valid keys. The namespace version and revision are compared
+before and after the callback. The complete result is atomically persisted before
+the new version is published; failed transforms and concurrent writers preserve
+the old namespace. Success invalidates old namespace/transaction handles and
+returns a fresh StorageNamespace through Tasks.Read. Existing namespaces larger
+than this bounded migration payload fail explicitly; data is never truncated.

@@ -9,7 +9,7 @@ and explicit bounded data through reviewed upstream operations.
 
 ## Preview compatibility
 
-Bootstrap and SDK packages are now `0.2.0-alpha.7`. The requested revision changes
+Bootstrap and SDK packages are now `0.2.0-alpha.8`. The requested revision changes
 managed signatures and adds activation: **rebuild earlier preview plugins**. These
 unpublished previews are not binary-compatible. Bootstrap assembly identity remains
 `1.0.0.0`; that identity alone does not make old preview binaries compatible.
