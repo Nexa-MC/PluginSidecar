@@ -37,6 +37,7 @@ public sealed class PluginHostRuntime : IAsyncDisposable
             services.RegisterHostCleanupCore=(caller,cleanup)=>coordinator!.RegisterHostCleanup(caller,cleanup);
             services.ReleaseCleanup=(caller,reference)=>coordinator!.ReleaseCleanup(caller,reference);
             services.DispatchProbe=(caller,identity,handler,input,options)=>coordinator!.InvokeProbe(caller,identity,handler,input,options);
+            services.DispatchOwnProbe=(caller,identity,handler,input,options)=>coordinator!.InvokeProbe(caller,identity,handler,input,options, allowOwnRoot: true);
             services.OwnLoadReport=caller=>coordinator!.ReadOwnLoadReport(caller);
             services.ContentRegistry=definitions;definitions.ContentChanged=services.ContentPublished;
             return definitions.Routes.Concat(Storage.Routes).Concat(services.Routes).Concat(businessRoutes ?? []);

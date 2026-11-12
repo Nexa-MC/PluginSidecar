@@ -355,3 +355,14 @@ Provider callback failures map to PROVIDER_UNAVAILABLE under the Unavailable pol
 FailOperation preserves the callback error code. Neither policy retries effects.
 Closed Page/ Snapshot schema helpers are generated additively; existing model schema
 fingerprints and operation numbers remain unchanged.
+
+## ABI 100 completion adapters
+
+Trusted business adapters may stage typed definitions in the existing publication
+ledger and invoke typed read providers through the existing query-only boundary.
+All registrations retain namespace ownership, atomic publication, in-use holds,
+retirement cancellation and explicit release. Generic task retry is restricted to
+plugin-owned terminal tasks and workflows without ambiguous effects; arbitrary
+host mutations are not replayable unless their owner supplies a fresh admission.
+Canonical SDK contracts are maintained in NexaCL-Plugin-SDK; additive extensions
+must retain all existing operation IDs and model fingerprints.

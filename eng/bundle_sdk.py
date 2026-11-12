@@ -37,7 +37,7 @@ NuGet source alongside nuget.org for third-party dependencies. Extract
 - [Implemented and remaining acceptance](docs/roadmap.md)
 - [Source, tests and build instructions](https://github.com/Nexa-MC/PluginSidecar)
 
-The SDK exposes 368 current/legacy calls; the local kernel implements 97 routes.
+The SDK exposes 380 current/legacy calls; the local kernel and Desktop adapters jointly implement the catalog.
 Desktop integration is described in docs/desktop-integration.md; production Market
 admission and a signed distribution remain separate work. This bundle is not an installed launcher update or a NuGet.org
 publication. `SHA256.json` checks file integrity, not publisher authenticity.
@@ -48,7 +48,7 @@ publication. `SHA256.json` checks file integrity, not publisher authenticity.
 将 `packages/` 加入本地 NuGet 源，并保留 nuget.org 以还原第三方依赖。
 C SDK 压缩包包含头文件，以及实际运行过的基础示例和工作流示例。
 
-SDK 提供 368 个当前及历史调用绑定，本地运行库实现 97 项操作。
+SDK 提供 380 个当前及历史调用绑定，本地运行库与 Desktop 适配器共同实现目录中的操作。
 Desktop 接入范围见 docs/desktop-integration.md；生产 Market 准入和签名发行包仍未完成。
 本包不是启动器更新，也未发布到 NuGet.org。校验清单用于检查文件完整性，不能代替发行签名。
 '''.encode()

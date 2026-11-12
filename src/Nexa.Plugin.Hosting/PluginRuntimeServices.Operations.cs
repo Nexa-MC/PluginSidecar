@@ -12,7 +12,7 @@ public sealed partial class PluginRuntimeServices
         internal OperationRecord Record=record;
         internal bool Cancellable=cancellable;
         internal CancellationTokenSource Lifetime=lifetime;
-        internal bool Running;internal Task? Worker;
+        internal bool Running, PluginOwned;internal Task? Worker;
     }
     private readonly Dictionary<EntityId,Operation> _operations=[];
     private Operation CreateOperation(HostInvocation c,SchemaRef output,bool cancellable)
@@ -98,7 +98,7 @@ public sealed partial class PluginRuntimeServices
         }
     }
     private IEnumerable<HostCapabilityRoute> TaskRoutes => [
-        HostRoutes.Typed<TaskCreate,OperationRef>("Tasks","CreateOwned",(c,v)=>{Own(c,v.Id);var op=CreateOperation(c,Abi100Schemas.Empty,v.Cancellable);return ValueTask.FromResult(new OperationRef(op.Record.Id,op.Record.State));}),
+        HostRoutes.Typed<TaskCreate,OperationRef>("Tasks","CreateOwned",(c,v)=>{Own(c,v.Id);var op=CreateOperation(c,Abi100Schemas.Empty,v.Cancellable);op.PluginOwned=true;return ValueTask.FromResult(new OperationRef(op.Record.Id,op.Record.State));}),
         HostRoutes.Typed<TaskProgress,Empty>("Tasks","Report",(c,v)=>
         { lock(_gate) {var op=GetOperation(c,v.Task);CheckMutable(op,v.ExpectedRevision);if(v.Progress is <0 or >1)throw new AbiHostException(AbiErrors.SCHEMA_INVALID);Change(op,op.Record with {State=OperationState.Running,Progress=v.Progress,Stage=v.Stage});return ValueTask.FromResult(new Empty());} }),
         HostRoutes.Typed<TaskCompletion,Empty>("Tasks","Complete",(c,v)=>
@@ -109,9 +109,27 @@ public sealed partial class PluginRuntimeServices
         {lock(_gate)return ValueTask.FromResult(Page(c,v,"operations",_operations.Values.Where(o=>o.Owner==c.Identity).OrderBy(o=>o.Record.Id.Value,StringComparer.Ordinal).Select(o=>o.Record)));}),
         HostRoutes.Typed<EntityRequest,OperationRecord>("Tasks","Read",(c,v)=>ValueTask.FromResult(GetOperation(c,v.Id).Record)),
         HostRoutes.Typed<OperationRequest,OperationRef>("Tasks","Cancel",(c,v)=>ValueTask.FromResult(Cancel(c,v))),
+        HostRoutes.Typed<OperationRequest,OperationRef>("Tasks","Retry",(c,v)=>ValueTask.FromResult(RetryOperation(c,v))),
         HostRoutes.Typed<EntityRequest,Empty>("Tasks","Dismiss",(c,v)=>
         {lock(_gate){var op=GetOperation(c,v.Id);if(!Terminal(op.Record.State)||op.Running)throw new AbiHostException(AbiErrors.CONFLICT);if(_runs.TryGetValue(v.Id,out var run)&&run.Definition.Persistent)File.Delete(JournalPath(c.Identity.PluginId,v.Id));_operations.Remove(v.Id);ForgetRun(v.Id);op.Lifetime.Dispose();_revision=NewRevision();return ValueTask.FromResult(new Empty());}})
     ];
+    private OperationRef RetryOperation(HostInvocation caller,OperationRequest request)
+    {
+        lock(_gate)
+        {
+            var operation=GetOperation(caller,request.Operation);
+            if(operation.Record.State==OperationState.OutcomeUnknown)throw new AbiHostException(AbiErrors.OUTCOME_UNKNOWN);
+            if(operation.Running||operation.Record.State is not (OperationState.Failed or OperationState.Cancelled))throw new AbiHostException(AbiErrors.CONFLICT);
+            if(_runs.TryGetValue(request.Operation,out var run))
+                return Resume(caller,new(request.Operation,operation.Record.Revision,run.Definition.DefinitionDigest));
+            // Host mutations have no implicit replay contract. The plugin resumes its own producer.
+            if(!operation.PluginOwned)throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
+            operation.Lifetime.Dispose();
+            operation.Lifetime=CancellationTokenSource.CreateLinkedTokenSource(Lifetime(caller.Identity));
+            Change(operation,operation.Record with {State=OperationState.Pending,Progress=0,Stage="retry-pending",Failure=null,Result=new AbiValue.Null(),ResultSchema=Abi100Schemas.Empty});
+            return new(operation.Record.Id,OperationState.Pending);
+        }
+    }
     private static void CheckMutable(Operation op,Revision revision)
     {if(op.Record.Revision!=revision)throw new AbiHostException(AbiErrors.STALE_REVISION);if(Terminal(op.Record.State)||op.Running)throw new AbiHostException(AbiErrors.CONFLICT);}
 

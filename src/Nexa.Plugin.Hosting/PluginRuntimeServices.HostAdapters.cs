@@ -54,6 +54,57 @@ public sealed partial class PluginRuntimeServices
         return StartOperation(caller, resultSchema, operation);
     }
 
+    /// <summary>Returns an owned, published workflow for a Host-admitted template plan.</summary>
+    public WorkflowDefinition HostWorkflow(HostInvocation caller, QualifiedId id, SchemaRef input, SchemaRef output)
+    {
+        Own(caller,id); var entry=Find(caller,"workflow",id);
+        if(entry.Owner!=caller.Identity||entry.Registration.State!=RegistrationState.Active)throw new AbiHostException(AbiErrors.SERVICE_NOT_READY);
+        var definition=WorkflowDefinition.Read(entry.Value);
+        if(definition.Input!=input||definition.Output!=output)throw new AbiHostException(AbiErrors.SERVICE_CONTRACT_MISMATCH);
+        return definition;
+    }
+    /// <summary>Executes a template workflow with the same owned Tasks ledger and effect journal as Workflows.Start.</summary>
+    public async ValueTask<AbiValue> ExecuteHostWorkflow(HostInvocation caller, string permission, WorkflowRequest request)
+    {
+        if(!_authorize(caller.Identity,permission))throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
+        Own(caller,request.Workflow);caller.Options.Cancellation.ThrowIfCancellationRequested();
+        var reference=StartWorkflow(caller,request);var operation=GetOperation(caller,reference.Id);
+        using var cancellation=caller.Options.Cancellation.Register(()=>Cancel(caller,new(reference.Id)));
+        await operation.Worker!.ConfigureAwait(false);
+        if(operation.Record.State!=OperationState.Completed)throw new AbiHostException(operation.Record.State==OperationState.OutcomeUnknown?AbiErrors.OUTCOME_UNKNOWN:operation.Record.Failure?.Code??AbiErrors.CANCELLED);
+        return operation.Record.Result;
+    }
+
+    /// <summary>Invokes a pure callback while checking its published definition before and after execution.</summary>
+    public async ValueTask<AbiValue> QueryDefinitionCallback(HostInvocation caller, PublishedDefinition definition, string permission, ulong handler, AbiValue input, SchemaRef output)
+    {
+        void CheckPublished()
+        {
+            if (ContentRegistry is null || !ContentRegistry.Entries.Any(e => e.Owner == definition.Owner && e.Registration == definition.Registration && e.Revision == definition.Revision)) throw new AbiHostException(AbiErrors.PROVIDER_GONE);
+            if (!_authorize(definition.Owner, permission)) throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
+        }
+        CheckPublished();
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(caller.Options.Cancellation, Lifetime(caller.Identity), Lifetime(definition.Owner));
+        lifetime.CancelAfter(TimeSpan.FromMilliseconds(Math.Min(caller.Options.Budget.TotalMilliseconds, 30000)));
+        var reply = await (caller.Identity == definition.Owner ? DispatchOwnProbe : DispatchProbe)(caller, definition.Owner, handler, input, caller.Options with { Cancellation = lifetime.Token }).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested(); CheckPublished();
+        if (!reply.Success) throw new AbiHostException(reply.Error!.Code);
+        Validate(output, reply.Value); return reply.Value;
+    }
+
+    /// <summary>Runs an owner's pure transformation without allowing mutation reentrancy.</summary>
+    public async ValueTask<AbiValue> QueryOwnHostCallback(HostInvocation caller, string permission, ulong handler, AbiValue input, SchemaRef output)
+    {
+        if (!_authorize(caller.Identity, permission)) throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
+        if (handler == 0) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(caller.Options.Cancellation, Lifetime(caller.Identity));
+        lifetime.CancelAfter(TimeSpan.FromMilliseconds(Math.Min(caller.Options.Budget.TotalMilliseconds, 30000)));
+        var reply = await DispatchOwnProbe(caller, caller.Identity, handler, input, caller.Options with { Cancellation = lifetime.Token }).ConfigureAwait(false);
+        lifetime.Token.ThrowIfCancellationRequested();
+        if (!reply.Success) throw new AbiHostException(reply.Error!.Code);
+        Validate(output, reply.Value); return reply.Value;
+    }
+
     /// <summary>Invokes a callback registered by the admitted plugin, retaining its original capability context.</summary>
     public ValueTask<AbiReply<AbiValue>> DispatchHostCallback(PluginIdentity owner, string permission, ulong handler,
         AbiValue input, InvocationOptions options)

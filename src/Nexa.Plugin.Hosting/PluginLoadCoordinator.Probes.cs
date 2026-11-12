@@ -5,7 +5,7 @@ namespace Nexa.Plugin.Hosting;
 
 public sealed partial class PluginLoadCoordinator
 {
-    internal async ValueTask<AbiReply<AbiValue>> InvokeProbe(HostInvocation caller,PluginIdentity owner,ulong handle,AbiValue input,InvocationOptions options)
+    internal async ValueTask<AbiReply<AbiValue>> InvokeProbe(HostInvocation caller,PluginIdentity owner,ulong handle,AbiValue input,InvocationOptions options,bool allowOwnRoot=false)
     {
         Attempt? target;
         lock(authority.PublicationGate)
@@ -16,7 +16,8 @@ public sealed partial class PluginLoadCoordinator
                 return Failure(AbiErrors.SERVICE_NOT_READY);
         }
         var chain=CallbackChain.Value??ImmutableStack<Guid>.Empty;
-        if(chain.IsEmpty)chain=chain.Push(caller.Identity.LoadInstanceId);
+        // A Host-owned migration may enter its owner once; nested callbacks still cannot cycle.
+        if(chain.IsEmpty&&(!allowOwnRoot||caller.Identity!=owner))chain=chain.Push(caller.Identity.LoadInstanceId);
         if(chain.Contains(owner.LoadInstanceId)||chain.Count()>=16)return Failure(AbiErrors.CONFLICT);
         if(handle==0)return Failure(AbiErrors.HANDLE_INVALID);
         using var timeout=CancellationTokenSource.CreateLinkedTokenSource(options.Cancellation,target.Invocations.Token);

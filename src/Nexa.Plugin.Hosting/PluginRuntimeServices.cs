@@ -13,6 +13,7 @@ public sealed partial class PluginRuntimeServices
     internal Func<HostInvocation,ulong,RegistrationRef> RegisterCleanup=null!;
     internal Func<HostInvocation,RegistrationRef,ValueTask<bool>> ReleaseCleanup=null!;
     internal Func<HostInvocation,PluginIdentity,ulong,AbiValue,InvocationOptions,ValueTask<AbiReply<AbiValue>>> DispatchProbe=null!;
+    internal Func<HostInvocation,PluginIdentity,ulong,AbiValue,InvocationOptions,ValueTask<AbiReply<AbiValue>>> DispatchOwnProbe=null!;
     internal Func<HostInvocation,LoadReport> OwnLoadReport=null!;
     private readonly string _workflowStore;
     private readonly PluginRuntimeOptions _options;

@@ -1,4 +1,4 @@
-# Desktop integration (alpha.5)
+# Desktop integration
 
 The independent worker now implements `plugin.execution.v1` through the existing
 NexaCL authenticated Sidecar binary command channel. Public Host packages are built
@@ -43,16 +43,33 @@ load arbitrary images. `ui.plugin.action` takes an owned action ID as its Argume
 the Host invokes Actions.Invoke with the current model (Empty by default).
 Stopping a plugin removes its page and invalidates file and business handles.
 
-This adds an actual Desktop vertical slice; it does not claim every SDK operation
-has a Host mapping. Production Market admission/entitlements, persisted enablement,
-UI contributions/replacement/shortcuts/drawing and the remaining domain methods
-still require separate mappings. Unsupported operations stay unavailable.
+## Current business integration
+
+The Desktop implementation now connects every operation in the current catalog to
+an owner or a validated provider consumer. See the public SDK's
+[business extension guide](https://docs.pcln.top/plugins/how-to/extend-business-features)
+and [support manifest](https://github.com/Nexa-MC/NexaCL-Plugin-SDK/blob/main/contracts/host-support.json)
+for request models, supported behavior and the exact verified Host commit.
+
+Provider registration publishes a typed callback contract; it does not grant raw
+paths, credentials or arbitrary execution. Query callbacks run under a read-only
+probe fence. Effects run through owned operations, revisions, previews and Host
+confirmation. Unloading the provider retires its callbacks and invalidates plans
+that depended on the published definition. Host callbacks into the same plugin are
+permitted only at the root; nested callback cycles remain rejected.
+
+Instance and content changes run through the existing domain owners in both the
+managed and native deployment. Restore/import require explicit owned destinations;
+Java distribution installation verifies bounded ZIP contents and a SHA-256 digest;
+launch contributions expose only the supported temporary settings. The public guide
+describes these limits and failure cases rather than treating registration as execution.
 
 ## 简体中文
 
-alpha.5 使用现有 Sidecar 认证和二进制通道运行独立 Wasm 工作进程。Desktop
-持有准入、权限、状态和业务路由。连接失败后不自动重放插件操作。
-新增 `Files.OpenPackageFile` 只返回已验证包内资产的实例级引用。
-`desktop.zip` 示例覆盖包内页面注册、实际页面展示与宿主确认后的操作。
-开发包必须在开发者模式下逐次确认权限；生产工作进程仍要求 `.nsc` 发行签名。
-尚未映射的 UI/业务接口继续返回不可用，不能把本次接入等同于全部功能完成。
+Desktop 负责准入、权限、业务路由和持久状态；独立 Wasm 工作进程通过现有认证
+二进制通道执行插件。当前目录中的操作均已连接到业务所有者或实际消费 Provider
+的入口。可用范围及对应宿主提交以公共 SDK 的 `host-support.json` 为准。
+
+Provider 回调只收到声明的数据，查询回调不能借机产生业务副作用。修改操作仍须经过
+宿主确认、版本检查和所有者服务；卸载插件会撤销回调并使关联计划失效。
+完成接口接入不等于配置了生产 Market 凭据或发行签名。

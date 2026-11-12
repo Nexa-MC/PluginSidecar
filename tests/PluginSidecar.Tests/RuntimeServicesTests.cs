@@ -86,6 +86,17 @@ internal static class RuntimeServicesTests
             var record=Success(await c.Tasks.Read(new(task.Id),Options()));
             Success(await c.Tasks.Complete(new(task.Id,TextResult.Write(new("done")),Abi100Schemas.TextResult,record.Revision),Options()));
             Check((await c.Tasks.Report(new(task.Id,"late",0.5,record.Revision),Options())).Error?.Code==AbiErrors.STALE_REVISION);
+            Check((await c.Tasks.Retry(new(task.Id),Options())).Error?.Code==AbiErrors.CONFLICT);
+            var retryTask=Success(await c.Tasks.CreateOwned(new(new("consumer:retry"),new("retry",[]),new("parent"),true),Options()));
+            var retryRecord=Success(await c.Tasks.Read(new(retryTask.Id),Options()));
+            Success(await c.Tasks.Fail(new(retryTask.Id,new("TEST",new("failed",[]),Guid.NewGuid(),true,[]),retryRecord.Revision),Options()));
+            Check((await p.Tasks.Retry(new(retryTask.Id),Options())).Error?.Code==AbiErrors.HANDLE_OWNER_MISMATCH);
+            var retried=Success(await c.Tasks.Retry(new(retryTask.Id),Options()));
+            Check(retried.Id==retryTask.Id&&retried.State==OperationState.Pending);
+            Check((await c.Tasks.Retry(new(retryTask.Id),Options())).Error?.Code==AbiErrors.CONFLICT);
+            retryRecord=Success(await c.Tasks.Read(new(retryTask.Id),Options()));
+            Check(retryRecord.Failure is null&&retryRecord.Progress==0);
+            Success(await c.Tasks.Complete(new(retryTask.Id,TextResult.Write(new("retried")),Abi100Schemas.TextResult,retryRecord.Revision),Options()));
             await runtime.StopAsync("provider");
             foreach(var subscription in new[]{availability,contractWatch})
                 Check(CapabilityDescription.Read(Success(await c.Resources.ReadSubscription(new(subscription,256),Options())).Items.Single()).Availability==CapabilityAvailability.Unavailable);
