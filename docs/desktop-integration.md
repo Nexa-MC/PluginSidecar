@@ -47,7 +47,7 @@ Stopping a plugin removes its page and invalidates file and business handles.
 
 The Desktop implementation now connects every operation in the current catalog to
 an owner or a validated provider consumer. See the public SDK's
-[business extension guide](https://docs.pcln.top/plugins/how-to/extend-business-features)
+[business extension guide](https://docs.pcln.top/en/plugin-sdk/how-to/extend-business-features)
 and [support manifest](https://github.com/Nexa-MC/NexaCL-Plugin-SDK/blob/main/contracts/host-support.json)
 for request models, supported behavior and the exact verified Host commit.
 

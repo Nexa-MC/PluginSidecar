@@ -67,9 +67,8 @@ that assigns new business types exclusively to Sidecars.
 The SDK gains a machine-readable ContractCatalog and generated typed group APIs,
 with explicit data schemas, phase/permission/idempotency metadata and bounded
 AbiValue codecs. Catalog method numbers are SDK-local draft dispatch contracts,
-NOT new NexaCL transport opcodes or proof of an implemented Host route. Every
-catalog entry is marked HostMappingPending until a reviewed adapter and actual
-consumer exist. Existing binary transport and generated numeric routing remain
+NOT new NexaCL transport opcodes or proof of an implemented Host route. Per-Host mappings are recorded in the public SDK host-support.json, with the
+verified Host commit; the catalog retains neutral HostDefined metadata. Existing binary transport and generated numeric routing remain
 authoritative. No direct project references to launcher-private implementations
 are introduced.
 

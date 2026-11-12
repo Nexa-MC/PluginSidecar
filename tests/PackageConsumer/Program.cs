@@ -11,7 +11,7 @@ try
     await using var runtime=new PluginHostRuntime(root,_=>true,Abi100Schemas.Validate,options:new()
         {AutomaticSchedules=false,RegistryConsumers=[new Consumer()],ActionConfirmation=new Confirmation()});
     int routes=runtime.Services.Routes.Count()+runtime.Definitions.Routes.Count()+runtime.Storage.Routes.Count();
-    if(routes!=97)throw new InvalidOperationException("Missing packaged runtime routes: "+routes);
+    if(routes!=98)throw new InvalidOperationException("Missing packaged runtime routes: "+routes);
     IPluginCleanupInvocationV1 cleanup=new Adapter();IPluginProbeInvocationV1 probe=new Adapter();
     GC.KeepAlive(cleanup);GC.KeepAlive(probe);
     using var package=VerifiedPluginPackage.Parse(await File.ReadAllBytesAsync(args.Single()),"example.wasm","1.0.0");
@@ -19,7 +19,7 @@ try
     if(result.State!=LoadState.Active||runtime.Definitions.Entries.Length!=1)throw new InvalidOperationException(result.Error?.Code??"Missing content");
     await runtime.StopAsync("example.wasm");
     if(!runtime.Active.IsEmpty)throw new InvalidOperationException("Package remained active");
-    Console.WriteLine("PASS: independent NuGet-only consumer, 97 routes, cleanup/probe/confirmation ports, real compiled Wasm activation and retirement.");
+    Console.WriteLine("PASS: independent NuGet-only consumer, 98 routes, cleanup/probe/confirmation ports, real compiled Wasm activation and retirement.");
 }
 finally{if(Directory.Exists(root))Directory.Delete(root,true);}
 sealed class Consumer:IRegistryConsumer
