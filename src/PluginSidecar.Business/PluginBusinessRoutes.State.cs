@@ -15,8 +15,11 @@ public sealed partial class PluginBusinessRoutes
     private readonly Channel<bool> _changes = Channel.CreateBounded<bool>(new BoundedChannelOptions(1) { FullMode = BoundedChannelFullMode.DropOldest, SingleReader = true });
     private PluginRuntimeServices? _services;
     private Task? _watchWorker;
+    private readonly object _disposeGate = new();
+    private Task? _disposeTask;
     public void Bind(PluginRuntimeServices services)
     {
+        ObjectDisposedException.ThrowIf(_disposeTask is not null, this);
         if (_services is not null) throw new InvalidOperationException("Plugin business routes already bound.");
         _services = services; store.Changed += Changed; store.Start(); _watchWorker = PumpAsync(); _changes.Writer.TryWrite(true); _fileWatchWorker = WatchFilesAsync(); _lanWatchWorker = WatchLanAsync(); _logWatchWorker = WatchLogsAsync(); _asyncWatchWorker = WatchAsyncQueries();
     }
@@ -35,26 +38,30 @@ public sealed partial class PluginBusinessRoutes
     }
     private async Task PumpAsync()
     {
-        await foreach (var _ in _changes.Reader.ReadAllAsync().ConfigureAwait(false))
+        try
         {
-            await RefreshDeveloperModeAsync().ConfigureAwait(false);
-            await RefreshSettingWatchesAsync().ConfigureAwait(false);
-            lock (_watchGate)
-                foreach (var watch in _watches.Values.ToArray())
-                {
-                    try
+            await foreach (var _ in _changes.Reader.ReadAllAsync(_resourceStop.Token).ConfigureAwait(false))
+            {
+                await RefreshDeveloperModeAsync(_resourceStop.Token).ConfigureAwait(false);
+                await RefreshSettingWatchesAsync(_resourceStop.Token).ConfigureAwait(false);
+                lock (_watchGate)
+                    foreach (var watch in _watches.Values.ToArray())
                     {
-                        if (!Services.PublishHostSubscription(watch.Owner, watch.Reference, watch.Read())) _watches.Remove(watch.Reference.Token);
+                        try
+                        {
+                            if (!Services.PublishHostSubscription(watch.Owner, watch.Reference, watch.Read())) _watches.Remove(watch.Reference.Token);
+                        }
+                        catch (AbiHostException)
+                        {
+                            // The source or its captured revision disappeared. Retire this watch instead
+                            // of substituting a different account, instance or process into its identity.
+                            Services.PublishHostSubscription(watch.Owner, watch.Reference, new AbiValue.Null());
+                            _watches.Remove(watch.Reference.Token);
+                        }
                     }
-                    catch (AbiHostException)
-                    {
-                        // The source or its captured revision disappeared. Retire this watch instead
-                        // of substituting a different account, instance or process into its identity.
-                        Services.PublishHostSubscription(watch.Owner, watch.Reference, new AbiValue.Null());
-                        _watches.Remove(watch.Reference.Token);
-                    }
-                }
+            }
         }
+        catch (OperationCanceledException) when (_resourceStop.IsCancellationRequested) { }
     }
     private IEnumerable<HostCapabilityRoute> StateRoutes => [
         HostRoutes.Typed<WatchRequest, SubscriptionRef>("Minecraft.Instances", "Watch", (c, v) => ValueTask.FromResult(Watch(c, v,
@@ -87,7 +94,8 @@ public sealed partial class PluginBusinessRoutes
             return new Empty();
         })
     ];
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync() { lock (_disposeGate) return new(_disposeTask ??= DisposeCoreAsync()); }
+    private async Task DisposeCoreAsync()
     {
         if (_application is not null) _application.ResourcesRetired -= RetireResources;
         Task[] downloads; lock (_planGate) { _downloadsStopped = true; downloads = _downloadWorkers.Select(w => w.Task).ToArray(); }
@@ -98,9 +106,10 @@ public sealed partial class PluginBusinessRoutes
         if (_lanWatchWorker is not null) await _lanWatchWorker.ConfigureAwait(false);
         if (_logWatchWorker is not null) await _logWatchWorker.ConfigureAwait(false);
         if (_asyncWatchWorker is not null) await _asyncWatchWorker.ConfigureAwait(false);
-        _resourceStop.Dispose();
         store.Changed -= Changed; await store.DisposeAsync().ConfigureAwait(false); _changes.Writer.TryComplete();
         if (_watchWorker is not null) await _watchWorker.ConfigureAwait(false);
+        _resourceStop.Dispose();
+        _developerEnabled = false;
         lock (_watchGate) { _watches.Clear(); _settingWatches.Clear(); _fileWatches.Clear(); _lanWatches.Clear(); _logWatches.Clear(); _asyncWatches.Clear(); }
         lock (_planGate) { _plans.Clear(); _contentIdentities.Clear(); _launchGrants.Clear(); _launchPlans.Clear(); _installDrafts.Clear(); _installPlans.Clear(); _installOperations.Clear(); _signInFlows.Clear(); _pluginDownloads.Clear(); _javaOffers.Clear(); }
         System.Security.Cryptography.CryptographicOperations.ZeroMemory(_identity);

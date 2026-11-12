@@ -27,6 +27,10 @@ The business tests run without any `Nexa.Services` assemblies in both managed an
 NativeAOT modes. They exercise caller isolation, revision fencing, cancellation
 routing, state-loss recovery and plugin retirement. These focused tests are not a
 claim that every SDK feature has been migrated to the independent worker.
+Background settings queries carry the business owner's cancellation token.
+Retirement cancels pending queries before awaiting watch workers, and repeated
+disposal awaits the same cleanup task. A missing settings revision clears
+developer mode instead of retaining a previous authorization decision.
 
 
 Bootstrap 1 is a preview managed entry contract intended to freeze at formal publication. ABI 100 is a separate SDK package; future versions must not extend Bootstrap interfaces with version-specific members. The uploaded proposal is preserved under specifications as design input, not an assertion of implemented behavior.

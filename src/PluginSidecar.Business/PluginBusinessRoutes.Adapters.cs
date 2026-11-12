@@ -14,14 +14,15 @@ public sealed partial class PluginBusinessRoutes
     private volatile bool _developerEnabled;
     private long _developerRevision = -1;
     public bool DeveloperEnabled => _developerEnabled;
-    private async ValueTask RefreshDeveloperModeAsync()
+    private async ValueTask RefreshDeveloperModeAsync(CancellationToken token)
     {
         if (foundationQueries is null) return;
         if (!store.TryRead(out var state)) { _developerEnabled = false; _developerRevision = -1; return; }
         var revision = state!.SettingsRevision;
-        if (revision < 0 || revision == _developerRevision) return;
+        if (revision < 0) { _developerEnabled = false; _developerRevision = -1; return; }
+        if (revision == _developerRevision) return;
         if (!foundationQueries.TryResolve(SettingsPolicyContract.EffectiveQuery, out var route)) return;
-        var result = await foundationQueries.QueryAsync<SettingsEffectiveQuery, SettingsEffectiveSnapshot>(route, new() { ProfileId = null, TemporaryId = null }).ConfigureAwait(false);
+        var result = await foundationQueries.QueryAsync<SettingsEffectiveQuery, SettingsEffectiveSnapshot>(route, new() { ProfileId = null, TemporaryId = null }, cancellationToken: token).ConfigureAwait(false);
         _developerEnabled = result.IsSuccess && result.Value!.Values.Any(v => v.Key == "developer.enabled" && v.Value.Value == "true");
         if (result.IsSuccess) _developerRevision = revision;
     }

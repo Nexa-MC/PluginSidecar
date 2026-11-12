@@ -89,7 +89,41 @@ internal static class BusinessTests
         }
         finally { await state.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetName().Name?.StartsWith("Nexa.Services", StringComparison.Ordinal) == true));
+        await StopCancelsPendingHostQuery();
         Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, revision fencing, lost-state recovery and retirement.");
+    }
+    private static async Task StopCancelsPendingHostQuery()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "plugin-business-stop-" + Guid.NewGuid().ToString("N"));
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var pending = new TaskCompletionSource<Host.SettingsEffectiveSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var state = new SidecarBusinessState(_ => ValueTask.FromResult(XsrResult.Success(
+            new Host.SidecarPublicState(-1, null, -1, null, -1, null, -1, null, -1, null, -1, null, 1))));
+        try
+        {
+            var observer = new Observer();
+            var empty = new XsrCommandRouterBuilder().Build(observer);
+            XsrQueryRouterBuilder queries = new();
+            queries.Register<Host.SettingsEffectiveQuery, Host.SettingsEffectiveSnapshot>(Host.SettingsPolicyContract.EffectiveQuery, async (_, token) =>
+            {
+                entered.TrySetResult();
+                try { return XsrResult.Success(await pending.Task.WaitAsync(token)); }
+                catch (OperationCanceledException) { cancelled.TrySetResult(); throw; }
+            });
+            await using var business = new PluginBusinessRoutes(state, empty, empty, foundationQueries: queries.Build(observer));
+            await using var app = new PluginApplication(root, (_, _) => throw new InvalidOperationException(), business.Routes,
+                new Allow(), (_, _) => { }, (_, _) => { }, _ => { });
+            await state.RefreshAsync();
+            business.BindApplication(app); business.Bind(app.Runtime.Services);
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await business.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await business.DisposeAsync();
+            Check(!business.DeveloperEnabled);
+        }
+        finally { await state.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        Console.WriteLine("PASS: Sidecar retirement cancels pending Host settings queries and is idempotent.");
     }
     private sealed class Observer : IXsrDispatchObserver { public void OnCompleted(XsrDispatchObservation observation) { } }
     private sealed class Allow : IActionConfirmation

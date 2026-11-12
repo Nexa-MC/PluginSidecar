@@ -102,7 +102,7 @@ public sealed partial class PluginBusinessRoutes
         })
     ];
     private readonly Dictionary<Guid, (HostInvocation Caller, SettingQuery Query, SubscriptionRef Reference, Revision Revision)> _settingWatches = [];
-    private async ValueTask RefreshSettingWatchesAsync()
+    private async ValueTask RefreshSettingWatchesAsync(CancellationToken token)
     {
         (HostInvocation Caller, SettingQuery Query, SubscriptionRef Reference, Revision Revision)[] watches;
         lock (_watchGate) watches = _settingWatches.Values.ToArray();
@@ -110,7 +110,7 @@ public sealed partial class PluginBusinessRoutes
         {
             try
             {
-                var current = await ReadSetting(watch.Caller with { Options = watch.Caller.Options with { Cancellation = default } }, watch.Query).ConfigureAwait(false);
+                var current = await ReadSetting(watch.Caller with { Options = watch.Caller.Options with { Cancellation = token } }, watch.Query).ConfigureAwait(false);
                 if (current.Revision == watch.Revision) continue;
                 bool live = Services.PublishHostSubscription(watch.Caller.Identity, watch.Reference, EffectiveSetting.Write(current));
                 lock (_watchGate)
