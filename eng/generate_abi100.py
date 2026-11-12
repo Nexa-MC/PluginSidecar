@@ -85,6 +85,7 @@ catalog+='    ];\n}\n'
 # Each fingerprint includes the transitive model/enum closure, not unrelated models.
 schemas = header + 'using Nexa.Plugin.Sdk.Abi100.Data;\nnamespace Nexa.Plugin.Sdk.Abi100;\n\npublic static class Abi100Schemas\n{\n'
 schema_fingerprints = {}
+schema_targets = {name: name for name in spec['models']}
 for name in spec['models']:
     closure = {}; pending = [name]
     while pending:
@@ -97,9 +98,30 @@ for name in spec['models']:
     fingerprint = hashlib.sha256(json.dumps({'root':name,'types':closure,'codec':'nexa-abi-value-1','scalarContract':1}, sort_keys=True, separators=(',',':')).encode()).hexdigest()
     schema_fingerprints[name] = fingerprint
     schemas += f'    public static SchemaRef {name} {{ get; }} = new(new("nexa:abi100/{name.lower()}"), 1, "{fingerprint}");\n'
+# Closed collection schemas are additive. Keep every existing model fingerprint unchanged.
+generic_shapes = {
+    'Page': [{'name':'Items','type':'T[]'}, {'name':'NextCursor','type':'string?'}, {'name':'Revision','type':'Revision'}],
+    'Snapshot': [{'name':'Value','type':'T'}, {'name':'Revision','type':'Revision'}, {'name':'SchemaVersion','type':'ulong'}, {'name':'ObservedAt','type':'DateTimeOffset'}]
+}
+for generic, item_type in sorted(set(re.findall(r'(Page|Snapshot)<([A-Za-z][A-Za-z0-9]*)>', json.dumps(spec)))):
+    target = f'{generic}<{item_type}>'
+    name = f'{generic}Of{item_type}'
+    closure = {generic: generic_shapes[generic]}
+    pending = [item_type, 'Revision']
+    while pending:
+        item = pending.pop()
+        if item in closure: continue
+        if item in spec['models']:
+            closure[item] = spec['models'][item]
+            for field in closure[item]: pending.extend(re.findall(r'[A-Za-z][A-Za-z0-9]*', field['type']))
+        elif item in spec['enums']: closure[item] = spec['enums'][item]
+    fingerprint = hashlib.sha256(json.dumps({'root':target,'types':closure,'codec':'nexa-abi-value-1','scalarContract':1}, sort_keys=True, separators=(',',':')).encode()).hexdigest()
+    schema_targets[name] = target
+    schema_fingerprints[name] = fingerprint
+    schemas += f'    public static SchemaRef {name} {{ get; }} = new(new("nexa:abi100/{name.lower()}"), 1, "{fingerprint}");\n'
 schemas += '    public static bool Validate(SchemaRef schema, AbiValue value)\n    {\n        try\n        {\n            DataCodec.Validate(value);\n            switch (schema.Id.Value)\n            {\n'
-for name in spec['models']:
-    schemas += f'                case "nexa:abi100/{name.lower()}": if (schema != {name}) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.{name}.Read(value); return true;\n'
+for name, target in schema_targets.items():
+    schemas += f'                case "nexa:abi100/{name.lower()}": if (schema != {name}) return false; _ = global::Nexa.Plugin.Sdk.Abi100.Data.{target}.Read(value); return true;\n'
 schemas += '                default: return false;\n            }\n        }\n        catch (Exception error) when (error is FormatException or ArgumentException or OverflowException) { return false; }\n    }\n}\n'
 
 parser=argparse.ArgumentParser();parser.add_argument('--verify',action='store_true');args=parser.parse_args()

@@ -22,6 +22,7 @@ typedef struct { nx_value value; } nx_BackupTransfer;
 typedef struct { nx_value value; } nx_BlobRef;
 typedef struct { nx_value value; } nx_BlobRefOptional;
 typedef struct { nx_value value; } nx_BooleanResult;
+typedef struct { nx_value value; } nx_BusinessProviderCall;
 typedef enum { nx_CapabilityAvailability_Supported = 0, nx_CapabilityAvailability_Unavailable = 1, nx_CapabilityAvailability_Denied = 2, nx_CapabilityAvailability_Unsupported = 3 } nx_CapabilityAvailability;
 typedef struct { nx_value value; } nx_CapabilityDescription;
 typedef struct { nx_value value; } nx_CapabilityDescriptionArray;
@@ -472,6 +473,9 @@ static inline void nx_BlobRefOptional_encode(nx_writer *w, nx_BlobRefOptional va
 static inline void nx_BooleanResult_validate(nx_value v, nx_u32 depth);
 static inline nx_BooleanResult nx_BooleanResult_read(nx_value v);
 static inline void nx_BooleanResult_encode(nx_writer *w, nx_BooleanResult value);
+static inline void nx_BusinessProviderCall_validate(nx_value v, nx_u32 depth);
+static inline nx_BusinessProviderCall nx_BusinessProviderCall_read(nx_value v);
+static inline void nx_BusinessProviderCall_encode(nx_writer *w, nx_BusinessProviderCall value);
 static inline void nx_CapabilityAvailability_validate(nx_value v, nx_u32 depth);
 static inline nx_CapabilityAvailability nx_CapabilityAvailability_read(nx_value v);
 static inline void nx_CapabilityAvailability_encode(nx_writer *w, nx_CapabilityAvailability value);
@@ -1741,6 +1745,9 @@ static inline void nx_BlobRefOptional_encode(nx_writer *w,nx_BlobRefOptional val
 static inline void nx_BooleanResult_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(v.size && v.data[0]==8); nx_bool_validate(nx_field(v,"value"),depth+1);  }
 static inline nx_BooleanResult nx_BooleanResult_read(nx_value v) { nx_BooleanResult_validate(v,0); nx_BooleanResult result={v}; return result; }
 static inline void nx_BooleanResult_encode(nx_writer *w,nx_BooleanResult value) { nx_raw(w,value.value); }
+static inline void nx_BusinessProviderCall_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(v.size && v.data[0]==8); nx_QualifiedId_validate(nx_field(v,"provider"),depth+1); nx_QualifiedId_validate(nx_field(v,"kind"),depth+1); nx_string_validate(nx_field(v,"method"),depth+1); nx_SchemaRef_validate(nx_field(v,"inputSchema"),depth+1); nx_SchemaRef_validate(nx_field(v,"outputSchema"),depth+1); nx_AbiValue_validate(nx_field(v,"inputs"),depth+1);  }
+static inline nx_BusinessProviderCall nx_BusinessProviderCall_read(nx_value v) { nx_BusinessProviderCall_validate(v,0); nx_BusinessProviderCall result={v}; return result; }
+static inline void nx_BusinessProviderCall_encode(nx_writer *w,nx_BusinessProviderCall value) { nx_raw(w,value.value); }
 static inline void nx_CapabilityAvailability_validate(nx_value v,nx_u32 depth) { nx_require(depth <= 32); nx_require(nx_is_string(v,"Supported") || nx_is_string(v,"Unavailable") || nx_is_string(v,"Denied") || nx_is_string(v,"Unsupported")); }
 static inline nx_CapabilityAvailability nx_CapabilityAvailability_read(nx_value v) { nx_CapabilityAvailability_validate(v,0); if(nx_is_string(v,"Supported")) return nx_CapabilityAvailability_Supported; if(nx_is_string(v,"Unavailable")) return nx_CapabilityAvailability_Unavailable; if(nx_is_string(v,"Denied")) return nx_CapabilityAvailability_Denied; if(nx_is_string(v,"Unsupported")) return nx_CapabilityAvailability_Unsupported; __builtin_trap(); }
 static inline void nx_CapabilityAvailability_encode(nx_writer *w,nx_CapabilityAvailability value) { switch(value) { case nx_CapabilityAvailability_Supported: nx_string(w,"Supported"); return; case nx_CapabilityAvailability_Unavailable: nx_string(w,"Unavailable"); return; case nx_CapabilityAvailability_Denied: nx_string(w,"Denied"); return; case nx_CapabilityAvailability_Unsupported: nx_string(w,"Unsupported"); return; default: __builtin_trap(); } }
@@ -3031,6 +3038,13 @@ static inline nx_BlobRefOptional nx_BlobRefOptional_none(nx_writer *w) { nx_u32 
 static inline nx_BlobRefOptional nx_BlobRefOptional_some(nx_writer *w,nx_BlobRef value) { nx_u32 start=w->size; nx_BlobRef_encode(w,value); return nx_BlobRefOptional_read(nx_written(w,start)); }
 static inline int nx_BooleanResult_Value(nx_BooleanResult value) { return nx_bool_read(nx_field(value.value,"value")); }
 static inline nx_BooleanResult nx_BooleanResult_write(nx_writer *w, int arg_Value) { nx_u32 start=w->size; nx_map(w,1); nx_key(w,"value"); nx_bool_encode(w,arg_Value);return nx_BooleanResult_read(nx_written(w,start)); }
+static inline nx_text nx_BusinessProviderCall_Provider(nx_BusinessProviderCall value) { return nx_QualifiedId_read(nx_field(value.value,"provider")); }
+static inline nx_text nx_BusinessProviderCall_Kind(nx_BusinessProviderCall value) { return nx_QualifiedId_read(nx_field(value.value,"kind")); }
+static inline nx_text nx_BusinessProviderCall_Method(nx_BusinessProviderCall value) { return nx_string_read(nx_field(value.value,"method")); }
+static inline nx_SchemaRef nx_BusinessProviderCall_InputSchema(nx_BusinessProviderCall value) { return nx_SchemaRef_read(nx_field(value.value,"inputSchema")); }
+static inline nx_SchemaRef nx_BusinessProviderCall_OutputSchema(nx_BusinessProviderCall value) { return nx_SchemaRef_read(nx_field(value.value,"outputSchema")); }
+static inline nx_value nx_BusinessProviderCall_Inputs(nx_BusinessProviderCall value) { return nx_AbiValue_read(nx_field(value.value,"inputs")); }
+static inline nx_BusinessProviderCall nx_BusinessProviderCall_write(nx_writer *w, nx_text arg_Provider, nx_text arg_Kind, nx_text arg_Method, nx_SchemaRef arg_InputSchema, nx_SchemaRef arg_OutputSchema, nx_value arg_Inputs) { nx_u32 start=w->size; nx_map(w,6); nx_key(w,"inputSchema"); nx_SchemaRef_encode(w,arg_InputSchema);nx_key(w,"inputs"); nx_AbiValue_encode(w,arg_Inputs);nx_key(w,"kind"); nx_QualifiedId_encode(w,arg_Kind);nx_key(w,"method"); nx_string_encode(w,arg_Method);nx_key(w,"outputSchema"); nx_SchemaRef_encode(w,arg_OutputSchema);nx_key(w,"provider"); nx_QualifiedId_encode(w,arg_Provider);return nx_BusinessProviderCall_read(nx_written(w,start)); }
 static inline nx_text nx_CapabilityDescription_Id(nx_CapabilityDescription value) { return nx_string_read(nx_field(value.value,"id")); }
 static inline nx_u64 nx_CapabilityDescription_Version(nx_CapabilityDescription value) { return nx_ulong_read(nx_field(value.value,"version")); }
 static inline nx_CapabilityAvailability nx_CapabilityDescription_Availability(nx_CapabilityDescription value) { return nx_CapabilityAvailability_read(nx_field(value.value,"availability")); }
@@ -5346,6 +5360,7 @@ static inline nx_SchemaRef nx_schema_BackupSummary(nx_writer *w) { return nx_Sch
 static inline nx_SchemaRef nx_schema_BackupTransfer(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/backuptransfer"),1,nx_literal("0faabcb62aed0835996f56dddf3618370c1d89b223c21d196c1b5b08e3de4264")); }
 static inline nx_SchemaRef nx_schema_BlobRef(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/blobref"),1,nx_literal("867da511238c737f638ba577f22601adca51c93687e909045a7e1233f90a9a52")); }
 static inline nx_SchemaRef nx_schema_BooleanResult(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/booleanresult"),1,nx_literal("8bb0dc39369ca459201ca9f516a328aafe7ebb94c8e02907bfcb58d523110e23")); }
+static inline nx_SchemaRef nx_schema_BusinessProviderCall(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/businessprovidercall"),1,nx_literal("29e404340596f7786719061954ffa9fbb39dd7bcf950d6e7f78055cdf58ae886")); }
 static inline nx_SchemaRef nx_schema_CapabilityDescription(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/capabilitydescription"),1,nx_literal("b12a3f2e1ca3e85d2b06c080a344e8f3d5fec86a005779ec5d5c10dc71b86308")); }
 static inline nx_SchemaRef nx_schema_Cape(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/cape"),1,nx_literal("8ade8c8cb4adc041e02dfccdfe16512b9b8cbf9959cff7fd69dc8b6769789902")); }
 static inline nx_SchemaRef nx_schema_CapeSelection(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/capeselection"),1,nx_literal("a8c3cd1238ecf898c5488d9cbc3b2e4aa5f33035bc9125539f1088e6b7852025")); }
@@ -5465,6 +5480,42 @@ static inline nx_SchemaRef nx_schema_OperationRef(nx_writer *w) { return nx_Sche
 static inline nx_SchemaRef nx_schema_OperationRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/operationrequest"),1,nx_literal("609a9ee8790c9cc25f42d1c7418b445dfb51abd24926477943996f6665203f38")); }
 static inline nx_SchemaRef nx_schema_OverlayDefinition(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/overlaydefinition"),1,nx_literal("19a5b3d40756f76de4dd32fb8188e3c924ca20d75fac44c909b898bcd35d467c")); }
 static inline nx_SchemaRef nx_schema_PackageFileRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/packagefilerequest"),1,nx_literal("c1da2809ce75f21a814b330adddabf5ee392d5ef1d70edb56cad61bd64b91f68")); }
+static inline nx_SchemaRef nx_schema_PageOfAccountPublic(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofaccountpublic"),1,nx_literal("1f6d14f24e7ffda52b58cc102422861180b02dde6d4ad6f931c99d83421e5bdd")); }
+static inline nx_SchemaRef nx_schema_PageOfActionDescriptor(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofactiondescriptor"),1,nx_literal("876544486e83726bd51545de92efdba15543d5860837eebb73c5e693298e0f06")); }
+static inline nx_SchemaRef nx_schema_PageOfBackupSummary(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofbackupsummary"),1,nx_literal("18737c3b476639c5310b68843902abab105738dbe67f6886c4df1aa6b04bff62")); }
+static inline nx_SchemaRef nx_schema_PageOfCatalogDependency(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofcatalogdependency"),1,nx_literal("7559247116bb8bcce7a67f9540529f25bcdb4a3cd3e7f3820054853e324c58c5")); }
+static inline nx_SchemaRef nx_schema_PageOfCatalogFile(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofcatalogfile"),1,nx_literal("9efe122a5e6c8afd7d4ab1968c8239a9ae482f0d315f20738bbd8a306b2157a9")); }
+static inline nx_SchemaRef nx_schema_PageOfCatalogProject(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofcatalogproject"),1,nx_literal("2c99bb9a1e6e54d76fb8705c41f1692aae8bccbb5d80982e4ce7234e30e40ebe")); }
+static inline nx_SchemaRef nx_schema_PageOfCatalogVersion(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofcatalogversion"),1,nx_literal("ca629b9ca9b70d8a09ecf04bdc46a94f128e2e0d4f4069da54eab7fd05661a17")); }
+static inline nx_SchemaRef nx_schema_PageOfContentItem(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofcontentitem"),1,nx_literal("5254a5bea720db571f085fda07a5e947873844d7707c1c3013ae7aafb169dbe1")); }
+static inline nx_SchemaRef nx_schema_PageOfContentTransaction(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofcontenttransaction"),1,nx_literal("4ff9aae1b96eeb07106d428f4a5bdb9c01eed83d5f2a218c00a42dbf3814f555")); }
+static inline nx_SchemaRef nx_schema_PageOfDefinition(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofdefinition"),1,nx_literal("b9c4498bbd3b4506fd132a8ea28f0e5be788816760dc3e54ab648cfe86934d63")); }
+static inline nx_SchemaRef nx_schema_PageOfDiagnosticReport(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofdiagnosticreport"),1,nx_literal("254c115437d6c5c9c1638783c11464a4f9df7f5d5e48a8a8c2c098f1389fa2f9")); }
+static inline nx_SchemaRef nx_schema_PageOfDisplayInfo(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofdisplayinfo"),1,nx_literal("6368bb6793add526aae920d9fee4beb9c88bb92112ad6bc497c8fa05bdbdb50e")); }
+static inline nx_SchemaRef nx_schema_PageOfEffectiveSetting(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofeffectivesetting"),1,nx_literal("bb61e2d293c8482733055917acee53fa684c187c7be5c25d313d1300022f468d")); }
+static inline nx_SchemaRef nx_schema_PageOfFileStat(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageoffilestat"),1,nx_literal("ae1c4a55a17ee3f5422e7753da3507a89cfca59d058b8efe0450c706c662d92c")); }
+static inline nx_SchemaRef nx_schema_PageOfGameSession(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofgamesession"),1,nx_literal("b837621b170dca2cc453d7f9b1dd1108d6e2b08f4c220430671a844b48519996")); }
+static inline nx_SchemaRef nx_schema_PageOfGameVersion(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofgameversion"),1,nx_literal("20806130e997cc209856153faed7a893109b8226a54f9fbd32da7c9fe0527912")); }
+static inline nx_SchemaRef nx_schema_PageOfInstanceSummary(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofinstancesummary"),1,nx_literal("ab79ab59c6f24795ed0263cda960f7c4d41bf125bae8d224afa1eea908038f3f")); }
+static inline nx_SchemaRef nx_schema_PageOfJavaDistribution(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofjavadistribution"),1,nx_literal("b80dd340dacdf8b330543dae388a22cd8f7149feee55ad72dc87f5d7be949b2a")); }
+static inline nx_SchemaRef nx_schema_PageOfJavaRuntime(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofjavaruntime"),1,nx_literal("e2c6a4dbae331dcac5c6de7a77bcaa2ef39fdfa7372d0b6feee732b38e97141c")); }
+static inline nx_SchemaRef nx_schema_PageOfLaunchProfile(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageoflaunchprofile"),1,nx_literal("adf873bb7281ff6dcb8a1fab65fd8828b85b9dd9d12ce8f191237cf216583b68")); }
+static inline nx_SchemaRef nx_schema_PageOfLoaderVersion(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofloaderversion"),1,nx_literal("9f88c810da6a8272ebe547e51ec1827c2a0db8599850436fd38490ae49fa0060")); }
+static inline nx_SchemaRef nx_schema_PageOfManagedJavaOffer(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofmanagedjavaoffer"),1,nx_literal("a6c54be841a7fd3cfea87ba12b15b6df6f45e0bec7ac9be7b183602c8e806136")); }
+static inline nx_SchemaRef nx_schema_PageOfOperationRecord(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofoperationrecord"),1,nx_literal("7a587b90b5322187c3d64411502958c803d31903efbda2dc3ac260b8dbd07ca1")); }
+static inline nx_SchemaRef nx_schema_PageOfProviderDescriptor(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofproviderdescriptor"),1,nx_literal("7b0bb7bac341d71be9c178752022ef8bc718d43b37cf72a0b3a08b26395f24b0")); }
+static inline nx_SchemaRef nx_schema_PageOfPublicContract(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofpubliccontract"),1,nx_literal("6e91df27fdee434a795d7623998521c393bf01620af5599c8aa4209e729fe2db")); }
+static inline nx_SchemaRef nx_schema_PageOfRecoveryRecord(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofrecoveryrecord"),1,nx_literal("67903e684116ca6224e250c1eb053bf07d2d1e2f972bf65d58b67f1a57e371ec")); }
+static inline nx_SchemaRef nx_schema_PageOfRegistrationRef(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofregistrationref"),1,nx_literal("78952dfd1be36481031a50fbf910917b02c05fafa91d0cd23adc7712bfe3131c")); }
+static inline nx_SchemaRef nx_schema_PageOfRegistryDescriptor(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofregistrydescriptor"),1,nx_literal("0f19143ed791906ab1fc81aa0f994c7127ef1d05c2146df397b4ea920c45686e")); }
+static inline nx_SchemaRef nx_schema_PageOfRootRegistration(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofrootregistration"),1,nx_literal("4807102ab2a8e3cf340434cbea4c49053ed35c322392f7221262123fb638ead6")); }
+static inline nx_SchemaRef nx_schema_PageOfScheduleState(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofschedulestate"),1,nx_literal("7d41ffc578b1855711ec1ffdcab801c4a760653329825b36b0582e279d84e6db")); }
+static inline nx_SchemaRef nx_schema_PageOfSettingsProfile(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofsettingsprofile"),1,nx_literal("db753499e0b5adfba86792b9b31176bffa73ab4b8c4dfc811b5ca56940e06e1a")); }
+static inline nx_SchemaRef nx_schema_PageOfStorageEntry(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofstorageentry"),1,nx_literal("495a42d43effdd61b9f04c2d51532d71e901826aaf662201050cfcbc64bbaab1")); }
+static inline nx_SchemaRef nx_schema_PageOfThemeResource(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofthemeresource"),1,nx_literal("658113f47d11a3d607cd2810b074eb0b404d63e5da149bc4c3ec5f2b5c559928")); }
+static inline nx_SchemaRef nx_schema_PageOfThemeSummary(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofthemesummary"),1,nx_literal("2cb3be8480529f2ea8ce7b6646fec5b585b967cba21a7e7cfcc1dfff79176c11")); }
+static inline nx_SchemaRef nx_schema_PageOfUIViewContract(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofuiviewcontract"),1,nx_literal("5374d7aca60cf816df9eacb830801a3daccbc35893af0513225f0eeb400419d9")); }
+static inline nx_SchemaRef nx_schema_PageOfWorldSummary(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pageofworldsummary"),1,nx_literal("ada92fb5ded4d1437fd554365632e746b2123b2bff528461a77e3b9e3390fbcc")); }
 static inline nx_SchemaRef nx_schema_PageRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/pagerequest"),1,nx_literal("c91ffc50be926c0a585bafd621221b7ad7d41eb53f48938ba2e4e40361b82d02")); }
 static inline nx_SchemaRef nx_schema_PlanRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/planrequest"),1,nx_literal("861927ac6fbfd2395e744aa5ad733f0a2cd9d64a1d10a050610d0b37079fe20b")); }
 static inline nx_SchemaRef nx_schema_PlatformDescription(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/platformdescription"),1,nx_literal("23bb603c4a3316b71bb22ddd48dce21a3938b915519baed5b4426e9f88f06e05")); }
@@ -5516,6 +5567,7 @@ static inline nx_SchemaRef nx_schema_SignInChallenge(nx_writer *w) { return nx_S
 static inline nx_SchemaRef nx_schema_SignInContinue(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/signincontinue"),1,nx_literal("4570e5cde924caaa2f1778645bb9e743dc3d2176599dbbbe6989361a3b1db780")); }
 static inline nx_SchemaRef nx_schema_SignInRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/signinrequest"),1,nx_literal("849d7a38788b61639c5e8b5d42335d004181a47b85143718084c902e87d43d25")); }
 static inline nx_SchemaRef nx_schema_SkinRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/skinrequest"),1,nx_literal("5e541eae25a8135096760368e0cceaf8c47f61e4a891f8d3121fee945abae2a8")); }
+static inline nx_SchemaRef nx_schema_SnapshotOfDefinition(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/snapshotofdefinition"),1,nx_literal("c285efe5699c2764cb21ccff6bb1bcee0fb6ef7e8a4e1cd86a2e636a9e0077c6")); }
 static inline nx_SchemaRef nx_schema_SpanRef(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/spanref"),1,nx_literal("98fdc336736a7a5717bc501c2d9b2f55414a6bc6ff29173c86bf48b19588caa5")); }
 static inline nx_SchemaRef nx_schema_StateDescriptor(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/statedescriptor"),1,nx_literal("88bdccb4e4a470bf221010c4d1a86d686fe767fa8563b47fa81a8986914d372a")); }
 static inline nx_SchemaRef nx_schema_StateReadRequest(nx_writer *w) { return nx_SchemaRef_write(w,nx_literal("nexa:abi100/statereadrequest"),1,nx_literal("86191cf01097130b0cf597de1050d3d6827da46839f03e8b15eda6e51640c8a4")); }

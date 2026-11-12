@@ -139,7 +139,7 @@ the embedding Host still owns service/event scheduling and target authorization.
 `eng/build_wasm_sample.py` builds the example, every generated binding, a callback
 fixture and malformed-codec fixture. Set the four `NEXA_WASM_*` variables used in
 CI to enable those checks. The suite exercises all 368 operations for success and
-failure, 299 model/collection shapes, typed callbacks, Unicode/NUL/exact 64-bit
+failure, 300 model/collection shapes, typed callbacks, Unicode/NUL/exact 64-bit
 values and malformed data rejection. Fixture Host replies prove SDK contract
 behavior, not the availability of real launcher features. CI repeats these tests
 inside a NativeAOT executable on Windows, Linux and macOS.

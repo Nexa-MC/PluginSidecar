@@ -5,7 +5,7 @@ working launcher integration are distinct acceptance milestones.
 
 | Area | Implemented and tested | Remaining acceptance |
 | --- | --- | --- |
-| SDK | 33 groups, 346 new typed operations, 244 models; static schema fingerprints/validators; historical 22 slots retained | Desktop Host mapping and compatibility freeze |
+| SDK | 33 groups, 346 new typed operations, 245 models; static schema fingerprints/validators; historical 22 slots retained | Desktop Host mapping and compatibility freeze |
 | Loading | Authenticated independent worker, real authority, exact Make, phase leases, idempotency, dependency groups, atomic activation, hot-conflict stop closure and resource retirement | Production Market admission and persisted enablement |
 | Content | Wasm and static content packages share one registry; all 15 definition routes, trusted consumers, tags, resolved overlays, previews, watches, CAS and reference-protected deletion | Desktop/plugin consumer adapters, additional merge/deletion policies and product content scenarios |
 | Storage | Seven private namespace operations, durable atomic writes, transactions, CAS, ownership and restart tests | Workflow-backed migration and application key/storage policy |

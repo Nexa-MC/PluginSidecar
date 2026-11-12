@@ -4314,6 +4314,32 @@
         "name": "Entries",
         "type": "StorageEntry[]"
       }
+    ],
+    "BusinessProviderCall": [
+      {
+        "name": "Provider",
+        "type": "QualifiedId"
+      },
+      {
+        "name": "Kind",
+        "type": "QualifiedId"
+      },
+      {
+        "name": "Method",
+        "type": "string"
+      },
+      {
+        "name": "InputSchema",
+        "type": "SchemaRef"
+      },
+      {
+        "name": "OutputSchema",
+        "type": "SchemaRef"
+      },
+      {
+        "name": "Inputs",
+        "type": "AbiValue"
+      }
     ]
   },
   "groups": [

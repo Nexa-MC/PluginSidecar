@@ -1,5 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <PropertyGroup><Version>0.2.0-alpha.8</Version></PropertyGroup>
+  <PropertyGroup><Version>0.2.0-alpha.9</Version></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Nexa.Plugin.Sdk.Abi100/Nexa.Plugin.Sdk.Abi100.csproj" />
     <PackageReference Include="Wasmtime" Version="50.0.1" />

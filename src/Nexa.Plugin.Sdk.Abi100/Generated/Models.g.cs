@@ -3937,3 +3937,19 @@ public sealed record StorageMigrationOutput(ImmutableArray<global::Nexa.Plugin.S
         return new(DataCodec.ReadArray(DataCodec.Field(map, "entries"), (item, nestedDepth) => global::Nexa.Plugin.Sdk.Abi100.Data.StorageEntry.Read(item, nestedDepth), depth + 1));
     }
 }
+
+public sealed record BusinessProviderCall(global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId Provider, global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId Kind, string Method, global::Nexa.Plugin.Sdk.Abi100.Data.SchemaRef InputSchema, global::Nexa.Plugin.Sdk.Abi100.Data.SchemaRef OutputSchema, AbiValue Inputs) : IAbiData<BusinessProviderCall>
+{
+    public static AbiValue Write(BusinessProviderCall value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        ArgumentNullException.ThrowIfNull(value);
+        return DataCodec.Map(("provider", global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId.Write(value.Provider, depth + 1)), ("kind", global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId.Write(value.Kind, depth + 1)), ("method", DataCodec.WriteString(value.Method)), ("inputSchema", global::Nexa.Plugin.Sdk.Abi100.Data.SchemaRef.Write(value.InputSchema, depth + 1)), ("outputSchema", global::Nexa.Plugin.Sdk.Abi100.Data.SchemaRef.Write(value.OutputSchema, depth + 1)), ("inputs", DataCodec.WriteValue(value.Inputs)));
+    }
+    public static BusinessProviderCall Read(AbiValue value, int depth = 0)
+    {
+        using var scope = DataCodec.Enter(depth);
+        var map = DataCodec.ReadMap(value);
+        return new(global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId.Read(DataCodec.Field(map, "provider"), depth + 1), global::Nexa.Plugin.Sdk.Abi100.Data.QualifiedId.Read(DataCodec.Field(map, "kind"), depth + 1), DataCodec.ReadString(DataCodec.Field(map, "method")), global::Nexa.Plugin.Sdk.Abi100.Data.SchemaRef.Read(DataCodec.Field(map, "inputSchema"), depth + 1), global::Nexa.Plugin.Sdk.Abi100.Data.SchemaRef.Read(DataCodec.Field(map, "outputSchema"), depth + 1), DataCodec.ReadValue(DataCodec.Field(map, "inputs")));
+    }
+}

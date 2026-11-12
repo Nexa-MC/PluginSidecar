@@ -67,6 +67,9 @@ internal static class SurfaceTests
         Invalid(() => DataCodec.Validate(nested));
         var snap = new Snapshot<EntityRequest>(new(new("stable-instance-id")), new("opaque:revision"), 3, DateTimeOffset.Parse("2026-11-11T01:00:00+08:00"));
         Check(Snapshot<EntityRequest>.Read(Snapshot<EntityRequest>.Write(snap)) == snap);
+        Check(Abi100Schemas.Validate(Abi100Schemas.PageOfCatalogProject, Fixture("Page<CatalogProject>")));
+        Check(!Abi100Schemas.Validate(Abi100Schemas.PageOfCatalogProject, Fixture("Page<CatalogVersion>")));
+        Check(!Abi100Schemas.Validate(Abi100Schemas.PageOfCatalogProject with { Digest = "wrong" }, Fixture("Page<CatalogProject>")));
         var scope = new FileRef(Guid.NewGuid(), Guid.NewGuid(), "chosen-directory");
         Check(FileRef.Read(FileRef.Write(scope)) == scope);
         var u64 = new RegistrationRef(ulong.MaxValue, "plugin", Guid.NewGuid(), new("example:entry"), RegistrationState.Staged);

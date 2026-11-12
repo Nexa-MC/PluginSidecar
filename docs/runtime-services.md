@@ -106,7 +106,7 @@ service binding, state CAS/watch, event delivery, task ownership, action
 idempotency, workflow branching/early return/cancellation, rollback and stop
 closures. A separate test restarts the Host and resumes a checkpoint, then proves
 that an uncertain effect is not executed again. These run under NativeAOT too.
-C/Wasm conformance independently covers all 368 current/legacy SDK slots and 299
+C/Wasm conformance independently covers all 368 current/legacy SDK slots and 300
 model/collection shapes; that count is not a claim of 368 launcher integrations.
 
 On Windows, the Wasm adapter uses explicit trap checks (`WithSignalsBasedTraps(false)`).

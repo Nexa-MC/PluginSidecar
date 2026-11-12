@@ -5,10 +5,10 @@ English | [简体中文](README.zh-CN.md)
 NexaCL plugin contracts and SDK for derivative developers and contributors.
 The current design is [Plugin ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md).
 
-## SDK 0.2.0-alpha.8
+## SDK 0.2.0-alpha.9
 
 - `Nexa.Plugin.Bootstrap.V1`: unified ABIContext, required/optional capability negotiation, six loading stages, activation/cleanup callbacks, errors and Host commit ports.
-- `Nexa.Plugin.Sdk.Abi100`: 33 capability groups, 346 new typed operations, 244 data models, bounded codecs, opaque IDs/revisions, and the 22 previous preview dispatch slots.
+- `Nexa.Plugin.Sdk.Abi100`: 33 capability groups, 346 new typed operations, 245 data models, bounded codecs, opaque IDs/revisions, and the 22 previous preview dispatch slots.
 - `Nexa.Plugin.MarketDelivery`: signed encrypted delivery verification and an offline cache; independent package version `0.1.0-alpha.1`.
 - `Nexa.Plugin.Hosting`: capability authority, dependency-group loading, atomic definitions and durable private storage, runtime state/events/services and durable workflow checkpoints.
 - `PluginSidecar.WasmRuntime` / `PluginSidecar.Packages`: import-free Wasm execution, authenticated package parsing and declarative content entries.
@@ -52,7 +52,7 @@ dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 
 Run `python eng/package_sdk.py` for the standalone C/Wasm SDK ZIP. The managed SDK
 NuGet package also includes its schemas and C headers. Cross-language tests cover
-all 368 calls and 299 model/collection shapes, including callbacks and malformed
+all 368 calls and 300 model/collection shapes, including callbacks and malformed
 wire values. These tests exercise SDK semantics against explicit test Host ports.
 
 CI also packs Hosting, WasmRuntime, Packages and the trusted development
@@ -60,7 +60,7 @@ RuntimeAdapter with their versioned dependencies. Host embedders can use those
 packages without a private project reference.
 
 Use `artifacts/packages` as a local NuGet source and reference
-`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.8`. Edit
+`Nexa.Plugin.Sdk.Abi100` version `0.2.0-alpha.9`. Edit
 [contracts/abi100.json](contracts/abi100.json), then run the generator without
 `--verify`; do not edit generated sources. CI checks reproducibility on all three
 supported operating systems. The managed sample demonstrates Get/Make negotiation and
@@ -86,3 +86,5 @@ NativeAOT. Desktop business adapters, UI consumers and other remaining
 items are tracked explicitly in the [acceptance status](docs/roadmap.md).
 
 See [Desktop integration](docs/desktop-integration.md) for the authenticated worker, package UI references and the runnable Desktop example.
+
+[Business provider callback contract / 业务 Provider 回调契约](docs/business-providers.md)

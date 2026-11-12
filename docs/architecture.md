@@ -338,3 +338,20 @@ confirmation. A concurrent write, cancellation, retired load or invalid output l
 old schema/data intact. A successful migration retires all prior namespace/transaction
 handles and returns a fresh namespace handle. The existing Storage.Migrate signature is
 retained; only its callback data models are added.
+
+## Typed business-provider callbacks
+
+Business providers retain the original ProviderDescriptor and receive an additive
+BusinessProviderCall envelope: provider identity/kind, method, exact input/output
+schemas and typed input. Host adapters supply the method table and validation; a
+plugin cannot choose arbitrary callbacks or claim a built-in provider identity.
+Registrations use the existing staged registry and release ledger, become visible
+only after activation, and retire with their load. Read providers execute through
+the coordinator's query-only probe boundary. They cannot use catalog queries to
+perform nested business mutations. Callback results must match the Host's expected
+schema and the provider instance remains held until callback completion.
+
+Provider callback failures map to PROVIDER_UNAVAILABLE under the Unavailable policy;
+FailOperation preserves the callback error code. Neither policy retries effects.
+Closed Page/ Snapshot schema helpers are generated additively; existing model schema
+fingerprints and operation numbers remain unchanged.

@@ -4,6 +4,7 @@ await EndToEndTests.Run();
 await DefinitionTests.Run();
 await RuntimeServicesTests.Run();
 await ServiceProbeTests.Run();
+await BusinessProviderTests.Run();
 await ActionConfirmationTests.Run();
 await ScheduleWorkflowTests.Run();
 await DurableEventTests.Run();
