@@ -4,6 +4,21 @@ namespace Nexa.Plugin.Hosting;
 
 public sealed partial class PluginRuntimeServices
 {
+    internal Func<HostInvocation,Func<CancellationToken,ValueTask>,RegistrationRef> RegisterHostCleanupCore = null!;
+    /// <summary>Registers an owned Host resource for explicit release and automatic load cleanup.</summary>
+    public RegistrationRef RegisterHostCleanup(HostInvocation caller, string permission, Func<CancellationToken,ValueTask> cleanup)
+    {
+        ArgumentNullException.ThrowIfNull(cleanup);
+        if (!_authorize(caller.Identity, permission)) throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
+        return RegisterHostCleanupCore(caller, cleanup);
+    }
+    /// <summary>Releases an owned Host resource through the same cleanup ledger as Resources.Release.</summary>
+    public async ValueTask ReleaseHostCleanup(HostInvocation caller, string permission, RegistrationRef reference)
+    {
+        if (!_authorize(caller.Identity, permission)) throw new AbiHostException(AbiErrors.PERMISSION_DENIED);
+        if (!await ReleaseCleanup(caller, reference).ConfigureAwait(false)) throw new AbiHostException(AbiErrors.HANDLE_EXPIRED);
+    }
+
     /// <summary>Trusted Host route only. The outer capability handler already checked this method's permission.</summary>
     public SubscriptionRef CreateHostSubscription(HostInvocation caller, string contract, string permission,
         AbiValue initial, int limit = 256)

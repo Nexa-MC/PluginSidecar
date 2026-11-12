@@ -245,6 +245,14 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
     }
     private static async ValueTask RunRegisteredCleanup(Attempt member)
     {
+        HostCleanup[] hostCleanups;
+        lock(member.Callbacks) { hostCleanups=member.HostCleanups.Values.Reverse().ToArray(); member.HostCleanups.Clear(); }
+        using(var hostDeadline=new CancellationTokenSource(StageBudgets.Cleanup))
+            foreach(var cleanup in hostCleanups)
+            {
+                var result=await InvokeHostCleanup(member,cleanup,hostDeadline.Token).ConfigureAwait(false);
+                if(!result.Success)member.Cleanup.Add(result.Error!);
+            }
         CallbackHandle[] cleanupHandles;
         lock(member.Callbacks) cleanupHandles=member.CleanupCallbacks.AsEnumerable().Reverse().ToArray();
         using var deadline = new CancellationTokenSource(StageBudgets.Cleanup);
@@ -299,6 +307,7 @@ public sealed partial class PluginLoadCoordinator(CapabilityAuthority authority,
         internal List<AbiError> Cleanup = [];
         internal List<Finding> Diagnostics = [];
         internal Dictionary<ulong, Func<AbiValue, InvocationOptions, ValueTask<AbiReply<AbiValue>>>> Callbacks = [];
+        internal Dictionary<ulong, HostCleanup> HostCleanups = [];
         internal List<CallbackHandle> CleanupCallbacks = [];
         internal Dictionary<ulong,Nexa.Plugin.Sdk.Abi100.Data.RegistrationRef> CleanupRegistrations=[];
         internal ulong NextCallback;

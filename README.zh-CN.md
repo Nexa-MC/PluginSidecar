@@ -5,7 +5,7 @@
 面向衍生开发者和贡献者的 NexaCL 插件契约与 SDK。当前设计依据为
 [插件 ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md)。
 
-## SDK 0.2.0-alpha.6
+## SDK 0.2.0-alpha.7
 
 - `Nexa.Plugin.Bootstrap.V1`：统一 ABIContext、必需/可选能力协商、六阶段加载、激活/清理回调、结构化错误和 Host 提交接口。
 - `Nexa.Plugin.Sdk.Abi100`：33 个能力分组、342 个新增类型化操作、239 个数据模型、有界编解码、不透明 ID/版本，并保留之前 22 个预览调用槽位。
@@ -35,7 +35,7 @@ dotnet pack src/Nexa.Plugin.Bootstrap.V1 -c Release -o artifacts/packages
 dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 ```
 
-修改 `contracts/abi100.json` 后运行生成器，不直接修改生成文件；CI 会检查生成结果一致性。将 `artifacts/packages` 加入本地 NuGet 源，即可引用 `0.2.0-alpha.6` SDK。
+修改 `contracts/abi100.json` 后运行生成器，不直接修改生成文件；CI 会检查生成结果一致性。将 `artifacts/packages` 加入本地 NuGet 源，即可引用 `0.2.0-alpha.7` SDK。
 
 生命周期回调使用 `abi.ForStage100(stage)`；运行期使用 `abi.AsAbi100()`。
 `api.TryGet<Network100>()` 返回能力或结构化错误；`IsAvailable` 提供便捷检查。
@@ -53,7 +53,7 @@ SHA-256 清单打入 `artifacts/packages`；三平台 CI 会执行验证并上�
 
 CI 同时打包 Hosting、WasmRuntime、Packages 和仅用于可信开发的 RuntimeAdapter，并包含版本化依赖；宿主开发者无需直接引用本仓库源码项目。
 
-SDK 版本为 `0.2.0-alpha.6`。`python eng/package_sdk.py` 生成独立 C/Wasm SDK ZIP；C# NuGet 包也包含契约 schema 和 C 头文件。跨语言测试覆盖全部 364 个调用和 293 类模型/集合，并检查回调生命周期、错误传播及非法编码。测试中的 Host 业务端口是明确的测试端口，SDK 完整不代表启动器所有业务功能已经接通。
+SDK 版本为 `0.2.0-alpha.7`。`python eng/package_sdk.py` 生成独立 C/Wasm SDK ZIP；C# NuGet 包也包含契约 schema 和 C 头文件。跨语言测试覆盖全部 364 个调用和 293 类模型/集合，并检查回调生命周期、错误传播及非法编码。测试中的 Host 业务端口是明确的测试端口，SDK 完整不代表启动器所有业务功能已经接通。
 
 完整测试需先运行 `python eng/build_wasm_sample.py --clang /path/to/clang`，再设置 `NEXA_WASM_SAMPLE`、`NEXA_WASM_CONFORMANCE`、`NEXA_WASM_CALLBACK`、`NEXA_WASM_CODEC` 指向 `artifacts/wasm-sample` 中对应的 `plugin.zip`、`conformance.wasm`、`callback.wasm`、`codec.wasm`。CI 自动构建并执行这些测试。
 

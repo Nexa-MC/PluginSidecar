@@ -30,7 +30,14 @@ internal static class ResourceRuntimeTests
             using(var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(5)))
                 while(true){var released=await api.Resources.Release(new(entry.Action),Options());if(released.Success)break;Check(released.Error?.Code==AbiErrors.CONFLICT);await Task.Delay(5,timeout.Token);}
             Check((await api.Actions.Describe(new(new("owner:action")),Options())).Error?.Code==AbiErrors.NOT_FOUND);
-            await host.StopAsync("owner");Check(entry.Trace.SequenceEqual(["stop","b","a"]));
+            int hostReleased=0;
+            var caller=new HostInvocation(entry.Context!.Info.Identity,Guid.Empty,"Active",Options());
+            var hostResource=host.Services.RegisterHostCleanup(caller,"nexa.resources.write",_=>{hostReleased++;return ValueTask.CompletedTask;});
+            Check((await api.Resources.Release(new(hostResource with {DefinitionId=new("owner:forged")}),Options())).Error?.Code==AbiErrors.HANDLE_OWNER_MISMATCH);
+            Ok(await api.Resources.Release(new(hostResource),Options()));Check(hostReleased==1);
+            Check(!(await api.Resources.Release(new(hostResource),Options())).Success);
+            host.Services.RegisterHostCleanup(caller,"nexa.resources.write",_=>{hostReleased++;return ValueTask.CompletedTask;});
+            await host.StopAsync("owner");Check(hostReleased==2);Check(entry.Trace.SequenceEqual(["stop","b","a"]));
             var explicitEntry=new Entry(){ReleaseA=true};Check((await host.LoadAsync([explicitEntry.Source()])).Single().State==LoadState.Active);using var explicitApi=explicitEntry.Context!.AsAbi100();
             Ok(await explicitApi.Resources.Release(new(explicitEntry.CleanupA!),Options()));Check(explicitEntry.Trace.SequenceEqual(["a"]));
             await host.StopAsync("owner");Check(explicitEntry.Trace.SequenceEqual(["a","stop","b"]));

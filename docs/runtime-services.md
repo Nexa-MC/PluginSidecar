@@ -228,3 +228,12 @@ and Checkup findings and required dependency IDs. Findings are bounded and prese
 in the final trusted load report, including failed group loads. Other plugins'
 private findings are not exposed. Service probes also protect their predicate
 registration from release while referenced.
+
+### Host-managed cleanup
+
+`RegisterHostCleanup` and `ReleaseHostCleanup` are trusted embedding ports, not
+guest methods. Registration requires an admitted caller and its declared permission.
+The returned reference is owned by that exact load, can be released through the
+existing `Resources.Release`, and is automatically cleaned up on abort or stop.
+Host callbacks occupy a separate namespace from guest callback handles. A failed
+or timed-out cleanup is reported; its effect is never retried automatically.

@@ -322,3 +322,11 @@ requires the admitted context/capability; publication and callbacks remain permi
 and load scoped. Retirement releases queues and cancels operations. This lets Desktop
 UI and domain services use the existing Resources/Tasks APIs rather than parallel
 subscription or operation stores.
+
+## Trusted Host resource lifetimes
+
+Host adapters can register asynchronous cleanup in the existing admitted load
+lifetime. These registrations share the global registration-handle allocator and
+the Resources.Release operation, but keep callbacks separate from guest callback
+handles. Owner checks, bounded registration counts, explicit release, load abort
+and stop all apply. No numeric guest method or transport changes are introduced.
