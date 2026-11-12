@@ -11,6 +11,24 @@ resource and presentation owner. Its encrypted catalog takes an asynchronous key
 protection port, with no dependency on launcher account implementation classes.
 Migration of business and UI adapters must complete before the Beta release.
 
+`PluginSidecar.Business` now owns the SDK-to-launcher business adapters. It uses
+only the versioned `Nexa.Sidecar.Host.Contracts` package, never launcher service
+assemblies. The base client supplies ordinary domain routers and public state;
+the independent effects client supplies credential-free account eligibility and
+refresh, Java, power, preflight, public settings policy, game process cancellation,
+and world snapshot lists. Guest identities, permissions, confirmation, plans,
+opaque resources, callback providers, subscriptions and revisions remain local
+to the Sidecar. Host state loss invalidates the cached projection; stale account
+revisions cannot select a replacement account. The worker executable has not yet
+switched to this application/business composition. Theme, platform and dynamic
+presentation ports and complete parity verification remain required for cutover.
+
+The business tests run without any `Nexa.Services` assemblies in both managed and
+NativeAOT modes. They exercise caller isolation, revision fencing, cancellation
+routing, state-loss recovery and plugin retirement. These focused tests are not a
+claim that every SDK feature has been migrated to the independent worker.
+
+
 Bootstrap 1 is a preview managed entry contract intended to freeze at formal publication. ABI 100 is a separate SDK package; future versions must not extend Bootstrap interfaces with version-specific members. The uploaded proposal is preserved under specifications as design input, not an assertion of implemented behavior.
 
 Decision: Host communication uses the existing NexaCL Sidecar binary ABI, authenticated transport and generated numeric dispatch. The proposal's JSON envelope, transport numbering and JSON framing are NOT adopted. No new wire IDs are allocated by this SDK. A Host adapter must map these logical calls to reviewed upstream operations. Existing Host binaries do not yet implement this new loading contract.

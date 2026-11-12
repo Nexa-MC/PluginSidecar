@@ -1,0 +1,119 @@
+using System.Collections.Immutable;
+using Nexa.Plugin.Bootstrap.V1;
+using Nexa.Plugin.Hosting;
+using Nexa.Plugin.Sdk.Abi100;
+using Nexa.Plugin.Sdk.Abi100.Data;
+using Nexa.Xsr;
+using Nexa.Xsr.Runtime;
+using PluginSidecar.Application;
+using PluginSidecar.Business;
+using Host = Nexa.Sidecar.Host.Data;
+using Effects = Nexa.Sidecar.Host.Effects.Data;
+
+await BusinessTests.Run();
+internal static class BusinessTests
+{
+    internal static void Check(bool value, [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(value))] string? expression = null)
+    { if (!value) throw new InvalidOperationException("Business boundary: " + expression); }
+    internal static T Ok<T>(AbiReply<T> result) => result.Success ? result.Value : throw new InvalidOperationException(result.Error!.Code);
+    internal static InvocationOptions Options() => new(Guid.NewGuid(), TimeSpan.FromSeconds(5), default) { IdempotencyKey = Guid.NewGuid().ToString("N") };
+    internal static async Task Run()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "plugin-business-" + Guid.NewGuid().ToString("N"));
+        bool unavailable = false;
+        var process = new Host.MinecraftProcessSnapshot(Guid.NewGuid(), "instance", 42, Host.MinecraftProcessState.Running, null, DateTimeOffset.UtcNow, null)
+        { InstanceDirectory = Path.Combine(root, "games/versions/instance"), GameDirectory = Path.Combine(root, "games"), GameWindowConfirmed = false, LauncherVisibility = Host.MinecraftLauncherVisibility.Keep, WindowTitle = "" };
+        var snapshot = new Host.SidecarPublicState(-1, null, 4, [new(0, "player", "", Host.LaunchProfileKind.Microsoft, "uuid", "", "", null, "")],
+            8, [process], -1, null, -1, null, -1, null, -1);
+        var state = new SidecarBusinessState(token =>
+        {
+            token.ThrowIfCancellationRequested();
+            return ValueTask.FromResult(unavailable ? XsrResult.Failure<Host.SidecarPublicState>(new(XsrErrorKind.Unavailable, XsrSemanticId.Parse("xsr.unavailable"), "Lost")) : XsrResult.Success(snapshot));
+        });
+        var observer = new Observer();
+        var empty = new XsrCommandRouterBuilder().Build(observer);
+        var confirm = new Allow();
+        try
+        {
+            await using var business = new PluginBusinessRoutes(state, empty, empty);
+            XsrQueryRouterBuilder queries = new(); XsrCommandRouterBuilder commands = new();
+            queries.Register<Effects.HostEmptyRequest, Effects.HostSettingsDefinitions>(Effects.SidecarEffectsRoutes.SettingsDefinitions,
+                (_, _) => ValueTask.FromResult(XsrResult.Success(new Effects.HostSettingsDefinitions([], "instance"))));
+            long checkedRevision = -1;
+            queries.Register<Effects.HostAccountRequest, Effects.HostAccountEligibility>(Effects.SidecarEffectsRoutes.AccountEligibility,
+                (request, _) => { checkedRevision = request.ExpectedRosterRevision; Check(request.Index == 0); return ValueTask.FromResult(XsrResult.Success(new Effects.HostAccountEligibility(true, true))); });
+            queries.Register<Effects.HostEmptyRequest, Effects.HostPowerState>(Effects.SidecarEffectsRoutes.Power,
+                (_, _) => ValueTask.FromResult(XsrResult.Success(new Effects.HostPowerState(true, 60, false))));
+            var stopped = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
+            commands.Register<Effects.MinecraftCancelProcessCommand>(Effects.MinecraftRouteIds.ProcessCancel,
+                (request, _) => { stopped.TrySetResult(request.SessionId); return ValueTask.FromResult(XsrResult.Success()); });
+            business.BindEffects(commands.Build(observer), queries.Build(observer));
+            business.BindConfirmation(confirm);
+            await using var app = new PluginApplication(root, (_, _) => throw new InvalidOperationException("Test sources use their own bootstrap factory"),
+                business.Routes, confirm, (_, _) => { }, (_, _) => { }, _ => { });
+            business.BindApplication(app); business.Bind(app.Runtime.Services);
+            var first = new Entry("first"); var second = new Entry("second");
+            Check((await app.Runtime.LoadAsync([first.Source(), second.Source()])).All(report => report.State == LoadState.Active));
+            using var api = first.Context!.AsAbi100(); using var other = second.Context!.AsAbi100();
+            var account = Ok(await api.Accounts.List(new(null, 32), Options())).Items.Single();
+            var eligibility = Ok(await api.Accounts.ReadLaunchEligibility(new(account.Id), Options()));
+            Check(eligibility.Allowed && checkedRevision == 4 && eligibility.Reasons.Length == 1);
+            Check(!(await other.Accounts.ReadPublic(new(account.Id), Options())).Success);
+            var power = Ok(await api.Platform.QueryPower(new(), Options()));
+            Check(power.OnBattery && power.ChargePercent == 60);
+            var session = Ok(await api.Minecraft.Processes.ListSessions(new(null, 32), Options())).Items.Single();
+            var watch = Ok(await api.Minecraft.Processes.WatchSession(new(session.Id, null, Abi100Schemas.GameSession), Options()));
+            _ = Ok(await api.Resources.ReadSubscription(new(watch, 32), Options()));
+            Check((await api.Minecraft.Processes.Stop(new(session.Id), Options())).Success);
+            Check(await stopped.Task.WaitAsync(TimeSpan.FromSeconds(5)) == process.SessionId);
+            snapshot = snapshot with { ProcessesRevision = 9, Processes = [process with { State = Host.MinecraftProcessState.Exited, ExitCode = 0 }] };
+            await state.RefreshAsync();
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            while (true)
+            {
+                var changes = Ok(await api.Resources.ReadSubscription(new(watch, 32), Options()));
+                if (changes.Items.Any(value => value is not AbiValue.Null && !GameSession.Read(value).Running)) break;
+                await Task.Delay(5, deadline.Token);
+            }
+            unavailable = true;
+            try { await state.RefreshAsync(); throw new InvalidOperationException("Lost state accepted"); } catch (AbiHostException) { }
+            Check(!state.TryRead(out _) && !business.DeveloperEnabled);
+            Check(!(await api.Accounts.ReadPublic(new(account.Id), Options())).Success);
+            unavailable = false; snapshot = snapshot with { AccountsRevision = 5 };
+            await state.RefreshAsync();
+            Check(!(await api.Accounts.ReadPublic(new(account.Id), Options())).Success);
+            Check(Ok(await api.Accounts.List(new(null, 32), Options())).Items.Single().Id != account.Id);
+            await app.Runtime.StopAsync("first");
+            Check(!(await api.Platform.QueryPower(new(), Options())).Success);
+            Check((await other.Platform.QueryPower(new(), Options())).Success);
+        }
+        finally { await state.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
+        Check(!AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetName().Name?.StartsWith("Nexa.Services", StringComparison.Ordinal) == true));
+        Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, revision fencing, lost-state recovery and retirement.");
+    }
+    private sealed class Observer : IXsrDispatchObserver { public void OnCompleted(XsrDispatchObservation observation) { } }
+    private sealed class Allow : IActionConfirmation
+    { public ValueTask<bool> ConfirmAsync(ActionConfirmationRequest request, CancellationToken cancellation) => ValueTask.FromResult(true); }
+    private sealed class Entry(string id) : IPluginBootstrapV1
+    {
+        internal ABIContext? Context;
+        private static readonly ImmutableArray<string> Permissions = ["nexa.accounts.read", "nexa.minecraft.processes.read", "nexa.minecraft.processes.write", "nexa.platform.read", "nexa.tasks.read", "nexa.tasks.write", "nexa.resources.read", "nexa.resources.write"];
+        internal PluginLoadSource Source() => new(new(1, id, "1.0.0", 1, new("test", "test"), new([], [], "fixture"), [100], [], [], [], Permissions, []),
+            Permissions, _ => ValueTask.FromResult<IPluginBootstrapV1>(this), () => ValueTask.CompletedTask);
+        public async ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext context)
+        {
+            var draft = new Abi100Draft(Ok(await context.Negotiator.GetABIContext(100, Options())))
+                .Require("nexa.accounts/100").Require("nexa.minecraft.processes/100").Require("nexa.platform/100").Require("nexa.tasks/100").Require("nexa.resources/100");
+            Context = Ok(await draft.Make(context.Negotiator, Guid.NewGuid(), Permissions, default));
+            return AbiReply<PreInitResult>.Ok(new(Context, [], [], [], []));
+        }
+        public ValueTask<AbiReply<Unit>> OnInitialize(ABIContext context, StageContext stage) => Done();
+        public ValueTask<AbiReply<Unit>> OnPostInitialize(ABIContext context, StageContext stage) => Done();
+        public ValueTask<AbiReply<CheckupResult>> OnCheckup(ABIContext context, StageContext stage) => ValueTask.FromResult(AbiReply<CheckupResult>.Ok(new(CheckupStatus.Passed, [], [])));
+        public ValueTask<AbiReply<Unit>> OnFinalize(ABIContext context, StageContext stage) => Done();
+        public ValueTask<AbiReply<Unit>> OnActivated(ABIContext context, InvocationContext invocation) => Done();
+        public ValueTask<AbiReply<Unit>> OnStop(StopContext context) => Done();
+        public ValueTask<AbiReply<Unit>> OnAbort(AbortContext context) => Done();
+        private static ValueTask<AbiReply<Unit>> Done() => ValueTask.FromResult(AbiReply<Unit>.Ok(new()));
+    }
+}
