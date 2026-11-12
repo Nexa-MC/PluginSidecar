@@ -20,5 +20,18 @@ actual=subprocess.check_output(['git','-C',str(checkout),'rev-parse','HEAD'],tex
 if actual!=spec['commit']:raise SystemExit('Host reference does not match lock.')
 environment=os.environ.copy()
 if args.dotnet!='dotnet':environment['PATH']=str(Path(args.dotnet).resolve().parent)+os.pathsep+environment.get('PATH','')
-subprocess.run([sys.executable,'eng/packages/build.py','--output',str(feed)],cwd=checkout,env=environment,check=True)
+# The pinned Host revision may allow SDK feature/patch roll-forward even though
+# its package manifest requires exact compiler bytes. New runner images must not
+# silently choose a newer SDK. Override SDK selection only for this build and
+# restore the pinned source file even when the build fails.
+selection=checkout/'global.json'
+original=selection.read_bytes() if selection.exists() else None
+package_spec=json.loads((checkout/'eng/packages/manifest.json').read_text())
+if package_spec['version']!=spec['packagesVersion']:raise SystemExit('Host package version does not match lock.')
+try:
+ selection.write_text(json.dumps({'sdk':{'version':package_spec['sdk'],'rollForward':'disable','allowPrerelease':False}})+'\n')
+ subprocess.run([sys.executable,'eng/packages/build.py','--output',str(feed)],cwd=checkout,env=environment,check=True)
+finally:
+ if original is None:selection.unlink(missing_ok=True)
+ else:selection.write_bytes(original)
 print(feed)
