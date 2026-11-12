@@ -1,6 +1,7 @@
+if (args is ["--key-protection-only"]) { await KeyProtectionTests.Run(); return; }
 if (args is ["--remote-only"]) { await RemoteExecutionTests.Run(); return; }
-if (args is ["--application-only"]) { await ApplicationTests.Run(); return; }
-await ApplicationTests.Run();
+if (args is ["--application-only"]) { await KeyProtectionTests.Run(); await ApplicationTests.Run(); return; }
+await KeyProtectionTests.Run(); await ApplicationTests.Run();
 await WasmTests.Run();
 await EndToEndTests.Run();
 await DefinitionTests.Run();

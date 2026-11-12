@@ -32,6 +32,17 @@ Retirement cancels pending queries before awaiting watch workers, and repeated
 disposal awaits the same cleanup task. A missing settings revision clears
 developer mode instead of retaining a previous authorization decision.
 
+The production catalog key protector belongs to Sidecar. New Windows records use
+current-user DPAPI with catalog-specific entropy; Unix records use AES-GCM with
+keys kept in the OS key store under a separate PluginSidecar namespace. Key-store
+failure never falls back to a plaintext key file. Legacy Host catalog envelopes
+(Windows format 1 and Unix format 2) remain readable with their original OS scope;
+new writes use formats 3 and 4 respectively. Only 32-byte catalog encryption keys
+enter this internal port. Plugin guests cannot request protection or unprotection.
+This preserves record compatibility without importing launcher account services.
+The worker still needs the correct catalog directory before offline restoration
+can be enabled in its production composition.
+
 
 Bootstrap 1 is a preview managed entry contract intended to freeze at formal publication. ABI 100 is a separate SDK package; future versions must not extend Bootstrap interfaces with version-specific members. The uploaded proposal is preserved under specifications as design input, not an assertion of implemented behavior.
 

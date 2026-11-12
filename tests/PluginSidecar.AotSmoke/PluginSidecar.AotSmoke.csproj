@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><OutputType>Exe</OutputType><IsAotCompatible>true</IsAotCompatible></PropertyGroup>
-  <ItemGroup><Compile Include="../PluginSidecar.Tests/ApplicationTests.cs" Link="ApplicationTests.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="../PluginSidecar.Tests/KeyProtectionTests.cs" Link="KeyProtectionTests.cs" /><Compile Include="../PluginSidecar.Tests/ApplicationTests.cs" Link="ApplicationTests.cs" /></ItemGroup>
   <ItemGroup><Compile Include="../PluginSidecar.Tests/RemoteExecutionTests.cs" Link="RemoteExecutionTests.cs" />
     <ProjectReference Include="../../src/PluginSidecar.Packages/PluginSidecar.Packages.csproj" />
     <Compile Include="../PluginSidecar.Tests/EndToEndTests.cs" Link="EndToEndTests.cs" />

@@ -3,14 +3,15 @@ using Nexa.Plugin.Bootstrap.V1;
 using Nexa.Plugin.Sdk.Abi100;
 using PluginSidecar.RuntimeAdapter;
 
+if (args is ["--key-protection-only"]) { await KeyProtectionTests.Run(); return; }
 if (args is ["--remote-only"]) { await RemoteExecutionTests.Run(); return; }
-if (args is ["--application-only"]) { await ApplicationTests.Run(); return; }
+if (args is ["--application-only"]) { await KeyProtectionTests.Run(); await ApplicationTests.Run(); return; }
 
 static void Assert(bool value) { if (!value) throw new InvalidOperationException("Contract assertion failed."); }
 Assert(!AbiVersions.IsStable(0) && !AbiVersions.IsStable(101) && !AbiVersions.IsStable(150));
 Assert(AbiVersions.IsStable(100) && AbiVersions.IsStable(200));
 await MarketOfflineTests.Run();
-await ApplicationTests.Run();
+await KeyProtectionTests.Run(); await ApplicationTests.Run();
 await ContextTests.Run();
 await SurfaceTests.Run();
 await AuthorityTests.Run();
