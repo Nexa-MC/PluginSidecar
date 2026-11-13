@@ -38,14 +38,14 @@ public static class PluginViewCompiler
         }
     }
 
-    public static PluginPreparedView Prepare(PluginPage page)
+    public static PluginPreparedView Prepare(PluginPage page, string publicationEpoch = "")
     {
         ValidatePage(page.Source);
         var model = ReadModel(page.Model);
         var original = new NxmlExtensionProgram("page.nxml", new Dictionary<string, string> { ["page.nxml"] = page.Source }).Compile(model);
         if (original.Root.Root.Role != XsrUiSemanticRole.Page) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         ValidateCompiled(original.Root.Root, "ui.plugin.action");
-        string scope = "Plugin_" + Hash(page.Owner.PluginId + ":" + page.Owner.LoadInstanceId.ToString("N") + ":" + page.Page.Id.Value);
+        string scope = "Plugin_" + Hash(page.Owner.PluginId + ":" + page.Owner.LoadInstanceId.ToString("N") + ":" + page.Page.Id.Value + ":" + publicationEpoch);
         string aliasPrefix = "nx_" + scope + ".";
         if (model.Keys.Any(key => key.StartsWith(aliasPrefix, StringComparison.Ordinal))) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         Dictionary<string, string> inputs = new(StringComparer.Ordinal), actions = new(StringComparer.Ordinal);

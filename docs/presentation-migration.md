@@ -56,6 +56,60 @@ identities, forbidden markup, and a real Wasm action through confirmation and
 terminal task completion. The test also rejects any loaded Desktop, Avalonia or
 `Nexa.Services` assembly.
 
-Production publication, management UI, dialogs, contributions, shortcuts, drawing
-and lifecycle visibility events remain to be composed and verified. These tests
+The ordinary-page publisher below is implemented. Production worker composition,
+management UI, dialogs, contributions, shortcuts and drawing remain to be composed
+and verified. These tests
 do not authorize removing the old Desktop controller or publishing SDK Beta.
+
+## Owning publication
+
+`PluginPagePublisher` is the sole presentation writer for its Sidecar session.
+Call `SynchronizeAsync` after activation, model changes, registration retirement
+and plugin stop. It publishes at most 32 ordinary pages, sorted by qualified page
+ID. It validates the complete candidate against the Host's source/model budgets
+before sending it. Advanced contributions, dialogs and drawing are not included
+in this ordinary-page publisher.
+
+The publisher distinguishes source replacement from model updates. Source-set
+changes rotate a publication epoch for every page, so delayed commands from an old
+source set cannot resolve to a new action. Model updates keep the epoch, source
+and control identities, preserving drafts. Typed model changes that produce the
+same display text still replace the local action model without a redundant Host
+write.
+
+A mutation may have reached the Host even when its response is lost or cancelled.
+In that case, the publisher stops admitting actions and discards its assumed Host
+revision. The next explicit synchronization rereads the revision and replaces the
+complete source set with a new epoch. It never automatically replays navigation
+or a guest action. Recovery therefore does not mean the previous action ran twice.
+
+Use `SetOpenAsync` with the exact active `PluginIdentity` and page ID. The
+publisher resolves them locally to an owned document index. Periodically call
+`ReportVisibilityAsync` to feed actual Host visibility into the application's
+existing view lifecycle subscriptions. Route generated DTO command payloads to
+`InvokeActionAsync`; it checks the current published token, active load and active
+page declaration before invoking the ordinary action pipeline. Its result is an
+`OperationRef`; observe that operation for terminal success or failure.
+
+Disposing the publisher cancels outstanding Host work and rejects late callers.
+The process/session owner must also retire the Host session to remove its pages.
+Do not create two publishers for one session, or combine a publisher with another
+writer of that session's presentation revision.
+
+Publisher tests use a simulated Host port with two real Wasm guests. They cover a
+committed replacement with a lost reply, explicit recovery, retired publication
+tokens, model-only publication, foreign navigation, plugin stop and cancellation
+of an outstanding visibility query during disposal. A separate frozen wire fixture
+exercises the actual generated Host clients, including discovery, document/model
+encoding, navigation, visibility and rejected operations, in managed and NativeAOT
+builds. The launcher repository separately tests those catalogs against its real
+renderer. These checks do not replace a production worker-to-launcher test. This component is not yet the production
+worker composition. Management UI, advanced UI, platform ports and release
+packaging remain prerequisites for removing the legacy Host plugin controller.
+
+`SidecarPresentationHost.CreateAsync(requests, observer, token)` discovers both
+view-state and page-control catalogs and returns the generated binary adapter for
+`PluginPagePublisher`. Use it with shared packages `0.1.0-alpha.9`. The worker's
+single receive loop must route Host replies to `SidecarHostRequestClient` while
+publisher work runs outside that loop. The adapter sends documents, UTF-8 model
+fields, revisions and document indices only; it does not send guest DTOs.

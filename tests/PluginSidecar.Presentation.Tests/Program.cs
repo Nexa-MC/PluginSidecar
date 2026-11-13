@@ -13,7 +13,7 @@ using PluginSidecar.WasmRuntime;
 
 await PresentationTests.Run();
 
-internal static class PresentationTests
+internal static partial class PresentationTests
 {
     private static void Check(bool condition, [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string? message = null)
     { if (!condition) throw new InvalidOperationException("Presentation boundary: " + message); }
@@ -83,6 +83,7 @@ internal static class PresentationTests
         }) Reject(() => PluginViewCompiler.Prepare(Page(identity, "<nxml-page><Page Key=\"Bad\">" + forbidden + "</Page></nxml-page>")));
         PluginViewCompiler.ValidateComponent("<nxml-dynamic><Text Content=\"Component\" /></nxml-dynamic>");
         Reject(() => PluginViewCompiler.ValidateComponent("<nxml-dynamic><Button DismissCommand=\"ui.host.erase\" /></nxml-dynamic>"));
+        await HostPort(view);
         await RealGuest();
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name is { } name && (name.StartsWith("Nexa.Services.", StringComparison.Ordinal)
             || name.StartsWith("Avalonia", StringComparison.Ordinal) || name == "Nexa.Desktop")));
@@ -102,14 +103,27 @@ internal static class PresentationTests
                 (_, _) => { }, (_, _) => { }, PluginViewCompiler.ValidatePage, PluginViewCompiler.ValidateComponent);
             var loaded = await app.LoadAsync(package, package.Manifest.RequestedPermissions, default);
             Check(loaded.State == LoadState.Active);
-            var page = app.Snapshot().Pages.Single(); var view = PluginViewCompiler.Prepare(page);
-            var button = Nodes(Compile(view).Root.Root).Single(n => n.Command is not null);
-            var request = view.TranslateAction(SidecarUiForms.Encode(button.Argument!, new Dictionary<string, string>()), loaded.Identity);
-            var operation = Abi100Catalog.Operations.Single(o => o.Group == "Actions" && o.Name == "Invoke");
-            var result = await app.Runtime.InvokeAsync(loaded.Identity, operation.ContractId, operation.MethodId, ActionRequest.Write(request),
-                new(Guid.NewGuid(), TimeSpan.FromSeconds(10), default) { IdempotencyKey = request.IdempotencyKey });
-            Check(result.Success);
-            var reference = OperationRef.Read(result.Value);
+            var page = app.Snapshot().Pages.Single();
+            var host = new TestPageHost { LoseAcknowledgement = true };
+            await using var publisher = new PluginPagePublisher(app, host);
+            bool uncertain = false;
+            try { await publisher.SynchronizeAsync(); } catch (IOException) { uncertain = true; }
+            Check(uncertain && host.Revision == 1);
+            byte[] Form(PluginPreparedView value) => SidecarUiForms.Encode(Nodes(Compile(value).Root.Root).Single(node => node.Command is not null).Argument!, new Dictionary<string, string>());
+            byte[] retiredForm = Form(host.Views.Single());
+            await RejectedAsync(() => publisher.InvokeActionAsync(retiredForm).AsTask());
+            await publisher.SynchronizeAsync();
+            Check(host.Revision == 2 && host.Replacements == 2);
+            await RejectedAsync(() => publisher.InvokeActionAsync(retiredForm).AsTask());
+            byte[] form = Form(host.Views.Single());
+            await publisher.SynchronizeAsync(); Check(host.Revision == 2); // No redundant replacement.
+            await publisher.SetOpenAsync(loaded.Identity, page.Page.Id, true);
+            Check(host.Visible == 0);
+            await RejectedAsync(() => publisher.SetOpenAsync(loaded.Identity with { LoadInstanceId = Guid.NewGuid() }, page.Page.Id, false).AsTask());
+            Check(host.Visible == 0);
+            await publisher.ReportVisibilityAsync();
+            await publisher.SetOpenAsync(loaded.Identity, page.Page.Id, false); Check(host.Visible == -1);
+            var reference = await publisher.InvokeActionAsync(form);
             var read = Abi100Catalog.Operations.Single(o => o.Group == "Tasks" && o.Name == "Read");
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             while (true)
@@ -127,13 +141,72 @@ internal static class PresentationTests
                 await Task.Delay(5, deadline.Token);
             }
             Check(confirmation.Count == 1);
+            using var advanced = VerifiedPluginPackage.Parse(await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sample))!, "advanced.zip")), "example.advanced", "1.0.0");
+            var advancedLoad = await app.LoadAsync(advanced, advanced.Manifest.RequestedPermissions, default);
+            Check(advancedLoad.State == LoadState.Active);
+            await publisher.SynchronizeAsync(); Check(host.Views.Count == 2 && host.Revision == 3);
+            await RejectedAsync(() => publisher.InvokeActionAsync(form).AsTask()); // Source-set replacement rotates every action epoch.
+            var advancedPage = app.Snapshot().Pages.Single(value => value.Owner == advancedLoad.Identity);
+            var update = Abi100Catalog.Operations.Single(value => value.Group == "UI" && value.Name == "UpdateModel");
+            var modelResult = await app.Runtime.InvokeAsync(advancedLoad.Identity, update.ContractId, update.MethodId,
+                UIModelUpdate.Write(new(new(advancedPage.Page.Id.Value), advancedPage.Page.Schema, TextResult.Write(new("Model update")), null)),
+                new(Guid.NewGuid(), TimeSpan.FromSeconds(5), default) { IdempotencyKey = Guid.NewGuid().ToString("N") });
+            Check(modelResult.Success, modelResult.Error?.Code);
+            string[] targets = host.Views.Select(value => value.Document.Target).ToArray();
+            await publisher.SynchronizeAsync();
+            Check(host.Revision == 4 && host.ModelUpdates == 1 && targets.SequenceEqual(host.Views.Select(value => value.Document.Target)));
+            Check(host.Views.Single(value => value.Owner == advancedLoad.Identity).Model["text"] == "Model update");
+            await publisher.SynchronizeAsync(); Check(host.Revision == 4);
+            await app.StopAsync(advancedLoad.Identity.PluginId);
+            await publisher.SynchronizeAsync(); Check(host.Views.Count == 1 && host.Revision == 5);
+
             await app.StopAsync(loaded.Identity.PluginId);
             Check(app.Runtime.Active.IsEmpty);
-            var retired = await app.Runtime.InvokeAsync(loaded.Identity, operation.ContractId, operation.MethodId, ActionRequest.Write(request),
-                new(Guid.NewGuid(), TimeSpan.FromSeconds(10), default) { IdempotencyKey = Guid.NewGuid().ToString("N") });
-            Check(!retired.Success);
+            await RejectedAsync(() => publisher.InvokeActionAsync(form).AsTask());
+            await RejectedAsync(() => publisher.SetOpenAsync(loaded.Identity, page.Page.Id, true).AsTask());
+            await publisher.SynchronizeAsync(); Check(host.Views.Count == 0 && host.Revision == 6);
+            host.BlockVisibility = true;
+            var waiting = publisher.ReportVisibilityAsync().AsTask();
+            await host.VisibilityEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            await publisher.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            try { await waiting; } catch (OperationCanceledException) { }
+            Check(waiting.IsCanceled);
+            bool cancelled = false;
+            try { await publisher.SynchronizeAsync(); } catch (OperationCanceledException) { cancelled = true; }
+            Check(cancelled);
+
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+    private static async Task RejectedAsync(Func<Task> action)
+    {
+        try { await action(); } catch (AbiHostException) { return; }
+        throw new InvalidOperationException("Retired or foreign presentation action admitted.");
+    }
+    private sealed class TestPageHost : IPluginPresentationHost
+    {
+        internal long Revision;
+        internal int Replacements, ModelUpdates, Visible = -1;
+        internal bool LoseAcknowledgement, BlockVisibility;
+        internal TaskCompletionSource VisibilityEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal IReadOnlyList<PluginPreparedView> Views = [];
+        public ValueTask<long> ReadRevisionAsync(CancellationToken token) => ValueTask.FromResult(Revision);
+        public ValueTask ReplaceAsync(long revision, IReadOnlyList<PluginPreparedView> views, CancellationToken token)
+        {
+            Check(revision == Revision); Revision++; Replacements++; Views = views.ToArray(); Visible = -1;
+            if (LoseAcknowledgement) { LoseAcknowledgement = false; throw new IOException("Simulated lost reply after Host commit."); }
+            return ValueTask.CompletedTask;
+        }
+        public ValueTask UpdateModelsAsync(long revision, IReadOnlyList<PluginPreparedView> views, CancellationToken token)
+        { Check(revision == Revision); Revision++; ModelUpdates++; Views = views.ToArray(); return ValueTask.CompletedTask; }
+        public ValueTask SetOpenAsync(long revision, int document, bool open, CancellationToken token)
+        { Check(revision == Revision && document >= 0 && document < Views.Count); Visible = open ? document : -1; return ValueTask.CompletedTask; }
+        public async ValueTask<IReadOnlyList<int>> ReadVisibleAsync(long revision, CancellationToken token)
+        {
+            Check(revision == Revision);
+            if (BlockVisibility) { VisibilityEntered.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, token); }
+            return Visible < 0 ? [] : [Visible];
+        }
     }
     private sealed class Allow : IActionConfirmation
     {

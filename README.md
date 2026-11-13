@@ -32,7 +32,7 @@ Runtime behavior and remaining limits are documented in [runtime services](docs/
 
 The standalone migration now has Sidecar-owned application, business and guest
 presentation modules. [Guest presentation ownership](docs/presentation-migration.md)
-explains page validation, scoped inputs and action translation. These modules are
+explains page validation, scoped inputs, action translation and ordinary-page publication. These modules are
 tested independently of launcher service assemblies; the production worker still
 uses its existing execution entry, and SDK Beta remains pending the full cutover.
 

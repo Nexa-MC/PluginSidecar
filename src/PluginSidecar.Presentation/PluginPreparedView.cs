@@ -30,6 +30,8 @@ public sealed class PluginPreparedView
         _actions = new ReadOnlyDictionary<string, string>(actions);
     }
 
+    internal bool OwnsAction(string token) => _actions.ContainsKey(token);
+
     /// <summary>Call only after resolving this projection in the current published set and active application.</summary>
     public ActionRequest TranslateAction(ReadOnlyMemory<byte> payload, PluginIdentity activeOwner)
     {

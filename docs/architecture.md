@@ -427,3 +427,22 @@ plugin-owned terminal tasks and workflows without ambiguous effects; arbitrary
 host mutations are not replayable unless their owner supplies a fresh admission.
 Canonical SDK contracts are maintained in NexaCL-Plugin-SDK; additive extensions
 must retain all existing operation IDs and model fingerprints.
+
+## Sidecar-owned page publication
+
+The presentation module owns an explicit asynchronous publisher over a general
+Host presentation port. It is the sole writer of its Sidecar session's source set
+and revision. Source replacement changes a publication epoch and retires all old
+action tokens; model-only writes retain document identity and input drafts. A
+failed or cancelled mutation has an unknown remote outcome: action admission is
+closed until a subsequent explicit synchronization rereads the Host revision and
+replaces the source set. The publisher does not replay navigation or actions.
+
+Opening, closing and visibility reporting cross the generic Host page-control
+catalog. Guest IDs, permissions and lifecycle watches remain local. A form must
+resolve to a currently published page whose exact load identity and declaration
+remain active. Guest actions retain the existing confirmation and task pipeline.
+No publisher lock is held while a guest callback executes. Disposal closes local
+admission and cancels outstanding Host work; the session owner must retire the
+Host session to remove its presentation. Worker composition remains a separate
+migration step, so this unit must not enable duplicate guest loading.
