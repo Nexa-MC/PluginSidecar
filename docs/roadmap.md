@@ -5,6 +5,29 @@ This repository owns the plugin kernel and execution worker. Plugin authors use 
 reference and `contracts/host-support.json` identify the tested Desktop revision.
 A catalog binding alone is not evidence of a working Host integration.
 
+## Standalone Sidecar cutover
+
+The launcher-to-Sidecar migration is not yet complete. The production worker still
+serves the existing remote Wasm execution contract; the launcher's plugin manager
+and UI remain active. SDK Beta publication is pending the cutover and its release
+checks. The table below describes implementation ownership, not installed-product
+availability.
+
+| Component | Current state | Remaining work |
+| --- | --- | --- |
+| Application and admission | `PluginSidecar.Packages/Application` owns package admission, runtime lifecycle, guest resources and presentation data. A real UI guest loads and retires in managed and NativeAOT tests. | Compose it in the worker after authenticated Host capability discovery. |
+| Business adapters | `PluginSidecar.Business` uses versioned generic Host contracts without `Nexa.Services` assemblies. Focused tests cover account revision fencing, caller isolation, process cancellation, watches, state loss and bounded retirement. | Bind the remaining platform/theme ports and verify every migrated business path, including configured network policy and download behavior. |
+| Offline installations | The Sidecar owns encrypted installation records and OS key protection. New key envelopes use a separate catalog scope; legacy Host envelopes remain readable when the OS grants access. Windows DPAPI and the portable envelope/restore tests run in CI. | Supply the installation directory in production composition and exercise startup restoration through the real worker. macOS Keychain and Linux Secret Service still depend on an available, unlocked OS store; tests with an in-memory store do not establish those deployment conditions. |
+| Dynamic presentation | Host commit `a3c0b8d7d60401481e96e63e357dfe693b59aead` exposes a generic session-owned NXML replacement catalog. The Host compiles and renders documents without guest SDK models. | Migrate the manager, pages, model/action translation, dialogs, drawing, shortcuts and contributions. Additional model-update work in the Host is not yet a published Sidecar dependency. |
+| Worker distribution | Existing builds verify authenticated remote execution and NativeAOT deployment on Windows, Linux and macOS. | Stage the standalone worker and its native dependencies in signed launcher releases, then verify missing, disabled, failed and crashed workers leave ordinary launcher functions usable. |
+
+Keep the existing guest ABI and SDK schemas unchanged during this migration.
+Generic Host ABI additions do not allocate a guest `EXP_ID`. After SDK Beta is
+published, guest-facing contract changes must follow the frozen SDK's experiment
+registry and compatibility rules.
+
+## Existing catalog integration
+
 The current catalog contains 358 operations and 261 models. The previous 346
 operations retain their IDs and model layouts; 12 additive operations express
 explicit restore destinations, versioned settings, trash previews and provider
