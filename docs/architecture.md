@@ -11,6 +11,24 @@ resource and presentation owner. Its encrypted catalog takes an asynchronous key
 protection port, with no dependency on launcher account implementation classes.
 Migration of business and UI adapters must complete before the Beta release.
 
+`PluginSidecar.Presentation` owns guest NXML policy and translation. It uses the
+canonical NXML compiler from the versioned public shared packages, without
+Desktop, Avalonia or launcher service assemblies. A prepared page has a key space
+derived from its plugin load identity and page ID. Input names and local anchors
+are rewritten into that space. Guest action identifiers become opaque, page-local
+tokens routed through one registered Sidecar command; the Host only captures a
+general form envelope. Sidecar maps those fields back to the guest model and
+constructs the SDK action request. Raw or compiled Host state bindings, images,
+Host commands and dismissal/scroll command escape paths are rejected locally.
+
+This compilation layer does not itself publish documents, admit plugins or
+activate the worker. The production presentation owner must retire its published
+action map with the corresponding load and exposure, and check the active load
+identity before invoking the application. Advanced dialogs, contributions,
+shortcuts, drawing and visibility subscriptions still require the complete UI
+owner and the remaining generic Host ports before the old Desktop controller can
+be removed.
+
 `PluginSidecar.Business` now owns the SDK-to-launcher business adapters. It uses
 only the versioned `Nexa.Sidecar.Host.Contracts` package, never launcher service
 assemblies. The base client supplies ordinary domain routers and public state;

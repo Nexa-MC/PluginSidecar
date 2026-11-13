@@ -30,6 +30,12 @@ binaries compatible. See [loading and migration](docs/loading-contract.md).
 
 Runtime behavior and remaining limits are documented in [runtime services](docs/runtime-services.md) and [acceptance status](docs/roadmap.md).
 
+The standalone migration now has Sidecar-owned application, business and guest
+presentation modules. [Guest presentation ownership](docs/presentation-migration.md)
+explains page validation, scoped inputs and action translation. These modules are
+tested independently of launcher service assemblies; the production worker still
+uses its existing execution entry, and SDK Beta remains pending the full cutover.
+
 After `dotnet pack PluginSidecar.slnx -c Release -o artifacts/packages` and
 `python eng/package_sdk.py`, run `python eng/verify_packages.py` to restore and
 execute an independent NuGet-only consumer. It uses an isolated package cache,

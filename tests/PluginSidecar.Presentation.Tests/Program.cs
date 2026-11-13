@@ -1,0 +1,143 @@
+using System.Collections.Immutable;
+using System.Text;
+using Nexa.Plugin.Bootstrap.V1;
+using Nexa.Plugin.Hosting;
+using Nexa.Plugin.Sdk.Abi100;
+using Nexa.Plugin.Sdk.Abi100.Data;
+using Nexa.Sidecar.Protocol;
+using Nexa.Xsr.Renderer.Nxml;
+using PluginSidecar.Application;
+using PluginSidecar.Packages;
+using PluginSidecar.Presentation;
+using PluginSidecar.WasmRuntime;
+
+await PresentationTests.Run();
+
+internal static class PresentationTests
+{
+    private static void Check(bool condition, [System.Runtime.CompilerServices.CallerArgumentExpression(nameof(condition))] string? message = null)
+    { if (!condition) throw new InvalidOperationException("Presentation boundary: " + message); }
+    private static void Reject(Action action)
+    {
+        try { action(); }
+        catch (Exception error) when (error is AbiHostException or NxmlCompileException or NxmlParseException or InvalidDataException) { return; }
+        throw new InvalidOperationException("Guest presentation unexpectedly accepted.");
+    }
+    private static IEnumerable<NxmlIrNode> Nodes(NxmlIrNode root)
+    {
+        yield return root;
+        foreach (var child in root.Children)
+            foreach (var node in Nodes(child)) yield return node;
+    }
+    private static NxmlPreparedDocument Compile(PluginPreparedView view) => new NxmlExtensionProgram(view.Document.EntryPoint, view.Document.Files).Compile(view.Model);
+    private static AbiValue.Map Model(params (string Key, AbiValue Value)[] values) => new(values.ToImmutableDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal));
+    private static PluginPage Page(PluginIdentity owner, string source, AbiValue? model = null, string id = "example.test:page") => new(owner,
+        new(new(id), new(Guid.NewGuid(), owner.LoadInstanceId, "package"), Abi100Schemas.Empty, []), "Test", source, model ?? new AbiValue.Null(), new("1"));
+    internal static async Task Run()
+    {
+        var identity = new PluginIdentity("example.test", "1.0.0", Guid.NewGuid());
+        string source = """<nxml-page><Page Key="Page"><StackPanel><Text Content="{data title}" /><TextInput Key="draft" Label="Draft" /><Button Key="save" Content="Save" Command="ui.plugin.action" Argument="{data action}" /></StackPanel></Page></nxml-page>""";
+        var page = Page(identity, source, Model(("title", new AbiValue.Utf8String("<Image Source='private'/> {state host.secret}")),
+            ("action", new AbiValue.Utf8String("example.test:save")), ("number", new AbiValue.Int64(42))));
+        var view = PluginViewCompiler.Prepare(page);
+        var compiled = Compile(view);
+        var nodes = Nodes(compiled.Root.Root).ToArray();
+        var input = nodes.Single(n => n.Recipe == NxmlRuntimeRecipe.TextInput);
+        var button = nodes.Single(n => n.Command is not null);
+        Check(view.Document.Target == "#" + compiled.Root.Root.Key);
+        Check(input.Key != "draft" && button.Command!.Value.Value == PluginViewCompiler.ActionCommand);
+        Check(nodes.All(n => n.Bindings.Count == 0 && n.Recipe != NxmlRuntimeRecipe.Image));
+        Check(nodes.Any(n => n.Content == "<Image Source='private'/> {state host.secret}"));
+        byte[] Form(string argument, string key = "", string value = "") => SidecarUiForms.Encode(argument,
+            key == "" ? new Dictionary<string, string>() : new Dictionary<string, string> { [key] = value });
+        byte[] form = Form(button.Argument!, input.Key!, "typed & <value>");
+        var action = view.TranslateAction(form, identity);
+        Check(action.Action.Value == "example.test:save");
+        var values = ((AbiValue.Map)action.Inputs).Value;
+        Check(((AbiValue.Utf8String)values["draft"]).Value == "typed & <value>");
+        Check(((AbiValue.Int64)values["number"]).Value == 42);
+        Check(!values.ContainsKey(input.Key!));
+        Reject(() => view.TranslateAction(Form("example.test:save"), identity));
+        Reject(() => view.TranslateAction(Form(button.Argument!, "foreign", "secret"), identity));
+        Reject(() => view.TranslateAction(form, identity with { LoadInstanceId = Guid.NewGuid() }));
+        var other = PluginViewCompiler.Prepare(page with { Page = page.Page with { Id = new("example.test:other") } });
+        Reject(() => other.TranslateAction(form, identity));
+        Check(view.Document.Target != other.Document.Target);
+        var changed = PluginViewCompiler.Prepare(page with { Model = Model(("title", new AbiValue.Utf8String("Updated")), ("action", new AbiValue.Utf8String("example.test:next"))), Revision = new("2") });
+        Check(view.Document.Files[view.Document.EntryPoint] == changed.Document.Files[changed.Document.EntryPoint]);
+        Check(view.Document.Target == changed.Document.Target);
+        Reject(() => changed.TranslateAction(form, identity));
+        Check(Nodes(Compile(changed).Root.Root).Any(n => n.Content == "Updated"));
+        var foreignAction = PluginViewCompiler.Prepare(page with { Model = Model(("title", new AbiValue.Utf8String("Test")), ("action", new AbiValue.Utf8String("other.plugin:save"))) });
+        var foreignButton = Nodes(Compile(foreignAction).Root.Root).Single(n => n.Command is not null);
+        Reject(() => foreignAction.TranslateAction(Form(foreignButton.Argument!), identity));
+        // Static keys do not inflate the dynamic data budget during namespacing.
+        string many = "<nxml-page><Page Key=\"Many\"><StackPanel>" + string.Concat(Enumerable.Range(0, 300).Select(i => "<Text Key=\"k" + i + "\" Content=\"text\"/>")) + "</StackPanel></Page></nxml-page>";
+        Check(PluginViewCompiler.Prepare(Page(identity, many)).Model.Count == 0);
+        foreach (string forbidden in new[]
+        {
+            "<Text Content=\"{state host.secret}\"/>", "<Image Source=\"file:///private\"/>",
+            "<Node Kind=\"Image\" Recipe=\"Image\" Source=\"private\"/>",
+            "<Button Command=\"ui.host.erase\"/>", "<Button Command=\"{data action}\"/>",
+            "<StackPanel ScrollCommand=\"ui.plugin.action\"/>", "<StackPanel DismissCommand=\"ui.host.erase\"/>"
+        }) Reject(() => PluginViewCompiler.Prepare(Page(identity, "<nxml-page><Page Key=\"Bad\">" + forbidden + "</Page></nxml-page>")));
+        PluginViewCompiler.ValidateComponent("<nxml-dynamic><Text Content=\"Component\" /></nxml-dynamic>");
+        Reject(() => PluginViewCompiler.ValidateComponent("<nxml-dynamic><Button DismissCommand=\"ui.host.erase\" /></nxml-dynamic>"));
+        await RealGuest();
+        Check(!AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name is { } name && (name.StartsWith("Nexa.Services.", StringComparison.Ordinal)
+            || name.StartsWith("Avalonia", StringComparison.Ordinal) || name == "Nexa.Desktop")));
+        Console.WriteLine("PASS: Sidecar compiles guest pages, scopes keys/actions, preserves models, rejects Host escape paths and invokes the real Wasm action without launcher assemblies.");
+    }
+    private static async Task RealGuest()
+    {
+        string? sample = Environment.GetEnvironmentVariable("NEXA_WASM_SAMPLE");
+        if (sample is null) throw new InvalidOperationException("NEXA_WASM_SAMPLE must identify the compiled guest fixture.");
+        byte[] bytes = await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sample))!, "desktop.zip"));
+        string root = Path.Combine(Path.GetTempPath(), "sidecar-view-" + Guid.NewGuid().ToString("N"));
+        var confirmation = new Allow();
+        try
+        {
+            using var package = VerifiedPluginPackage.Parse(bytes, "example.desktop", "1.0.0");
+            await using var app = new PluginApplication(root, (wasm, _) => ValueTask.FromResult<IWasmPluginMachine>(new WasmPluginMachine(wasm.Span)), [], confirmation,
+                (_, _) => { }, (_, _) => { }, PluginViewCompiler.ValidatePage, PluginViewCompiler.ValidateComponent);
+            var loaded = await app.LoadAsync(package, package.Manifest.RequestedPermissions, default);
+            Check(loaded.State == LoadState.Active);
+            var page = app.Snapshot().Pages.Single(); var view = PluginViewCompiler.Prepare(page);
+            var button = Nodes(Compile(view).Root.Root).Single(n => n.Command is not null);
+            var request = view.TranslateAction(SidecarUiForms.Encode(button.Argument!, new Dictionary<string, string>()), loaded.Identity);
+            var operation = Abi100Catalog.Operations.Single(o => o.Group == "Actions" && o.Name == "Invoke");
+            var result = await app.Runtime.InvokeAsync(loaded.Identity, operation.ContractId, operation.MethodId, ActionRequest.Write(request),
+                new(Guid.NewGuid(), TimeSpan.FromSeconds(10), default) { IdempotencyKey = request.IdempotencyKey });
+            Check(result.Success);
+            var reference = OperationRef.Read(result.Value);
+            var read = Abi100Catalog.Operations.Single(o => o.Group == "Tasks" && o.Name == "Read");
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            while (true)
+            {
+                var progress = await app.Runtime.InvokeAsync(loaded.Identity, read.ContractId, read.MethodId, EntityRequest.Write(new(reference.Id)),
+                    new(Guid.NewGuid(), TimeSpan.FromSeconds(5), deadline.Token));
+                Check(progress.Success);
+                var record = OperationRecord.Read(progress.Value);
+                if (record.State is OperationState.Completed or OperationState.Failed or OperationState.Cancelled or OperationState.OutcomeUnknown)
+                {
+                    Check(record.State == OperationState.Completed, record.Failure?.Code);
+                    Check(TextResult.Read(record.Result).Text == "Desktop action completed");
+                    break;
+                }
+                await Task.Delay(5, deadline.Token);
+            }
+            Check(confirmation.Count == 1);
+            await app.StopAsync(loaded.Identity.PluginId);
+            Check(app.Runtime.Active.IsEmpty);
+            var retired = await app.Runtime.InvokeAsync(loaded.Identity, operation.ContractId, operation.MethodId, ActionRequest.Write(request),
+                new(Guid.NewGuid(), TimeSpan.FromSeconds(10), default) { IdempotencyKey = Guid.NewGuid().ToString("N") });
+            Check(!retired.Success);
+        }
+        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+    }
+    private sealed class Allow : IActionConfirmation
+    {
+        internal int Count;
+        public ValueTask<bool> ConfirmAsync(ActionConfirmationRequest request, CancellationToken cancellation) { Count++; return ValueTask.FromResult(true); }
+    }
+}

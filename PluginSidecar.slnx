@@ -12,4 +12,6 @@
   <Project Path="tests/PluginSidecar.AotSmoke/PluginSidecar.AotSmoke.csproj"/>
   <Project Path="src/PluginSidecar.Business/PluginSidecar.Business.csproj"/>
   <Project Path="tests/PluginSidecar.Business.Tests/PluginSidecar.Business.Tests.csproj"/>
+  <Project Path="src/PluginSidecar.Presentation/PluginSidecar.Presentation.csproj"/>
+  <Project Path="tests/PluginSidecar.Presentation.Tests/PluginSidecar.Presentation.Tests.csproj"/>
 </Solution>

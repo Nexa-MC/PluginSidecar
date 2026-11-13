@@ -49,6 +49,13 @@ jobs:
       - run: dotnet build PluginSidecar.slnx -c Release
       - run: dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
       - run: dotnet run --project tests/PluginSidecar.Business.Tests -c Release --no-build
+      - run: dotnet run --project tests/PluginSidecar.Presentation.Tests -c Release --no-build
+      - run: dotnet publish tests/PluginSidecar.Presentation.Tests -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o artifacts/presentation-aot
+      - shell: pwsh
+        run: |
+          $binary = if ($IsWindows) { './artifacts/presentation-aot/PluginSidecar.Presentation.Tests.exe' } else { './artifacts/presentation-aot/PluginSidecar.Presentation.Tests' }
+          & $binary
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: dotnet publish tests/PluginSidecar.Business.Tests -c Release -r ${{ matrix.rid }} -p:PublishAot=true -o artifacts/business-aot
       - shell: pwsh
         run: |
