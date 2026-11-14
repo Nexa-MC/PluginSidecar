@@ -14,10 +14,10 @@ namespace PluginSidecar.Presentation;
 internal static class PluginPageContributions
 {
     internal static string Stamp(PluginIdentity owner, PluginAdvancedUi snapshot) => string.Join(',',
-        snapshot.Registrations.Where(r => r.Owner == owner && r.Kind is "components" or "contributions")
+        snapshot.Registrations.Where(r => r.Owner == owner && r.Kind is "components" or "contributions" or "replacements")
             .Select(r => r.Registration.Handle).Order().Select(handle => handle.ToString(CultureInfo.InvariantCulture)));
 
-    internal static PluginPage Compose(PluginPage page, PluginAdvancedUi snapshot)
+    internal static PluginPage Compose(PluginPage page, PluginAdvancedUi snapshot, AbiValue? contributionModel = null)
     {
         var owned = snapshot.Registrations.Where(r => r.Owner == page.Owner).ToArray();
         var items = owned.Where(r => r.Kind == "contributions").Select(r => UIContribution.Read(r.Value))
@@ -51,6 +51,7 @@ internal static class PluginPageContributions
         if (syntax.Children.Count != 1) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         var root = syntax.Children[0];
         var model = PluginViewCompiler.ReadModel(page.Model);
+        var componentModel = contributionModel is null ? model : PluginViewCompiler.ReadModel(contributionModel);
         var compiled = Compile(page.Source);
         PluginViewCompiler.ValidateCompiled(compiled.Root.Root, "ui.plugin.action");
         foreach (var item in ordered)
@@ -62,7 +63,7 @@ internal static class PluginPageContributions
             var fragment = NxmlParser.Parse(source).Root;
             if (fragment.Children.Count != 1) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
             var node = fragment.Children[0];
-            var part = Compile(source);
+            var part = Compile(source, componentModel);
             PluginViewCompiler.ValidateCompiled(part.Root.Root, "ui.plugin.action");
             var mode = item.Mode switch
             {
@@ -92,8 +93,8 @@ internal static class PluginPageContributions
         PluginViewCompiler.ValidatePage(result); // Includes the aggregate 256 KiB source limit.
         return page with { Source = result };
 
-        NxmlPreparedDocument Compile(string source) => new NxmlExtensionProgram("page.nxml",
-            new Dictionary<string, string> { ["page.nxml"] = source }).Compile(model);
+        NxmlPreparedDocument Compile(string source, IReadOnlyDictionary<string, string>? data = null) => new NxmlExtensionProgram("page.nxml",
+            new Dictionary<string, string> { ["page.nxml"] = source }).Compile(data ?? model);
     }
 
     private static void Write(NxmlElement node, XmlWriter writer)

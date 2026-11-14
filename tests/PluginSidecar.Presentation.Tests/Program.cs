@@ -84,9 +84,11 @@ internal static partial class PresentationTests
         PluginViewCompiler.ValidateComponent("<nxml-dynamic><Text Content=\"Component\" /></nxml-dynamic>");
         Reject(() => PluginViewCompiler.ValidateComponent("<nxml-dynamic><Button DismissCommand=\"ui.host.erase\" /></nxml-dynamic>"));
         ContributionChecks(identity);
+        ReplacementChecks(identity);
         await HostPort(view);
         await NotificationPort();
         await RealGuest();
+        await RealReplacementGuest();
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name is { } name && (name.StartsWith("Nexa.Services.", StringComparison.Ordinal)
             || name.StartsWith("Avalonia", StringComparison.Ordinal) || name == "Nexa.Desktop")));
         Console.WriteLine("PASS: Sidecar compiles guest pages, scopes keys/actions, preserves models, rejects Host escape paths and invokes the real Wasm action without launcher assemblies.");

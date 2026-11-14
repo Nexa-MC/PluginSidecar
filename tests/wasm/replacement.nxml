@@ -1,0 +1,1 @@
+<nxml-page><Page Key="Replacement"><StackPanel><Text Content="Rendered {data text}"/><Button Content="Echo" Command="ui.plugin.action" Argument="example.replacement:echo"/></StackPanel></Page></nxml-page>

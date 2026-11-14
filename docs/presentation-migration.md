@@ -57,9 +57,9 @@ terminal task completion. The test also rejects any loaded Desktop, Avalonia or
 `Nexa.Services` assembly.
 
 The ordinary-page publisher below is implemented. Production worker composition,
-management UI, workspace contributions, whole-view replacement, dialogs, shortcuts
-and drawing remain to be composed and verified. Ordinary-page content contributions
-are implemented as described below. Production end-to-end verification is still
+management UI, workspace contributions/replacement, dialogs, shortcuts and drawing
+remain to be composed and verified. Ordinary-page content contributions and
+whole-view replacement are implemented as described below. Production end-to-end verification is still
 required before removing the old Desktop controller or publishing SDK Beta.
 
 ## Owning publication
@@ -69,8 +69,8 @@ Call `SynchronizeAsync` after activation, model changes, registration retirement
 and plugin stop. It publishes at most 32 ordinary pages, sorted by qualified page
 ID. It validates the complete candidate against the Host's source/model budgets
 before sending it. It composes active, same-load content contributions locally;
-workspace contributions, whole-view replacement, dialogs and drawing remain outside
-this ordinary-page publisher.
+workspace contributions/replacement, dialogs and drawing remain outside this
+ordinary-page publisher.
 
 The publisher distinguishes source replacement from model updates. Source-set
 changes rotate a publication epoch for every page, so delayed commands from an old
@@ -159,7 +159,7 @@ at the corresponding end of the page's children. `Hide` clears those children;
 `Replace` replaces the children with the component. `Wrap` places existing children
 after a wrapper's own children and requires a supported layout/element container.
 These modes target page content, not protected Host navigation or confirmation UI.
-Whole-view replacement is a different operation and is not implemented here.
+Whole-view replacement is a different operation, described in the next section.
 
 `Before` and `After` form a dependency graph for that target. References to IDs
 outside the target do not affect its order. Available nodes use ordinal ID order
@@ -168,7 +168,7 @@ fail before publication. At most 256 contributions may target a page. Compilatio
 retains the shared 16384-node/128-depth bounds and the final page's 256 KiB UTF-8
 source limit, in addition to the publisher's aggregate limits.
 
-A component/contribution handle change invalidates the owner's published page
+A component/contribution/replacement handle change invalidates the owner's published page
 actions and navigation immediately. The next successful synchronization replaces
 the source set and rotates action epochs even if the markup is unchanged. This is
 conservative: a registration affecting another page of the same owner also causes
@@ -181,3 +181,60 @@ ownership, forbidden Host commands, model text and contributed form/action
 translation. A real Wasm fixture removes a contribution while its page and load
 remain active: old navigation is rejected before synchronization, and old action
 tokens remain rejected after the source set is republished.
+
+
+## Ordinary-page whole-view replacement
+
+`UI.RegisterViewReplacement` selects another active page owned by the same plugin
+load. Register both pages first, then register a `UIViewReplacement` with the
+original page ID in `View`, the target page ID in `Page`, and the original page's
+schema in `ViewContract`. Registration occurs during `Initialize`; both page
+schemas must match. Only one replacement may target a view. Removing a target
+page while its replacement is registered fails with `CONFLICT`; remove the
+replacement definition before removing the target page.
+
+The publisher passes its complete active page snapshot to
+`PluginViewCompiler.Prepare(page, advancedUi, activePages, publicationEpoch)`.
+Callers preparing a replacement directly must also supply that snapshot. The
+shorter overload has only the supplied page available; it cannot resolve a
+replacement referring to another page. A missing, foreign-load or schema-mismatched
+target fails locally before Host publication. Workspace replacement is not yet
+part of this publisher.
+
+A replacement changes the rendered page, not the logical page's identity. Its
+markup reads the **target page model**. Contributions registered for the original
+page are applied afterward and read the **original page model**. Replacement is
+one hop: replacements and contributions registered for the target page are not
+recursively applied to the original page. The target also remains independently
+publishable as an ordinary page.
+
+For example, if both models contain `text`, the replacement's `{data text}` reads
+the target value and an appended component's `{data text}` reads the original
+value. This applies to mixed text such as `Status: {data text}`, data-bound actions
+and inverted visibility bindings. The Sidecar assigns private aliases to target
+bindings; values containing XML or `{data ...}` remain literal data. Components
+cannot consume these aliases. A collision with the generated reserved prefix in
+the original model is rejected, never overwritten.
+
+Action translation retains the original page's ID, context and typed model.
+Submitted form drafts overlay that model, even when the input controls came from
+the replacement. Target-only data and private render aliases are not copied into
+guest action inputs. This preserves the existing logical-page contract rather
+than silently changing the action's input schema.
+
+Changing target data updates the Host's model while keeping source documents,
+control keys and drafts stable. Until synchronization installs that projection,
+action and navigation admission reject the previous target revision. A replacement
+registration change invalidates the owner's page projections immediately and
+forces an epoch rotation, even if the resulting markup would be identical. When
+replacement registration is removed, synchronization restores the original source.
+Lost acknowledgements use the same conservative recovery as ordinary publication.
+
+Verification includes distinct render/contribution/action models, mixed text,
+inverted visibility, data-bound action changes, missing and foreign targets,
+schema mismatch, duplicate replacements and private-alias access. A compiled Wasm
+fixture registers two pages and a replacement through the frozen SDK, invokes an
+action that returns the original model, updates the target without replacing Host
+sources, and retires the replacement and target while checking stale admission.
+These tests also run as a native executable; no launcher presentation assemblies
+are loaded.

@@ -555,6 +555,24 @@ Changes invalidate old page actions immediately, even before synchronization;
 publication rotates action epochs even when the rendered source is unchanged,
 then reconciles the current source/model set through the existing
 revision protocol. Registration changes for another owner do not invalidate the
-page. Workspace contributions, whole-view replacement, dialogs, drawing and
-shortcuts remain separate migration steps; this change covers ordinary-page
-content contributions only and does not switch production Worker composition.
+page. The ordinary-page replacement extension is described below. Workspace
+contributions/replacement, dialogs, drawing and shortcuts remain separate
+migration steps. Production Worker composition is not switched by these local
+presentation changes.
+
+## Ordinary-page replacement ownership
+
+The Sidecar resolves an active same-load `UIViewReplacement` against the active
+page snapshot before composing ordinary-page contributions. Replacement is one
+hop: the target supplies markup and render data, while the original page retains
+its identity, action context, typed input model and contribution target. Both page
+schemas must match the declared view contract. Missing targets and conflicting
+replacements fail before publication; no Host plugin API is introduced.
+
+Replacement bindings use private data aliases so components still read the
+original page model. Aliases never enter guest action inputs. Data changes update
+the existing Host model without changing source or control identities. Replacement
+registration changes invalidate the publication immediately; a target model
+revision change blocks old actions until synchronization has installed the new
+projection. Target retirement also blocks actions and navigation. Workspace
+replacement remains outside this ordinary-page implementation.

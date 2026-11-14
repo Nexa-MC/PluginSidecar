@@ -36,12 +36,12 @@ public sealed class PluginPagePublisher : IAsyncDisposable
                 .OrderBy(page => page.Page.Id.Value, StringComparer.Ordinal).ToArray();
             if (pages.Length > 32) throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
             var contributions = _application.AdvancedUi();
-            var next = pages.Select(page => PluginViewCompiler.Prepare(page, contributions, _epoch)).ToArray();
+            var next = pages.Select(page => PluginViewCompiler.Prepare(page, contributions, pages, _epoch)).ToArray();
             bool replace = _revision is null || !SameSources(_published, next);
             if (replace)
             {
                 string epoch = Guid.NewGuid().ToString("N");
-                next = pages.Select(page => PluginViewCompiler.Prepare(page, contributions, epoch)).ToArray();
+                next = pages.Select(page => PluginViewCompiler.Prepare(page, contributions, pages, epoch)).ToArray();
                 // Validate the whole candidate before affecting the acknowledged source set.
                 ValidateBudget(next);
                 long revision = _revision ?? await _host.ReadRevisionAsync(stop.Token).ConfigureAwait(false);
@@ -122,9 +122,15 @@ public sealed class PluginPagePublisher : IAsyncDisposable
         return OperationRef.Read(result.Value);
     }
 
-    private bool IsLive(PluginPreparedView view) => _application.Runtime.Active.Contains(view.Owner)
-        && view.ContributionStamp == PluginPageContributions.Stamp(view.Owner, _application.AdvancedUi())
-        && _application.Snapshot().Pages.Any(page => page.Owner == view.Owner && page.Page.Id == view.Page);
+    private bool IsLive(PluginPreparedView view)
+    {
+        if (!_application.Runtime.Active.Contains(view.Owner)
+            || view.ContributionStamp != PluginPageContributions.Stamp(view.Owner, _application.AdvancedUi())) return false;
+        var pages = _application.Snapshot().Pages;
+        return pages.Any(page => page.Owner == view.Owner && page.Page.Id == view.Page)
+            && (view.ReplacementDependency is not { } target || pages.Any(page => page.Owner == target.Owner
+                && page.Page == target.Page && page.Revision == target.Revision));
+    }
 
     private static bool SameSources(PluginPreparedView[] left, PluginPreparedView[] right) => left.Length == right.Length
         && left.Zip(right).All(pair => pair.First.Owner == pair.Second.Owner && pair.First.Page == pair.Second.Page

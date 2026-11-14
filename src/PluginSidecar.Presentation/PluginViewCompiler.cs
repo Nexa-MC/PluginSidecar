@@ -39,13 +39,22 @@ public static class PluginViewCompiler
     }
 
     public static PluginPreparedView Prepare(PluginPage page, PluginAdvancedUi contributions, string publicationEpoch = "")
+        => Prepare(page, contributions, [page], publicationEpoch);
+
+    public static PluginPreparedView Prepare(PluginPage page, PluginAdvancedUi contributions,
+        IReadOnlyList<PluginPage> activePages, string publicationEpoch = "")
     {
-        var prepared = Prepare(PluginPageContributions.Compose(page, contributions), publicationEpoch);
+        var (rendered, replacement) = PluginPageReplacements.Compose(page, contributions, activePages);
+        var prepared = Prepare(page, PluginPageContributions.Compose(rendered, contributions, page.Model), publicationEpoch);
         prepared.ContributionStamp = PluginPageContributions.Stamp(page.Owner, contributions);
+        prepared.ReplacementDependency = replacement;
         return prepared;
     }
 
     public static PluginPreparedView Prepare(PluginPage page, string publicationEpoch = "")
+        => Prepare(page, page, publicationEpoch);
+
+    private static PluginPreparedView Prepare(PluginPage logicalPage, PluginPage page, string publicationEpoch)
     {
         ValidatePage(page.Source);
         var model = ReadModel(page.Model);
@@ -119,7 +128,7 @@ public static class PluginViewCompiler
         if (compiled.Root.Root.Key != scope || compiled.Root.Root.Role != XsrUiSemanticRole.Page) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         var document = new SidecarNxmlDocument("#" + scope, SidecarNxmlOperation.Page, "page.nxml", files);
         _ = SidecarNxmlDocument.Encode(document);
-        return new(page, document, model, inputs, actions);
+        return new(logicalPage, document, model, inputs, actions);
     }
 
     internal static Dictionary<string, string> ReadModel(AbiValue value)
