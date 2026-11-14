@@ -321,3 +321,38 @@ command through the publisher. Management tests cover policy changes before
 refresh, wrong-channel tokens, forged fields, stale load/page controls, lost
 publication acknowledgement, duplicate clicks and cancellation of a pending
 effect. No Desktop, Avalonia or `Nexa.Services` assembly is loaded.
+
+## Modal control transport
+
+`SidecarDialogHost.CreateAsync(requests, observer, token)` discovers the separate
+DialogControl catalog. `SetOpenAsync(revision, document, open, token)` opens or
+closes a committed modal document; `ReadAsync(revision, token)` returns validated
+source indices, targets and open states. Negotiate `Nxml` and `Dialogs`, and publish
+`SidecarNxmlOperation.Dialog` sources before opening them. A source index includes
+ordinary pages and fragments earlier in the same source set.
+
+Use the acknowledged presentation revision and serialize these calls with source
+and model updates. Discovery failure, a rejected request and malformed state are
+errors; caller cancellation remains cancellation. The adapter never retries an open
+command automatically. After an uncertain reply, query state before deciding
+what to do. The Host may already have opened the window.
+
+This adapter is tested against the generated binary protocol, including malformed
+state, cancellation and lost acknowledgements. Guest dialog publication and
+lifecycle reconciliation still need to be added to the sole presentation owner;
+creating this adapter does not enable them in the production Worker.
+
+```csharp
+var dialogs = await SidecarDialogHost.CreateAsync(requests, observer, token);
+await dialogs.SetOpenAsync(presentationRevision, documentIndex, true, token);
+var state = await dialogs.ReadAsync(presentationRevision, token);
+bool open = state.Single(item => item.Document == documentIndex).Open;
+```
+
+The state query does not reserve the window. A user may close it immediately after
+the query completes. New sources start closed, model updates preserve open state,
+and source replacement or session retirement closes old windows. The Host limits
+open modals to eight per Sidecar session and sixteen globally, and rejects opening
+a new modal while a Host-owned confirmation or onboarding flow has priority.
+Do not convert a transport error into a synthetic closed state: that could retire
+a guest dialog whose window is still open.

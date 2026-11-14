@@ -690,3 +690,14 @@ Declining the second means session-only loading, stated in that dialog. Transpor
 failure, timeout or cancellation is not approval and never becomes a default
 remember decision. Package-provided values are quoted and bounded literal text.
 This uses the existing immutable Host catalogs and adds no guest ABI operation.
+
+## General modal control port
+
+`SidecarDialogHost` uses the Host's independently negotiated DialogControl catalog
+(shared packages alpha 18). It addresses only source indices and the current
+presentation revision; guest dialog IDs and view scopes stay inside Sidecar.
+Creation performs explicit catalog discovery. The adapter validates the complete
+state result before returning it, and does not retry opening after cancellation,
+timeout or a lost reply. The presentation owner must reconcile state under the
+same serialization gate used for source/model writes. This port alone does not
+activate guest dialogs or introduce another presentation writer in the Worker.
