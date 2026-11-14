@@ -1,9 +1,9 @@
 # Installation ownership migration
 
-The Sidecar now has a tested transaction for installing an approved developer
-package. Production Worker composition has **not** switched to this path. The
-Host still owns its existing picker, consent UI and restoration loop. Do not run
-both owners against the same installation directory.
+The Sidecar has a tested transaction and management controller for developer
+installation, disable and offline restoration. Production Worker composition has
+**not** switched to this path. The Host still owns its existing picker, consent UI
+and restoration loop. Do not run both owners against the same installation directory.
 
 ## What the installer accepts
 
@@ -68,24 +68,60 @@ or removes only the revision written by that installation attempt. Re-encrypting
 the previous record restores its contents, not its old revision. The file format
 remains `NEXAPC01`; revisions are not guest handles or publisher signatures.
 
+## Management controller
+
+`PluginManagementController` implements `IPluginManagementActions`. Construct it
+before loading any plugin and give it the application, catalog, current-policy
+reader, native picker and consent callbacks. The callbacks receive cancellation
+tokens and must honor them. The controller borrows the application and catalog;
+dispose it before disposing those dependencies.
+
+`ImportDeveloperPackageAsync` reads at most 25 MiB from the chosen file and verifies
+the complete package before requesting consent. The consent callback receives the
+ID, version and requested permissions. It returns `Declined`, `SessionOnly` or
+`Remember`. The controller rechecks the captured session after both interactions
+and then uses the approved installer. A failed load is surfaced to the caller.
+
+`DisableAsync` accepts an exact `PluginIdentity`. A stale identity is rejected
+before any catalog write. The method snapshots record revisions, stops that load
+and its required dependents, then removes matching records of loads actually
+retired. A concurrent newer record is preserved and `plugin.disable.record-changed`
+is reported. Cancellation after retirement starts does not cancel this cleanup.
+
+`RestoreOfflineAsync` returns an array of `PluginRestoreIssue` values. It validates
+records independently, retains only IDs, versions, revisions and dependencies
+during planning, then reopens one package at a time. Required dependencies load
+first. Invalid records, changed revisions, runtime failures and dependency cycles
+are reported without deleting records; unrelated valid plugins still load.
+Repeated calls in the same permitted session do not repeat the attempt.
+
+`SynchronizePolicyAsync` cancels a pending picker or confirmation when its session
+is no longer permitted, waits for that operation's cleanup, and retires active
+loads. It preserves remembered records and resets restoration so a later permitted
+session can restore them. `DisposeAsync` cancels and drains pending work, retires
+loads, and rejects new calls. Concurrent disposal calls await the same cleanup.
+
 ## Remaining production wiring
 
-One management owner must serialize import, restoration, disable and Market
-installation. It must observe and drain these asynchronous effects during
-shutdown, recheck policy after picker/consent interactions, and retire active
-loads when the session or developer policy is revoked. The installer checks an
-individual attempt; it is not a background policy monitor.
+The Worker must supply native picker and consent implementations, observe errors
+from management commands, display restoration issues, and drive policy
+synchronization when readiness, session or developer mode changes. `IsBusy` is
+available for the management-page policy. All state-changing management calls are
+serialized by the controller; the Worker must not load or stop plugins through a
+second owner. Market admission must enter this same lifecycle rather than create
+another restore or mutation loop.
 
-That owner must also implement dependency-ordered offline restoration and
-conditional cleanup after exact-load disable. `PluginApplication.StopLoadAsync`
-returns all identities retired through dependency shutdown. Deleting a record by
-plugin ID alone can erase a newer installation; use the observed catalog revision
-for cleanup. Production restoration remains disabled in this new path until the
-Worker owns the entire lifecycle and the Host owner is removed.
+Production restoration remains disabled in this new path until Worker composition
+switches to the controller and the Host owner is removed. The installer checks an
+individual attempt; the controller reacts when driven by the Worker. Neither
+class starts a background policy monitor merely by being constructed.
 
 `CatalogRevisionTests` exercises competing catalog objects and a separate process
 holding the directory lock. `ApprovedInstallationTests` exercises real Wasm
 activation, rollback, policy revocation, cancellation, concurrent record changes
 and queued byte snapshots. Both suites run in the managed and NativeAOT test
-executables. These tests validate the transaction, not the unfinished production
-picker, consent or startup integration.
+executables. `ManagementControllerChecks` additionally exercises real Wasm import,
+dependency restoration, exact disable, policy cancellation, corrupt records,
+dependency cycles, concurrent record replacement and shutdown. These tests do not
+claim that the unfinished production picker, consent or startup integration has
+switched owners.

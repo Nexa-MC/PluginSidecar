@@ -649,3 +649,28 @@ This is the installation transaction used by the future management owner, not a
 second startup or restoration loop. Production Worker composition and consent UI
 are still required before removing the current Host owner. The single owner must
 serialize restoration, disable and Market installation with these attempts.
+
+## Single management controller
+
+The Sidecar management controller owns developer import, exact-load disable,
+offline restoration and policy retirement under one asynchronous gate. It binds
+only to an application with no active loads. Picker and consent interactions are
+trusted native ports; permission and remember decisions never come from guests.
+The controller rechecks policy after each interaction and delegates approved
+installation to the transactional installer. Shutdown cancels pending work,
+drains it and retires active loads without deleting remembered installations.
+
+Disable observes revisions before retiring the selected exact load, then removes
+only matching records of loads actually retired, including dependents. A stale
+button does not alter records. A record changed by another writer is retained and
+reported. Policy retirement keeps records so re-enabling a permitted session can
+restore them.
+
+Offline restoration validates records independently, keeps only dependency
+metadata during planning, and reopens one package at a time before loading.
+Changed records, invalid packages, missing dependencies and dependency cycles
+are reported without deleting approved records or blocking unrelated packages.
+Restoration is attempted once per permitted session; policy revocation resets
+that attempt. Production composition must drive policy synchronization and use
+this controller as the sole owner. These library changes do not enable a second
+Worker restoration loop while the Host still owns startup.
