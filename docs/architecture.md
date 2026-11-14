@@ -520,3 +520,22 @@ queries are never retried automatically. The Host owns its native dialog slot
 until the dialog actually closes; guest unload must not turn a late reply into
 a new grant. This addition preserves guest ABI 100 and does not switch production
 worker composition by itself.
+
+
+## Host context and restoration readiness
+
+`SidecarRuntimeContext` consumes the independent general Host Context catalog
+(discovery 3327, query 3328). It validates the strict UTF-8 absolute data root and
+waits separately for business readiness and, when required, a native window.
+The caller supplies the activation token and a finite budget (at most ten minutes);
+polling backs off from 100 ms to one second. Stopping, unsupported discovery,
+invalid metadata and query failures stop the wait. Timeouts are distinct from
+caller cancellation. No filesystem directories are created by this adapter.
+
+The data root is trusted-native-Worker context, never a guest capability. Existing
+plugin storage and offline catalog layout remain Sidecar-owned compatibility
+policy. The Worker must finish activation before supervising this wait: the Host
+waits for initial Sidecar activation during its own startup preparation. This
+adapter does not enable a second restoration owner. Production Worker composition
+and removal of the old Desktop owner remain a subsequent atomic migration.
+The frozen ABI 100 receives no new operation or EXP_ID in this change.

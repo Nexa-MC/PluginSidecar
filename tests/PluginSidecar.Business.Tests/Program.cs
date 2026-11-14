@@ -146,6 +146,7 @@ internal static class BusinessTests
         finally { await state.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetName().Name?.StartsWith("Nexa.Services", StringComparison.Ordinal) == true));
         await StopCancelsPendingHostQuery();
+        await ContextFixture.AdapterChecks(observer);
         await FilePickerFixture.AdapterChecks(observer);
         await ClipboardFixture.AdapterChecks(observer);
         await ThemeOptionsTests.Run(observer);
