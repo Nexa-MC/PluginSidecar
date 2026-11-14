@@ -767,3 +767,26 @@ modal open. Native closure retires the exact application dialog and its lifecycl
 subscriptions; malformed or incomplete native state never becomes synthetic
 closure. Production Worker composition must use this sole publisher and drain
 its operations before the old Host controller can be removed.
+
+## Worker receive loop and retirement
+
+The worker owns exactly one frame reader. Activation, admitted commands and
+runtime retirement run outside that reader, including their synchronous prefixes.
+The reader continues routing correlated Host replies, cancellation and health
+traffic during retirement. Deactivation permanently closes command admission;
+unregistration acknowledges only after admitted work and runtime disposal finish.
+An asynchronous failure wakes the reader even if the Host sends no more frames.
+
+The internal runtime boundary supplies registrations, negotiated capabilities,
+activation and command execution. The existing remote Wasm runtime remains the
+production implementation until application ownership is migrated. This boundary
+does not add a guest SDK contract or a transport opcode. Host-request capability
+is enabled only by runtimes that actually use it, and correlated replies go to
+the existing shared request client. Host authorization still applies during
+retirement: processing a reply does not authorize new business effects.
+
+Shutdown or transport loss cancels work and closes the request client before
+awaiting local cleanup, so a missing Host reply cannot strand disposal. Cleanup
+is invoked once. A five-second local drain limit bounds a broken runtime; failure
+is reported rather than acknowledged as successful retirement. Runtime cleanup
+must be cancellation-aware and must not rely on a live Host after shutdown.

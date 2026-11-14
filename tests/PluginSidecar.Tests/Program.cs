@@ -5,6 +5,7 @@ using PluginSidecar.RuntimeAdapter;
 
 if (args is ["--catalog-hold-lock", var catalogDirectory]) { await CatalogRevisionTests.HoldLock(catalogDirectory); return; }
 if (args is ["--key-protection-only"]) { await KeyProtectionTests.Run(); return; }
+if (args is ["--worker-only"]) { await WorkerPeerTests.Run(); return; }
 if (args is ["--remote-only"]) { await RemoteExecutionTests.Run(); return; }
 if (args is ["--application-only"]) { await KeyProtectionTests.Run(); await ApplicationTests.Run(); return; }
 
@@ -29,6 +30,7 @@ await DurableEventTests.Run();
 await ContentRuntimeTests.Run();
 await ResourceRuntimeTests.Run();
 await WasmWorkflowTests.Run();
+await WorkerPeerTests.Run();
 await RemoteExecutionTests.Run();
 await GuestSdkTests.Run();
 await GuestConformanceTests.Run();
@@ -67,7 +69,7 @@ await diagnostics.ReportFinding(new("test", "test", false), options);
 await diagnostics.QueryRegistrations(options);
 await diagnostics.QueryBindingStatus(options);
 await new Resources100(probe).RegisterCleanup(new CallbackHandle(9), options);
-Assert(probe.Calls.SequenceEqual(new[] {1, 2, 4, 5}.Select(i => ("nexa.events/100", (uint)i)).Concat(Enumerable.Range(1, 6).Select(i => ("nexa.ui/100", (uint)i))).Concat(Enumerable.Range(1, 7).Select(i => ("nexa.interplugin/100", (uint)i))).Concat(Enumerable.Range(1, 4).Select(i => ("nexa.diagnostics/100", (uint)i))).Append(("nexa.resources/100", 1u))));
+Assert(probe.Calls.SequenceEqual(new[] { 1, 2, 4, 5 }.Select(i => ("nexa.events/100", (uint)i)).Concat(Enumerable.Range(1, 6).Select(i => ("nexa.ui/100", (uint)i))).Concat(Enumerable.Range(1, 7).Select(i => ("nexa.interplugin/100", (uint)i))).Concat(Enumerable.Range(1, 4).Select(i => ("nexa.diagnostics/100", (uint)i))).Append(("nexa.resources/100", 1u))));
 Assert(probe.LastOptions == options);
 var bytes = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "fixtures", "HelloPlugin.dll"));
 using var loaded = MemoryPlugin.LoadTrustedDevelopmentPayloads("HelloPlugin", "HelloPlugin.Plugin", new Dictionary<string, byte[]> { ["HelloPlugin"] = bytes, ["Nexa.Plugin.Sdk.Abi100"] = File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Nexa.Plugin.Sdk.Abi100.dll")) });
