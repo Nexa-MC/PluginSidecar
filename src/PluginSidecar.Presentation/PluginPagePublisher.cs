@@ -35,12 +35,13 @@ public sealed class PluginPagePublisher : IAsyncDisposable
             var pages = _application.Snapshot().Pages.Where(page => _application.Runtime.Active.Contains(page.Owner))
                 .OrderBy(page => page.Page.Id.Value, StringComparer.Ordinal).ToArray();
             if (pages.Length > 32) throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
-            var next = pages.Select(page => PluginViewCompiler.Prepare(page, _epoch)).ToArray();
+            var contributions = _application.AdvancedUi();
+            var next = pages.Select(page => PluginViewCompiler.Prepare(page, contributions, _epoch)).ToArray();
             bool replace = _revision is null || !SameSources(_published, next);
             if (replace)
             {
                 string epoch = Guid.NewGuid().ToString("N");
-                next = pages.Select(page => PluginViewCompiler.Prepare(page, epoch)).ToArray();
+                next = pages.Select(page => PluginViewCompiler.Prepare(page, contributions, epoch)).ToArray();
                 // Validate the whole candidate before affecting the acknowledged source set.
                 ValidateBudget(next);
                 long revision = _revision ?? await _host.ReadRevisionAsync(stop.Token).ConfigureAwait(false);
@@ -122,10 +123,12 @@ public sealed class PluginPagePublisher : IAsyncDisposable
     }
 
     private bool IsLive(PluginPreparedView view) => _application.Runtime.Active.Contains(view.Owner)
+        && view.ContributionStamp == PluginPageContributions.Stamp(view.Owner, _application.AdvancedUi())
         && _application.Snapshot().Pages.Any(page => page.Owner == view.Owner && page.Page.Id == view.Page);
 
     private static bool SameSources(PluginPreparedView[] left, PluginPreparedView[] right) => left.Length == right.Length
         && left.Zip(right).All(pair => pair.First.Owner == pair.Second.Owner && pair.First.Page == pair.Second.Page
+            && pair.First.ContributionStamp == pair.Second.ContributionStamp
             && pair.First.Document.Target == pair.Second.Document.Target && pair.First.Document.EntryPoint == pair.Second.Document.EntryPoint
             && pair.First.Document.Files.Count == pair.Second.Document.Files.Count
             && pair.First.Document.Files.All(file => pair.Second.Document.Files.TryGetValue(file.Key, out var text) && file.Value == text));

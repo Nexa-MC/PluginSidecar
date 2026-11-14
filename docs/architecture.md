@@ -539,3 +539,22 @@ waits for initial Sidecar activation during its own startup preparation. This
 adapter does not enable a second restoration owner. Production Worker composition
 and removal of the old Desktop owner remain a subsequent atomic migration.
 The frozen ABI 100 receives no new operation or EXP_ID in this change.
+
+## Ordinary-page contributions in the Sidecar
+
+The presentation owner composes active, same-load component contributions before
+publishing an ordinary page. Append, prepend, hide, replace-content and wrap use
+the existing NXML composition semantics and the page's model. Ordering is a
+stable topological sort by ordinal contribution ID; cycles, including self-edges,
+fail before Host publication. Inactive or foreign components are rejected.
+Compiled NXML and the final source retain the existing node, depth and byte
+budgets. No plugin registration or guest SDK model crosses into the Host.
+
+The publisher records the owner's active component/contribution handle set.
+Changes invalidate old page actions immediately, even before synchronization;
+publication rotates action epochs even when the rendered source is unchanged,
+then reconciles the current source/model set through the existing
+revision protocol. Registration changes for another owner do not invalidate the
+page. Workspace contributions, whole-view replacement, dialogs, drawing and
+shortcuts remain separate migration steps; this change covers ordinary-page
+content contributions only and does not switch production Worker composition.

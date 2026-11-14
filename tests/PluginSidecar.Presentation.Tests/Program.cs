@@ -20,7 +20,7 @@ internal static partial class PresentationTests
     private static void Reject(Action action)
     {
         try { action(); }
-        catch (Exception error) when (error is AbiHostException or NxmlCompileException or NxmlParseException or InvalidDataException) { return; }
+        catch (Exception error) when (error is AbiHostException or NxmlCompileException or NxmlParseException or NxmlLoadException or InvalidDataException) { return; }
         throw new InvalidOperationException("Guest presentation unexpectedly accepted.");
     }
     private static IEnumerable<NxmlIrNode> Nodes(NxmlIrNode root)
@@ -83,6 +83,7 @@ internal static partial class PresentationTests
         }) Reject(() => PluginViewCompiler.Prepare(Page(identity, "<nxml-page><Page Key=\"Bad\">" + forbidden + "</Page></nxml-page>")));
         PluginViewCompiler.ValidateComponent("<nxml-dynamic><Text Content=\"Component\" /></nxml-dynamic>");
         Reject(() => PluginViewCompiler.ValidateComponent("<nxml-dynamic><Button DismissCommand=\"ui.host.erase\" /></nxml-dynamic>"));
+        ContributionChecks(identity);
         await HostPort(view);
         await NotificationPort();
         await RealGuest();
@@ -158,14 +159,24 @@ internal static partial class PresentationTests
             Check(host.Revision == 4 && host.ModelUpdates == 1 && targets.SequenceEqual(host.Views.Select(value => value.Document.Target)));
             Check(host.Views.Single(value => value.Owner == advancedLoad.Identity).Model["text"] == "Model update");
             await publisher.SynchronizeAsync(); Check(host.Revision == 4);
+            var beforeRetirement = Nodes(Compile(host.Views.Single(value => value.Owner == loaded.Identity)).Root.Root).Single(node => node.Command is not null);
+            var beforeRetirementForm = SidecarUiForms.Encode(beforeRetirement.Argument!, new Dictionary<string, string>());
+            var contribution = app.Runtime.Definitions.Entries.Single(entry => entry.Owner == advancedLoad.Identity && entry.Definition.Registry.Value == "nexa:ui/contributions");
+            app.Runtime.Definitions.Remove(new(advancedLoad.Identity, Guid.Empty, "Active", new(Guid.NewGuid(), TimeSpan.FromSeconds(5), default)),
+                new(contribution.Definition.Registry, contribution.Definition.Id, contribution.Revision));
+            Check(app.Runtime.Active.Contains(advancedLoad.Identity) && app.Snapshot().Pages.Any(value => value.Owner == advancedLoad.Identity));
+            await RejectedAsync(() => publisher.SetOpenAsync(advancedLoad.Identity, advancedPage.Page.Id, true).AsTask());
+            await publisher.SynchronizeAsync(); Check(host.Revision == 5);
+            await RejectedAsync(() => publisher.InvokeActionAsync(beforeRetirementForm).AsTask());
+            await publisher.SetOpenAsync(advancedLoad.Identity, advancedPage.Page.Id, true);
             await app.StopAsync(advancedLoad.Identity.PluginId);
-            await publisher.SynchronizeAsync(); Check(host.Views.Count == 1 && host.Revision == 5);
+            await publisher.SynchronizeAsync(); Check(host.Views.Count == 1 && host.Revision == 6);
 
             await app.StopAsync(loaded.Identity.PluginId);
             Check(app.Runtime.Active.IsEmpty);
             await RejectedAsync(() => publisher.InvokeActionAsync(form).AsTask());
             await RejectedAsync(() => publisher.SetOpenAsync(loaded.Identity, page.Page.Id, true).AsTask());
-            await publisher.SynchronizeAsync(); Check(host.Views.Count == 0 && host.Revision == 6);
+            await publisher.SynchronizeAsync(); Check(host.Views.Count == 0 && host.Revision == 7);
             host.BlockVisibility = true;
             var waiting = publisher.ReportVisibilityAsync().AsTask();
             await host.VisibilityEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));

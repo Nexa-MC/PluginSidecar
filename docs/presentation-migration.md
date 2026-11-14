@@ -57,9 +57,10 @@ terminal task completion. The test also rejects any loaded Desktop, Avalonia or
 `Nexa.Services` assembly.
 
 The ordinary-page publisher below is implemented. Production worker composition,
-management UI, dialogs, contributions, shortcuts and drawing remain to be composed
-and verified. These tests
-do not authorize removing the old Desktop controller or publishing SDK Beta.
+management UI, workspace contributions, whole-view replacement, dialogs, shortcuts
+and drawing remain to be composed and verified. Ordinary-page content contributions
+are implemented as described below. Production end-to-end verification is still
+required before removing the old Desktop controller or publishing SDK Beta.
 
 ## Owning publication
 
@@ -67,8 +68,9 @@ do not authorize removing the old Desktop controller or publishing SDK Beta.
 Call `SynchronizeAsync` after activation, model changes, registration retirement
 and plugin stop. It publishes at most 32 ordinary pages, sorted by qualified page
 ID. It validates the complete candidate against the Host's source/model budgets
-before sending it. Advanced contributions, dialogs and drawing are not included
-in this ordinary-page publisher.
+before sending it. It composes active, same-load content contributions locally;
+workspace contributions, whole-view replacement, dialogs and drawing remain outside
+this ordinary-page publisher.
 
 The publisher distinguishes source replacement from model updates. Source-set
 changes rotate a publication epoch for every page, so delayed commands from an old
@@ -88,7 +90,7 @@ publisher resolves them locally to an owned document index. Periodically call
 `ReportVisibilityAsync` to feed actual Host visibility into the application's
 existing view lifecycle subscriptions. Route generated DTO command payloads to
 `InvokeActionAsync`; it checks the current published token, active load and active
-page declaration before invoking the ordinary action pipeline. Its result is an
+page declaration and unchanged contribution ownership before invoking the ordinary action pipeline. Its result is an
 `OperationRef`; observe that operation for terminal success or failure.
 
 Disposing the publisher cancels outstanding Host work and rejects late callers.
@@ -141,3 +143,41 @@ cancellation before sending, literal text formatting, oversized inputs, explicit
 approval and terminal action completion. The Host repository separately exercises
 actual dialog rendering/clicking and cancellation when its Sidecar connection
 retires. Production worker composition is still pending.
+
+
+## Ordinary-page content contributions
+
+Use `UI.RegisterComponent` to register a package-owned `nxml-dynamic` asset, then
+`UI.RegisterContribution` to target the owning plugin's page and its `content`
+node. The application's registration and ownership checks still apply. During
+synchronization, the Sidecar resolves active components and combines their markup
+with the page before applying key and action namespacing. The Host receives a
+normal page; it never receives plugin registrations or contribution DTOs.
+
+The contribution uses the page model. `Append` and `Prepend` insert a component
+at the corresponding end of the page's children. `Hide` clears those children;
+`Replace` replaces the children with the component. `Wrap` places existing children
+after a wrapper's own children and requires a supported layout/element container.
+These modes target page content, not protected Host navigation or confirmation UI.
+Whole-view replacement is a different operation and is not implemented here.
+
+`Before` and `After` form a dependency graph for that target. References to IDs
+outside the target do not affect its order. Available nodes use ordinal ID order
+as the tie-breaker; duplicate edges do not change ordering. Cycles and self-edges
+fail before publication. At most 256 contributions may target a page. Compilation
+retains the shared 16384-node/128-depth bounds and the final page's 256 KiB UTF-8
+source limit, in addition to the publisher's aggregate limits.
+
+A component/contribution handle change invalidates the owner's published page
+actions and navigation immediately. The next successful synchronization replaces
+the source set and rotates action epochs even if the markup is unchanged. This is
+conservative: a registration affecting another page of the same owner also causes
+republishing. Changes for a different owner do not invalidate that owner's actions
+before synchronization. As with any source-set replacement, acknowledged
+republishing rotates all page epochs in the shared session.
+
+Validation covers all five modes, deterministic ordering, cycles, component
+ownership, forbidden Host commands, model text and contributed form/action
+translation. A real Wasm fixture removes a contribution while its page and load
+remain active: old navigation is rejected before synchronization, and old action
+tokens remain rejected after the source set is republished.

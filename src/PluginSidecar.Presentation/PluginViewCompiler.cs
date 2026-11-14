@@ -38,6 +38,13 @@ public static class PluginViewCompiler
         }
     }
 
+    public static PluginPreparedView Prepare(PluginPage page, PluginAdvancedUi contributions, string publicationEpoch = "")
+    {
+        var prepared = Prepare(PluginPageContributions.Compose(page, contributions), publicationEpoch);
+        prepared.ContributionStamp = PluginPageContributions.Stamp(page.Owner, contributions);
+        return prepared;
+    }
+
     public static PluginPreparedView Prepare(PluginPage page, string publicationEpoch = "")
     {
         ValidatePage(page.Source);
@@ -133,7 +140,7 @@ public static class PluginViewCompiler
         return result;
     }
 
-    private static void ValidateCompiled(NxmlIrNode node, string command)
+    internal static void ValidateCompiled(NxmlIrNode node, string command)
     {
         if (node.Bindings.Count != 0 || node.Command is { } action && action.Value != command
             || node.ScrollCommand is not null || node.DismissCommand is not null || node.Recipe == NxmlRuntimeRecipe.Image)

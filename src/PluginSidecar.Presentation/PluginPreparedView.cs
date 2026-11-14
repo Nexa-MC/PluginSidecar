@@ -18,6 +18,7 @@ public sealed class PluginPreparedView
     public PluginIdentity Owner => _page.Owner;
     public QualifiedId Page => _page.Page.Id;
     public Revision Revision => _page.Revision;
+    internal string ContributionStamp { get; set; } = "";
     public SidecarNxmlDocument Document { get; }
     public IReadOnlyDictionary<string, string> Model { get; }
 
