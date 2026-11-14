@@ -507,3 +507,16 @@ The presentation adapter adds the plugin identity to bounded literal text and
 sends a general Host notification. Acknowledgement means Host feedback admission,
 not screen paint; unknown outcomes are never retried. Unsupported guest actions
 and localization arguments fail before IPC. No guest SDK type enters the Host.
+
+## Native file selection ownership
+
+The business adapter discovers the general Host file-picker catalog before
+binding it. Both guest file-picker operations share this adapter. Guest title
+arguments remain unsupported; literal text and filters are checked before IPC.
+The adapter prefixes the guest ID, awaits the native result and checks the
+invocation token again before creating an owner-scoped writable file grant.
+A null selection becomes guest cancellation. Failed, cancelled and uncertain
+queries are never retried automatically. The Host owns its native dialog slot
+until the dialog actually closes; guest unload must not turn a late reply into
+a new grant. This addition preserves guest ABI 100 and does not switch production
+worker composition by itself.

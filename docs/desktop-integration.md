@@ -164,4 +164,38 @@ key merely to replay an uncertain effect.
 
 This adapter is verified through the real application/guest route against an
 independent binary Host fixture. Production worker composition, environment,
-file-picker/clipboard and advanced presentation migration remain outstanding.
+clipboard and advanced presentation migration remain outstanding. Native file selection now has an independent general Host adapter, described below.
+
+
+### Native file selection
+
+Create a `SidecarFilePickerClient` from the same bidirectional request client as the
+other Host adapters. Call `DiscoverAsync` and check its result before passing the
+client to `business.BindFilePicker(client)`. The worker must keep its single receive
+loop running while guest invocations await the dialog. Binding the file-picker
+client does not require a clipboard binding.
+
+Both `Files.Pick` and `Platform.PickFile` use this adapter. The guest ID prefixes the
+literal title, and Desktop adds its own verified Sidecar package label. The combined
+guest title must fit 256 UTF-16 code units; localization arguments and control
+characters are rejected. Zero to 32 extension filters are accepted, with at most
+32 ASCII letters, digits or dots per filter. A filter consisting only of dots is
+invalid. Open, directory and save selections retain their existing ABI enum values.
+
+The Host returns strict UTF-8 path bytes, or null when no local item is selected.
+A byte field retains long Unicode paths without exceeding the general protocol's
+string limit. The adapter validates the result and rechecks the invocation token
+before creating an owner-scoped writable grant. It never exposes a Host path as a
+guest handle directly, and another guest cannot use the resulting grant.
+
+User dismissal becomes guest `CANCELLED`. Native unavailability or admission
+backpressure does not trigger another dialog automatically. Cancellation and guest
+stop end the pending invocation; a late selection is drained without creating a
+grant. On the Host, the native dialog keeps its single admission slot until it
+actually closes, even after cancellation or UI rebinding.
+
+Tests use the frozen Host binary contract and the real business/application owner
+to verify source labels, grant isolation, user dismissal and stop during a pending
+query. Adapter tests additionally exercise invalid filters, malformed UTF-8,
+paths exceeding 32 KiB and no retry after rejection. Production worker composition
+still remains a separate migration step.

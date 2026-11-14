@@ -14,11 +14,17 @@ public sealed record PluginPlatformEffects(
 public sealed partial class PluginBusinessRoutes
 {
     private PluginPlatformEffects? _platform;
+    private Func<string, int, string[], CancellationToken, Task<string?>>? _pickFile;
+    public void BindFilePicker(Nexa.Sidecar.Host.SidecarFilePickerClient client) => _pickFile = new SidecarFilePicker(client).PickAsync;
     public void BindPlatform(PluginPlatformEffects platform) => _platform = platform;
     private PluginPlatformEffects Platform => _platform ?? throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
     private async ValueTask<FileRef> PickFile(HostInvocation c, FilePick request)
     {
-        string? path = await Platform.Pick(c.Identity.PluginId + ": " + request.Title.MessageKey, (int)request.Kind, request.Extensions.ToArray(), c.Options.Cancellation).ConfigureAwait(false);
+        if (!request.Title.Arguments.IsEmpty) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
+        c.Options.Cancellation.ThrowIfCancellationRequested();
+        string? path = await (_pickFile ?? Platform.Pick)(c.Identity.PluginId + ": " + request.Title.MessageKey,
+            (int)request.Kind, request.Extensions.ToArray(), c.Options.Cancellation).ConfigureAwait(false);
+        c.Options.Cancellation.ThrowIfCancellationRequested();
         if (path is null) throw new AbiHostException(AbiErrors.CANCELLED);
         return Application.Files.GrantPath(c.Identity, path, true);
     }

@@ -52,6 +52,9 @@ internal static class BusinessTests
             using var shell = new ShellFixture(observer);
             Check((await shell.Client.DiscoverAsync()).IsSuccess);
             business.BindShell(shell.Client);
+            using var picker = new FilePickerFixture(observer) { Selection = root };
+            Check((await picker.Client.DiscoverAsync()).IsSuccess);
+            business.BindFilePicker(picker.Client);
             business.BindPlatform(new((_, _, _, _) => Task.FromResult<string?>(root),
                 _ => Task.FromResult<(string?, byte[]?)>((null, null)), (_, _, _) => Task.CompletedTask));
             await using var app = new PluginApplication(root, (_, _) => throw new InvalidOperationException("Test sources use their own bootstrap factory"),
@@ -70,6 +73,11 @@ internal static class BusinessTests
             // links intentionally; verify the revealed directory's identity, not its alias.
             File.WriteAllText(Path.Combine(root, "reveal-marker.txt"), "selected test directory");
             var picked = Ok(await api.Platform.PickFile(new(new("Directory", []), FilePickKind.Directory, []), Options()));
+            Check(picker.Picks == 1 && picker.Title == "first: Directory");
+            picker.Selection = null;
+            var dismissed = await api.Platform.PickFile(new(new("Dismissed", []), FilePickKind.File, []), Options());
+            Check(!dismissed.Success && dismissed.Error!.Code == AbiErrors.CANCELLED);
+            picker.Selection = root;
             Check(!(await other.Platform.RevealFile(picked, Options())).Success && shell.Reveals == 0);
             Check((await api.Platform.RevealFile(picked, Options())).Success && shell.Reveals == 1);
             Check(shell.DirectoryPath is { } revealed && Path.GetFileName(revealed) == Path.GetFileName(root)
@@ -105,13 +113,22 @@ internal static class BusinessTests
             await state.RefreshAsync();
             Check(!(await api.Accounts.ReadPublic(new(account.Id), Options())).Success);
             Check(Ok(await api.Accounts.List(new(null, 32), Options())).Items.Single().Id != account.Id);
-            await app.Runtime.StopAsync("first");
+            picker.Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            picker.Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            picker.Drained = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            var waitingForPicker = api.Platform.PickFile(new(new("Pending", []), FilePickKind.File, []),
+                new(Guid.NewGuid(), TimeSpan.FromSeconds(30), default) { IdempotencyKey = "picker-stop" }).AsTask();
+            await picker.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5)); Check(!waitingForPicker.IsCompleted);
+            await app.Runtime.StopAsync("first").AsTask().WaitAsync(TimeSpan.FromSeconds(5));
+            Check(!(await waitingForPicker.WaitAsync(TimeSpan.FromSeconds(5))).Success);
+            picker.Release.TrySetResult(); await picker.Drained.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Check(!(await api.Platform.QueryPower(new(), Options())).Success);
             Check((await other.Platform.QueryPower(new(), Options())).Success);
         }
         finally { await state.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetName().Name?.StartsWith("Nexa.Services", StringComparison.Ordinal) == true));
         await StopCancelsPendingHostQuery();
+        await FilePickerFixture.AdapterChecks(observer);
         await ThemeOptionsTests.Run(observer);
         await ThemeActivationTests.Run(observer);
         Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, acknowledged shell effects, typed theme configuration and local document validation, file-grant isolation, revision fencing, lost-state recovery and retirement.");
