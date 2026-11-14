@@ -30,6 +30,7 @@ internal static partial class PresentationTests
             foreach (var node in Nodes(child)) yield return node;
     }
     private static NxmlPreparedDocument Compile(PluginPreparedView view) => new NxmlExtensionProgram(view.Document.EntryPoint, view.Document.Files).Compile(view.Model);
+    private static NxmlPreparedDocument Compile(IPluginHostView view) => new NxmlExtensionProgram(view.Document.EntryPoint, view.Document.Files).Compile(view.Model);
     private static AbiValue.Map Model(params (string Key, AbiValue Value)[] values) => new(values.ToImmutableDictionary(p => p.Key, p => p.Value, StringComparer.Ordinal));
     private static PluginPage Page(PluginIdentity owner, string source, AbiValue? model = null, string id = "example.test:page") => new(owner,
         new(new(id), new(Guid.NewGuid(), owner.LoadInstanceId, "package"), Abi100Schemas.Empty, []), "Test", source, model ?? new AbiValue.Null(), new("1"));
@@ -85,10 +86,12 @@ internal static partial class PresentationTests
         Reject(() => PluginViewCompiler.ValidateComponent("<nxml-dynamic><Button DismissCommand=\"ui.host.erase\" /></nxml-dynamic>"));
         ContributionChecks(identity);
         ReplacementChecks(identity);
+        WorkspaceChecks();
         await HostPort(view);
         await NotificationPort();
         await RealGuest();
         await RealReplacementGuest();
+        await ManagementChecks();
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name is { } name && (name.StartsWith("Nexa.Services.", StringComparison.Ordinal)
             || name.StartsWith("Avalonia", StringComparison.Ordinal) || name == "Nexa.Desktop")));
         Console.WriteLine("PASS: Sidecar compiles guest pages, scopes keys/actions, preserves models, rejects Host escape paths and invokes the real Wasm action without launcher assemblies.");
@@ -203,18 +206,19 @@ internal static partial class PresentationTests
         internal int Replacements, ModelUpdates, Visible = -1;
         internal bool LoseAcknowledgement, BlockVisibility;
         internal TaskCompletionSource VisibilityEntered = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        internal IReadOnlyList<PluginPreparedView> Views = [];
+        internal IReadOnlyList<IPluginHostView> Documents = [];
+        internal IReadOnlyList<PluginPreparedView> Views => Documents.OfType<PluginPreparedView>().ToArray();
         public ValueTask<long> ReadRevisionAsync(CancellationToken token) => ValueTask.FromResult(Revision);
-        public ValueTask ReplaceAsync(long revision, IReadOnlyList<PluginPreparedView> views, CancellationToken token)
+        public ValueTask ReplaceAsync(long revision, IReadOnlyList<IPluginHostView> views, CancellationToken token)
         {
-            Check(revision == Revision); Revision++; Replacements++; Views = views.ToArray(); Visible = -1;
+            Check(revision == Revision); Revision++; Replacements++; Documents = views.ToArray(); Visible = -1;
             if (LoseAcknowledgement) { LoseAcknowledgement = false; throw new IOException("Simulated lost reply after Host commit."); }
             return ValueTask.CompletedTask;
         }
-        public ValueTask UpdateModelsAsync(long revision, IReadOnlyList<PluginPreparedView> views, CancellationToken token)
-        { Check(revision == Revision); Revision++; ModelUpdates++; Views = views.ToArray(); return ValueTask.CompletedTask; }
+        public ValueTask UpdateModelsAsync(long revision, IReadOnlyList<IPluginHostView> views, CancellationToken token)
+        { Check(revision == Revision); Revision++; ModelUpdates++; Documents = views.ToArray(); return ValueTask.CompletedTask; }
         public ValueTask SetOpenAsync(long revision, int document, bool open, CancellationToken token)
-        { Check(revision == Revision && document >= 0 && document < Views.Count); Visible = open ? document : -1; return ValueTask.CompletedTask; }
+        { Check(revision == Revision && document >= 0 && document < Documents.Count); Visible = open ? document : -1; return ValueTask.CompletedTask; }
         public async ValueTask<IReadOnlyList<int>> ReadVisibleAsync(long revision, CancellationToken token)
         {
             Check(revision == Revision);

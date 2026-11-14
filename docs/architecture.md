@@ -576,3 +576,24 @@ registration changes invalidate the publication immediately; a target model
 revision change blocks old actions until synchronization has installed the new
 projection. Target retirement also blocks actions and navigation. Workspace
 replacement remains outside this ordinary-page implementation.
+
+## Management and workspace publication
+
+The same Sidecar presentation writer owns its management page, ordinary plugin
+pages and per-load workspace fragments. The Host port accepts only NXML documents
+and scalar models; a published management view has no fictitious guest identity.
+Management actions have a separate command and token table and cannot enter the
+guest action dispatcher. Current policy and exact load identity are checked again
+when an action is accepted. Import/disable effects are supplied by the Worker,
+which remains responsible for admission, confirmation and offline installations.
+
+Workspace contributions and replacement are compiled against a virtual
+`nexa:plugins/content` view for each active load. The fragment mounts into a private
+slot in the Sidecar's management page, through the existing general NXML channel.
+Each fragment has its own exposure and scoped form inputs. Registered commands
+remain outside the guest-replaceable content and invoke actions with empty inputs.
+Retired registrations invalidate their owner's actions before synchronization.
+Workspace fragments cannot be opened as standalone pages or reported as ordinary
+page visibility. All documents share the existing 32-document and byte budgets.
+Production composition must explicitly enable this owner; no second manager or
+automatic restoration owner is enabled by these library changes.

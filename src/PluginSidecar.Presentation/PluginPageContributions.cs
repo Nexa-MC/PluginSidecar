@@ -14,7 +14,7 @@ namespace PluginSidecar.Presentation;
 internal static class PluginPageContributions
 {
     internal static string Stamp(PluginIdentity owner, PluginAdvancedUi snapshot) => string.Join(',',
-        snapshot.Registrations.Where(r => r.Owner == owner && r.Kind is "components" or "contributions" or "replacements")
+        snapshot.Registrations.Where(r => r.Owner == owner && r.Kind is "components" or "contributions" or "replacements" or "commands")
             .Select(r => r.Registration.Handle).Order().Select(handle => handle.ToString(CultureInfo.InvariantCulture)));
 
     internal static PluginPage Compose(PluginPage page, PluginAdvancedUi snapshot, AbiValue? contributionModel = null)

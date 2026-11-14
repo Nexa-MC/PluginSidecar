@@ -56,21 +56,23 @@ identities, forbidden markup, and a real Wasm action through confirmation and
 terminal task completion. The test also rejects any loaded Desktop, Avalonia or
 `Nexa.Services` assembly.
 
-The ordinary-page publisher below is implemented. Production worker composition,
-management UI, workspace contributions/replacement, dialogs, shortcuts and drawing
-remain to be composed and verified. Ordinary-page content contributions and
-whole-view replacement are implemented as described below. Production end-to-end verification is still
+The publisher below implements ordinary pages, content contributions and
+whole-view replacement. When explicitly configured, it also publishes Sidecar
+management controls and isolated workspace extensions. Production Worker
+composition and real package-management effects, dialogs, shortcuts and drawing
+remain to be completed. Production end-to-end verification is still
 required before removing the old Desktop controller or publishing SDK Beta.
 
 ## Owning publication
 
 `PluginPagePublisher` is the sole presentation writer for its Sidecar session.
 Call `SynchronizeAsync` after activation, model changes, registration retirement
-and plugin stop. It publishes at most 32 ordinary pages, sorted by qualified page
-ID. It validates the complete candidate against the Host's source/model budgets
-before sending it. It composes active, same-load content contributions locally;
-workspace contributions/replacement, dialogs and drawing remain outside this
-ordinary-page publisher.
+and plugin stop. Ordinary pages are sorted by qualified page ID. At most 32
+documents may be published, including management, navigation and workspace
+fragments when management is enabled. It validates the complete candidate against the Host's source/model budgets
+before sending it. It composes active, same-load content contributions locally.
+Workspace composition is enabled with the management options described below;
+dialogs and drawing remain separate migration work.
 
 The publisher distinguishes source replacement from model updates. Source-set
 changes rotate a publication epoch for every page, so delayed commands from an old
@@ -168,7 +170,7 @@ fail before publication. At most 256 contributions may target a page. Compilatio
 retains the shared 16384-node/128-depth bounds and the final page's 256 KiB UTF-8
 source limit, in addition to the publisher's aggregate limits.
 
-A component/contribution/replacement handle change invalidates the owner's published page
+A component/contribution/replacement/command handle change invalidates the owner's published page
 actions and navigation immediately. The next successful synchronization replaces
 the source set and rotates action epochs even if the markup is unchanged. This is
 conservative: a registration affecting another page of the same owner also causes
@@ -198,8 +200,8 @@ The publisher passes its complete active page snapshot to
 Callers preparing a replacement directly must also supply that snapshot. The
 shorter overload has only the supplied page available; it cannot resolve a
 replacement referring to another page. A missing, foreign-load or schema-mismatched
-target fails locally before Host publication. Workspace replacement is not yet
-part of this publisher.
+target fails locally before Host publication. The management-enabled publisher also resolves workspace replacement against
+the same active-page snapshot.
 
 A replacement changes the rendered page, not the logical page's identity. Its
 markup reads the **target page model**. Contributions registered for the original
@@ -238,3 +240,77 @@ action that returns the original model, updates the target without replacing Hos
 sources, and retires the replacement and target while checking stale admission.
 These tests also run as a native executable; no launcher presentation assemblies
 are loaded.
+
+
+## Sidecar management and workspace publication
+
+Construct `PluginPagePublisher` with `PluginManagementOptions` to opt into this
+owner. Omitting the options preserves the ordinary-page-only mode. The Worker
+supplies a current-policy reader, an `IPluginManagementActions` implementation,
+localized labels and, optionally, a general navigation anchor. The default anchor
+is `#NavigationSettings`. These are trusted composition inputs, not guest SDK
+operations. The deployed Worker has not enabled this owner yet.
+
+The publisher includes a management page and a navigation item before the anchor.
+The page lists known installations, their states, active-load disable controls and
+links to ordinary pages. Each active load with workspace content or registered
+commands receives a separate NXML fragment mounted into a private manager slot.
+Everything uses the existing generated Host presentation and page-control clients;
+the Host receives no plugin status, registration or management DTO.
+
+Register two distinct generated-DTO commands in the Worker:
+
+| Command | Receiver | Meaning |
+| --- | --- | --- |
+| `PluginViewCompiler.ActionCommand` | `InvokeActionAsync` | An admitted guest action from its own published page or workspace exposure. |
+| `PluginPagePublisher.ManagementCommand` | `InvokeManagementAsync` | An opaque management token from the current Sidecar management page. |
+
+A guest source may emit only `ui.plugin.action`, which the compiler rewrites to
+the first command. It cannot author management commands. The manager rejects
+forms containing any input fields; guest forms cannot masquerade as package
+management. A management token sent to the guest dispatcher, or a guest token
+sent to the management dispatcher, is rejected.
+
+`PluginManagementPolicy` expresses developer mode, safe mode, engine readiness,
+a busy flag and literal status text. Import is available only in developer mode,
+outside safe mode, with a ready engine and no pending operation. The publisher
+checks the policy again on each click, even before the next visual refresh.
+Disable captures the exact load identity; a stopped or reloaded identity cannot
+reuse its button. A page link resolves only to a current ordinary page and checks
+its registration dependencies before opening it. `OpenManagerAsync` opens the
+manager through the same revision-fenced page-control channel.
+
+The effects port is intentionally separate from rendering. Its production
+implementation must perform native file selection, package verification, explicit
+permission consent and offline-installation updates, then recheck policy after
+user interaction. Disable must retire the exact admitted load under the lifecycle
+owner's synchronization and update its offline records. A successful button
+admission is not proof that any of these effects completed. The publisher permits
+one import/disable effect at a time, passes cancellation through and never
+automatically retries an uncertain effect. The Worker must observe and drain these calls as part of its
+lifetime supervision. The tests use a controlled effects port; they do not claim
+that production import or offline restoration has switched owners.
+
+Workspace content uses the stable logical view `nexa:plugins/content` and an empty
+original model for each load. Ordinary contribution ordering and replacement
+schema checks apply. A replacement target therefore needs the workspace's
+`Empty` schema. Contributions modify only that load's content. Registered command
+buttons are added afterward, outside the replaceable content; hiding or replacing
+content cannot remove them or any management control. Command labels are literal
+model data and command actions receive empty inputs, preserving their existing
+contract. Ordinary contributed actions receive their own exposure's drafts.
+
+Fragments have separate scoped keys, tokens and form exposures, even though their
+logical workspace view ID is shared. They cannot be opened with `SetOpenAsync`,
+and they are not reported as ordinary page visibility. Their source and model
+changes participate in the publisher's single revision and epoch protocol.
+Management, navigation, pages and fragments together consume the 32-document,
+4 MiB source and 4 MiB model budgets; exceeding a limit rejects the entire candidate
+before a Host write.
+
+Tests compile and mount workspace fragments with the shared renderer, verify
+separate form ownership and protected command controls, then exercise a real Wasm
+command through the publisher. Management tests cover policy changes before
+refresh, wrong-channel tokens, forged fields, stale load/page controls, lost
+publication acknowledgement, duplicate clicks and cancellation of a pending
+effect. No Desktop, Avalonia or `Nexa.Services` assembly is loaded.

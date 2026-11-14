@@ -11,10 +11,12 @@ using PluginSidecar.Application;
 namespace PluginSidecar.Presentation;
 
 /// <summary>A locally validated projection. Publication and active-load admission belong to its owner.</summary>
-public sealed class PluginPreparedView
+public sealed class PluginPreparedView : IPluginHostView
 {
     private readonly PluginPage _page;
     private readonly IReadOnlyDictionary<string, string> _inputs, _actions;
+    private readonly IReadOnlyDictionary<string, string> _commands;
+    public bool IsWorkspace { get; private init; }
     public PluginIdentity Owner => _page.Owner;
     public QualifiedId Page => _page.Page.Id;
     public Revision Revision => _page.Revision;
@@ -24,22 +26,28 @@ public sealed class PluginPreparedView
     public IReadOnlyDictionary<string, string> Model { get; }
 
     internal PluginPreparedView(PluginPage page, SidecarNxmlDocument document, Dictionary<string, string> model,
-        Dictionary<string, string> inputs, Dictionary<string, string> actions)
+        Dictionary<string, string> inputs, Dictionary<string, string> actions, Dictionary<string, string>? commands = null)
     {
         _page = page; Document = document;
         Model = new ReadOnlyDictionary<string, string>(model);
         _inputs = new ReadOnlyDictionary<string, string>(inputs);
         _actions = new ReadOnlyDictionary<string, string>(actions);
+        _commands = new ReadOnlyDictionary<string, string>(commands ?? []);
     }
 
-    internal bool OwnsAction(string token) => _actions.ContainsKey(token);
+    internal PluginPreparedView AsWorkspace(SidecarNxmlDocument document, Dictionary<string, string> model, Dictionary<string, string> commands)
+        => new(_page, document, model, new(_inputs), new(_actions), commands)
+        { IsWorkspace = true, ContributionStamp = ContributionStamp, ReplacementDependency = ReplacementDependency };
+
+    internal bool OwnsAction(string token) => _actions.ContainsKey(token) || _commands.ContainsKey(token);
 
     /// <summary>Call only after resolving this projection in the current published set and active application.</summary>
     public ActionRequest TranslateAction(ReadOnlyMemory<byte> payload, PluginIdentity activeOwner)
     {
         if (activeOwner != Owner) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
         var form = SidecarUiForms.Decode(payload);
-        if (!_actions.TryGetValue(form.Argument, out string? action)) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
+        bool command = _commands.TryGetValue(form.Argument, out string? action);
+        if (!command && !_actions.TryGetValue(form.Argument, out action)) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
         var fields = _page.Model is AbiValue.Map map ? map.Value.ToBuilder() : ImmutableDictionary.CreateBuilder<string, AbiValue>(StringComparer.Ordinal);
         foreach (var field in form.Fields)
         {
@@ -47,6 +55,6 @@ public sealed class PluginPreparedView
             if (!fields.ContainsKey(original) && fields.Count >= 128) throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
             fields[original] = new AbiValue.Utf8String(Encoding.UTF8.GetString(field.Utf8Value));
         }
-        return new(new(action), new(new("nexa:ui"), new(Page.Value), "plugin"), new AbiValue.Map(fields.ToImmutable()), null, Guid.NewGuid().ToString("N"));
+        return new(new(action!), new(new("nexa:ui"), new(Page.Value), "plugin"), command ? Empty.Write(new()) : new AbiValue.Map(fields.ToImmutable()), null, Guid.NewGuid().ToString("N"));
     }
 }

@@ -34,14 +34,14 @@ public sealed class SidecarPresentationHost : IPluginPresentationHost
         return result.Value.Revision;
     }
 
-    public async ValueTask ReplaceAsync(long revision, IReadOnlyList<PluginPreparedView> views, CancellationToken token)
+    public async ValueTask ReplaceAsync(long revision, IReadOnlyList<IPluginHostView> views, CancellationToken token)
     {
         if (!_views.Commands.TryResolve(Views.SidecarViewStateRoutes.Replace, out var route)) throw new InvalidOperationException("Host view-state replacement unavailable.");
         Check(await _views.Commands.Dispatch(route, new Views.HostViewReplace(revision,
             views.Select(view => SidecarNxmlDocument.Encode(view.Document)).ToArray(), Models(views)), cancellationToken: token).Completion.ConfigureAwait(false), token);
     }
 
-    public async ValueTask UpdateModelsAsync(long revision, IReadOnlyList<PluginPreparedView> views, CancellationToken token)
+    public async ValueTask UpdateModelsAsync(long revision, IReadOnlyList<IPluginHostView> views, CancellationToken token)
     {
         if (!_views.Commands.TryResolve(Views.SidecarViewStateRoutes.Models, out var route)) throw new InvalidOperationException("Host view-state models unavailable.");
         Check(await _views.Commands.Dispatch(route, new Views.HostViewModelsUpdate(revision, Models(views)), cancellationToken: token).Completion.ConfigureAwait(false), token);
@@ -65,7 +65,7 @@ public sealed class SidecarPresentationHost : IPluginPresentationHost
         return state.Pages.Where(page => page.Visible).Select(page => page.Document).ToArray();
     }
 
-    private static Views.HostViewModel[] Models(IReadOnlyList<PluginPreparedView> views) => views.Select((view, index) =>
+    private static Views.HostViewModel[] Models(IReadOnlyList<IPluginHostView> views) => views.Select((view, index) =>
         new Views.HostViewModel(index, view.Model.OrderBy(field => field.Key, StringComparer.Ordinal)
             .Select(field => new Views.HostViewValue(field.Key, Encoding.UTF8.GetBytes(field.Value))).ToArray())).ToArray();
     private static void Check(XsrResult result, CancellationToken token) => Check(result.Error, token);
