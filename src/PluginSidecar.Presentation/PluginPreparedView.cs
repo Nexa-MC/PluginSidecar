@@ -16,6 +16,7 @@ public sealed class PluginPreparedView : IPluginHostView
     private readonly PluginPage _page;
     private readonly IReadOnlyDictionary<string, string> _inputs, _actions;
     private readonly IReadOnlyDictionary<string, string> _commands;
+    internal string PublicationEpoch { get; init; } = "";
     public bool IsWorkspace { get; private init; }
     public PluginIdentity Owner => _page.Owner;
     public QualifiedId Page => _page.Page.Id;
@@ -37,7 +38,7 @@ public sealed class PluginPreparedView : IPluginHostView
 
     internal PluginPreparedView AsWorkspace(SidecarNxmlDocument document, Dictionary<string, string> model, Dictionary<string, string> commands)
         => new(_page, document, model, new(_inputs), new(_actions), commands)
-        { IsWorkspace = true, ContributionStamp = ContributionStamp, ReplacementDependency = ReplacementDependency };
+        { PublicationEpoch = PublicationEpoch, IsWorkspace = true, ContributionStamp = ContributionStamp, ReplacementDependency = ReplacementDependency };
 
     internal bool OwnsAction(string token) => _actions.ContainsKey(token) || _commands.ContainsKey(token);
 

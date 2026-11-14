@@ -128,7 +128,7 @@ public static class PluginViewCompiler
         if (compiled.Root.Root.Key != scope || compiled.Root.Root.Role != XsrUiSemanticRole.Page) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         var document = new SidecarNxmlDocument("#" + scope, SidecarNxmlOperation.Page, "page.nxml", files);
         _ = SidecarNxmlDocument.Encode(document);
-        return new(logicalPage, document, model, inputs, actions);
+        return new(logicalPage, document, model, inputs, actions) { PublicationEpoch = publicationEpoch };
     }
 
     internal static Dictionary<string, string> ReadModel(AbiValue value)

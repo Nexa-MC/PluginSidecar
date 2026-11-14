@@ -75,17 +75,27 @@ before sending it. It composes active, same-load content contributions locally.
 Workspace composition is enabled with the management options described below;
 dialogs and drawing remain separate migration work.
 
-The publisher distinguishes source replacement from model updates. Source-set
-changes rotate a publication epoch for every page, so delayed commands from an old
-source set cannot resolve to a new action. Model updates keep the epoch, source
-and control identities, preserving drafts. Typed model changes that produce the
-same display text still replace the local action model without a redundant Host
-write.
+The publisher distinguishes source reconciliation from model updates. With
+`IPluginRetainedPresentationHost`, each ordinary page and workspace has its own
+publication epoch. Adding, removing or reordering another view retains unchanged
+sources by their previous indices. A source or ownership change rotates only the
+affected view's keys and action tokens. The trusted manager and its navigation
+share a target; replacing the manager also replaces workspace fragments mounted
+under that target. Unrelated pages retain their drafts and pending submissions. Previously reported
+visibility is carried forward only for retained ordinary pages, so rebuilding the
+manager does not generate a false hidden/open lifecycle transition.
+
+Model-only updates keep epochs and source identities. Typed model changes that
+produce the same display text still replace the local action model without a
+redundant Host write. Ports implementing only `IPluginPresentationHost` preserve
+the earlier whole-set replacement behavior, including rotating every view's epoch.
+Native `SidecarPresentationHost.CreateAsync` discovers the ViewReconcile catalog
+in addition to ViewState and PageControl; a missing catalog fails creation.
 
 A mutation may have reached the Host even when its response is lost or cancelled.
 In that case, the publisher stops admitting actions and discards its assumed Host
 revision. The next explicit synchronization rereads the revision and replaces the
-complete source set with a new epoch. It never automatically replays navigation
+complete source set with fresh epochs. It never automatically replays navigation
 or a guest action. Recovery therefore does not mean the previous action ran twice.
 
 Use `SetOpenAsync` with the exact active `PluginIdentity` and page ID. The
@@ -102,7 +112,7 @@ Do not create two publishers for one session, or combine a publisher with anothe
 writer of that session's presentation revision.
 
 Publisher tests use a simulated Host port with two real Wasm guests. They cover a
-committed replacement with a lost reply, explicit recovery, retired publication
+committed replacement or reconciliation with a lost reply, explicit recovery, retired publication
 tokens, model-only publication, foreign navigation, plugin stop and cancellation
 of an outstanding visibility query during disposal. A separate frozen wire fixture
 exercises the actual generated Host clients, including discovery, document/model
@@ -356,3 +366,27 @@ open modals to eight per Sidecar session and sixteen globally, and rejects openi
 a new modal while a Host-owned confirmation or onboarding flow has priority.
 Do not convert a transport error into a synthetic closed state: that could retire
 a guest dialog whose window is still open.
+
+
+## Retained publication transport
+
+`IPluginRetainedPresentationHost.ReconcileAsync(revision, views, previousDocuments, token)`
+sends the complete ordered candidate set. Each mapping entry is a unique prior
+source index, or `-1` for a new source. The native adapter rejects mismatched
+counts, duplicate retained indices and indices outside the 32-document limit
+before sending. Retained candidates send no source bytes; every candidate sends
+its complete model. Only the single publisher may decide which acknowledged
+sources are identical and safe to retain.
+
+The Host validates the session revision and complete candidate before committing.
+A successful command advances the revision once. All queued controls using the
+previous source-set snapshot retire, while retained documents keep their action
+lifetimes. Their new indices must be used for subsequent navigation or modal
+control. Retention never reopens a native-closed modal. The same serialization
+gate must own future dialog publication and close-state reconciliation.
+
+Managed and NativeAOT tests exercise the frozen binary catalog and real Wasm
+pages through both legacy replacement and retained publication. They cover
+reordering after another load appears, unchanged action tokens, contribution
+retirement, manager/workspace dependencies, malformed index maps and explicit
+fresh-source recovery after a lost reconciliation acknowledgement.

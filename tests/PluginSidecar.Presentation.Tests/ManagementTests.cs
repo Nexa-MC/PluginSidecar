@@ -10,7 +10,7 @@ using PluginSidecar.WasmRuntime;
 
 internal static partial class PresentationTests
 {
-    private static async Task ManagementChecks()
+    private static async Task ManagementChecks(bool retained = false)
     {
         string sample = Environment.GetEnvironmentVariable("NEXA_WASM_SAMPLE") ?? throw new InvalidOperationException("Guest fixture required.");
         string root = Path.Combine(Path.GetTempPath(), "sidecar-manager-" + Guid.NewGuid().ToString("N"));
@@ -20,7 +20,8 @@ internal static partial class PresentationTests
                 new Allow(), (_, _) => { }, (_, _) => { }, PluginViewCompiler.ValidatePage, PluginViewCompiler.ValidateComponent);
             var policy = new PluginManagementPolicy(true, false, true, false, "Ready <literal> {data private}");
             var effects = new ManagementEffects(app);
-            var host = new TestPageHost { LoseAcknowledgement = true };
+            TestPageHost host = retained ? new RetainedPageHost() : new TestPageHost();
+            host.LoseAcknowledgement = true;
             await using var publisher = new PluginPagePublisher(app, host, new(() => policy, effects));
             byte[] Form(IPluginHostView view, string label) => SidecarUiForms.Encode(Nodes(Compile(view).Root.Root)
                 .Single(node => node.Content == label && node.Command is not null).Argument!, new Dictionary<string, string>());
@@ -59,6 +60,30 @@ internal static partial class PresentationTests
             byte[] open = Form(Manager(), page.Title);
             await publisher.InvokeManagementAsync(open); Check(host.Visible == 2);
             await publisher.ReportVisibilityAsync();
+            if (retained)
+            {
+                var watch = Abi100Catalog.Operations.Single(value => value.Group == "UI" && value.Name == "WatchViewLifecycle");
+                var subscribed = await app.Runtime.InvokeAsync(load.Identity, watch.ContractId, watch.MethodId,
+                    UIViewWatch.Write(new(new(page.Page.Id.Value), load.Identity.LoadInstanceId, null)),
+                    new(Guid.NewGuid(), TimeSpan.FromSeconds(5), default));
+                Check(subscribed.Success, subscribed.Error?.Code);
+                var subscription = SubscriptionRef.Read(subscribed.Value);
+                Check(TextResult.Read(app.Runtime.Services.ReadSubscription(load.Identity, subscription).Items.Single()).Text == "open");
+                string ordinaryTarget = host.Views.Single(value => !value.IsWorkspace).Document.Target;
+                string previousWorkspace = host.Views.Single(value => value.IsWorkspace).Document.Target;
+                using var otherPackage = VerifiedPluginPackage.Parse(await File.ReadAllBytesAsync(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sample))!, "desktop.zip")),
+                    "example.desktop", "1.0.0");
+                var otherLoad = await app.LoadAsync(otherPackage, otherPackage.Manifest.RequestedPermissions, default);
+                Check(otherLoad.State == LoadState.Active);
+                await publisher.SynchronizeAsync();
+                Check(host.Views.Single(value => !value.IsWorkspace && value.Owner == load.Identity).Document.Target == ordinaryTarget);
+                Check(host.Views.Single(value => value.IsWorkspace).Document.Target != previousWorkspace);
+                Check(host.Views.Single(value => value.IsWorkspace).Document.Target.StartsWith(Manager().Document.Target + "/#", StringComparison.Ordinal));
+                Check(app.Runtime.Services.ReadSubscription(load.Identity, subscription).Items.IsEmpty);
+                await app.StopAsync(otherLoad.Identity.PluginId); await publisher.SynchronizeAsync();
+                Check(app.Runtime.Services.ReadSubscription(load.Identity, subscription).Items.IsEmpty);
+                app.Runtime.Services.ReleaseSubscription(load.Identity, subscription);
+            }
             await RejectedAsync(() => publisher.SetOpenAsync(load.Identity, PluginApplication.WorkspaceView, true).AsTask());
             var workspace = host.Views.Single(view => view.IsWorkspace);
             Check(workspace.Document.Target.StartsWith(Manager().Document.Target + "/#", StringComparison.Ordinal));

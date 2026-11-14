@@ -31,15 +31,17 @@ internal static partial class PresentationTests
                 { Check(reader.ReadBoolean()); Check(ReadText() == field.Key); Check(ReadText() == field.Value); }
                 models++;
             }
-            if (request.ContractId is 1023 or 1279)
+            if (request.ContractId is 1023 or 1279 or 3839)
             {
                 writer.Write(1u);
                 Text(request.ContractId == 1023
                     ? "6D34FF5EBE26D69AED55766EB04A20FCCC1077619CD2BA763323433DEA78FC82:C32BE3528BEE01E22C402B7ECD6A18DCA733060FF3F9734192119615BD45972A"
+                    : request.ContractId == 3839
+                    ? "D68929EB52E7BB891A4B1783601A41B6B9A120E09C940989CCAC7D333D169715:CF18AEE13178DE6491BC4112DF6AD5226D2C1D5C8782BFF633A4FB7FE36C6A31"
                     : "46D5C780DCD36136E0F3B0EE1E528E820A7FEBA2F80268C114764FDBA3AE59D4:B8AA95C327BBB6A10CC4B651ECC1A25694F31AD8CE554062803110CE1E9E2505");
-                writer.Write(3);
-                uint first = request.ContractId == 1023 ? 1024u : 1280u;
-                for (uint id = first; id < first + 3; id++) writer.Write(id);
+                int count = request.ContractId == 3839 ? 1 : 3; writer.Write(count);
+                uint first = request.ContractId == 3839 ? 3840u : request.ContractId == 1023 ? 1024u : 1280u;
+                for (uint id = first; id < first + count; id++) writer.Write(id);
             }
             else
             {
@@ -59,7 +61,17 @@ internal static partial class PresentationTests
                             Check(document.Files[document.EntryPoint] == view.Document.Files[view.Document.EntryPoint]);
                             ReadModels(); revision++; break;
                         case 1026: ReadModels(); revision++; break;
-                        case 1281: case 1282:
+                        case 3840:
+                            Check(reader.ReadInt32() == 1 && reader.ReadBoolean());
+                            int previous = reader.ReadInt32();
+                            var source = reader.ReadBytes(reader.ReadInt32());
+                            Check(previous == 0 ? source.Length == 0 : previous == -1 && source.SequenceEqual(SidecarNxmlDocument.Encode(view.Document)));
+                            Check(reader.ReadInt32() == view.Model.Count);
+                            foreach (var field in view.Model.OrderBy(field => field.Key, StringComparer.Ordinal))
+                            { Check(reader.ReadBoolean()); Check(ReadText() == field.Key); Check(ReadText() == field.Value); }
+                            revision++; break;
+                        case 1281:
+                        case 1282:
                             Check(reader.ReadInt32() == 0);
                             if (!reject) visible = request.ContractId == 1281;
                             break;
@@ -92,6 +104,16 @@ internal static partial class PresentationTests
         Check(denied && visible);
         await host.SetOpenAsync(44, 0, false, default);
         Check((await host.ReadVisibleAsync(44, default)).Count == 0);
+        var retained = (IPluginRetainedPresentationHost)host;
+        await retained.ReconcileAsync(44, [view], [0], default);
+        await retained.ReconcileAsync(45, [view], [-1], default);
+        foreach (int[] invalid in new int[][] { [], [-2], [32], [0, 0] })
+        {
+            bool invalidMap = false;
+            try { await retained.ReconcileAsync(46, invalid.Length == 2 ? [view, view] : [view], invalid, default); }
+            catch (ArgumentException) { invalidMap = true; }
+            Check(invalidMap && revision == 46);
+        }
     }
     private sealed class Observer : IXsrDispatchObserver { public void OnCompleted(XsrDispatchObservation observation) { } }
 }

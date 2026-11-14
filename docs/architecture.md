@@ -701,3 +701,30 @@ state result before returning it, and does not retry opening after cancellation,
 timeout or a lost reply. The presentation owner must reconcile state under the
 same serialization gate used for source/model writes. This port alone does not
 activate guest dialogs or introduce another presentation writer in the Worker.
+
+## Retaining independently published views
+
+The single presentation owner uses the general ViewReconcile catalog from shared
+packages alpha 19. Guest pages, the trusted manager/navigation pair and each
+load's workspace receive independently owned publication epochs. A source or
+ownership change rotates only the affected view's epoch. Model-only updates keep
+that view's keys and action tokens. An unchanged view is explicitly retained by
+its prior source index, even when another view is added, removed or reordered.
+No guest identity crosses the Host boundary.
+
+The manager's workspace target depends on its epoch. Replacing that manager also
+recompiles its navigation and all fragments mounted under the old target; those
+fragments cannot be retained against a removed parent. Unrelated ordinary pages
+keep their identities. Contribution stamps and replacement dependencies remain
+part of action admission, so retention never revives a retired load or stale
+replacement. Typed guest models are refreshed even when their rendered strings
+have not changed.
+
+One gate owns source reconciliation, model writes, revision changes and action
+admission. Only a successful acknowledgement installs the candidate. A failed or
+uncertain mutation clears admission and the remembered revision. An explicit
+later recovery reads the Host revision and publishes fresh sources with fresh
+epochs; it never assumes an uncertain retention succeeded or replays modal opens.
+Legacy presentation ports retain their existing whole-set replacement behavior.
+Production native composition must discover retention before using this path.
+This change does not switch the Worker restoration or presentation owner.

@@ -16,3 +16,9 @@ public interface IPluginPresentationHost
     ValueTask SetOpenAsync(long revision, int document, bool open, CancellationToken token);
     ValueTask<IReadOnlyList<int>> ReadVisibleAsync(long revision, CancellationToken token);
 }
+
+/// <summary>Opt-in source reconciliation; each index retains one previous source, or -1 adds a new source.</summary>
+public interface IPluginRetainedPresentationHost : IPluginPresentationHost
+{
+    ValueTask ReconcileAsync(long revision, IReadOnlyList<IPluginHostView> views, IReadOnlyList<int> previousDocuments, CancellationToken token);
+}

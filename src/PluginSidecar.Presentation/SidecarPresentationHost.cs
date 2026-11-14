@@ -5,23 +5,26 @@ using Nexa.Sidecar.Transport;
 using Nexa.Xsr;
 using Nexa.Xsr.Runtime;
 using Pages = Nexa.Sidecar.Host.PageControl.Data;
+using Retained = Nexa.Sidecar.Host.ViewReconcile.Data;
 using Views = Nexa.Sidecar.Host.ViewState.Data;
 
 namespace PluginSidecar.Presentation;
 
 /// <summary>Generated binary Host clients; no launcher service or plugin DTO is sent across IPC.</summary>
-public sealed class SidecarPresentationHost : IPluginPresentationHost
+public sealed class SidecarPresentationHost : IPluginRetainedPresentationHost
 {
     private readonly SidecarViewStateClient _views;
     private readonly SidecarPageControlClient _pages;
+    private readonly SidecarViewReconcileClient _retained;
     private SidecarPresentationHost(SidecarHostRequestClient requests, IXsrDispatchObserver observer)
-    { _views = new(requests, observer); _pages = new(requests, observer); }
+    { _views = new(requests, observer); _pages = new(requests, observer); _retained = new(requests, observer); }
 
     public static async ValueTask<SidecarPresentationHost> CreateAsync(SidecarHostRequestClient requests, IXsrDispatchObserver observer, CancellationToken token = default)
     {
         var host = new SidecarPresentationHost(requests, observer);
         Check(await host._views.DiscoverAsync(token).ConfigureAwait(false), token);
         Check(await host._pages.DiscoverAsync(token).ConfigureAwait(false), token);
+        Check(await host._retained.DiscoverAsync(token).ConfigureAwait(false), token);
         return host;
     }
 
@@ -39,6 +42,19 @@ public sealed class SidecarPresentationHost : IPluginPresentationHost
         if (!_views.Commands.TryResolve(Views.SidecarViewStateRoutes.Replace, out var route)) throw new InvalidOperationException("Host view-state replacement unavailable.");
         Check(await _views.Commands.Dispatch(route, new Views.HostViewReplace(revision,
             views.Select(view => SidecarNxmlDocument.Encode(view.Document)).ToArray(), Models(views)), cancellationToken: token).Completion.ConfigureAwait(false), token);
+    }
+
+    public async ValueTask ReconcileAsync(long revision, IReadOnlyList<IPluginHostView> views, IReadOnlyList<int> previousDocuments, CancellationToken token)
+    {
+        if (views.Count > 32 || previousDocuments.Count != views.Count || previousDocuments.Any(index => index is < -1 or >= 32)
+            || previousDocuments.Where(index => index >= 0).Distinct().Count() != previousDocuments.Count(index => index >= 0))
+            throw new ArgumentException("Invalid retained document map.");
+        if (!_retained.Commands.TryResolve(Retained.SidecarViewReconcileRoutes.Reconcile, out var route)) throw new InvalidOperationException("Host document reconciliation unavailable.");
+        var documents = views.Select((view, index) => new Retained.HostViewCandidate(previousDocuments[index],
+            previousDocuments[index] < 0 ? SidecarNxmlDocument.Encode(view.Document) : [],
+            view.Model.OrderBy(field => field.Key, StringComparer.Ordinal)
+                .Select(field => new Retained.HostViewCandidateValue(field.Key, Encoding.UTF8.GetBytes(field.Value))).ToArray())).ToArray();
+        Check(await _retained.Commands.Dispatch(route, new Retained.HostViewReconcileRequest(revision, documents), cancellationToken: token).Completion.ConfigureAwait(false), token);
     }
 
     public async ValueTask UpdateModelsAsync(long revision, IReadOnlyList<IPluginHostView> views, CancellationToken token)

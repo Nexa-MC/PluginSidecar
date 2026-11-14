@@ -37,12 +37,14 @@ internal sealed class PluginManagementView : IPluginHostView
     public SidecarNxmlDocument Document { get; }
     public IReadOnlyDictionary<string, string> Model { get; }
     internal IPluginHostView Navigation { get; }
+    internal string PublicationEpoch { get; }
     internal string WorkspaceTarget { get; }
     internal bool TryResolve(string token, out PluginManagementAction? action) => _actions.TryGetValue(token, out action);
 
     internal PluginManagementView(PluginPresentation snapshot, IReadOnlyCollection<PluginIdentity> active,
         IReadOnlyList<PluginPreparedView> pages, PluginManagementPolicy policy, PluginManagementOptions options, string epoch)
     {
+        PublicationEpoch = epoch;
         NxmlPresentationCoordinator.ValidateTarget(options.NavigationAnchor);
         var labels = options.Labels ?? new();
         string key = "PluginManager_" + epoch, slot = "PluginWorkspace_" + epoch;

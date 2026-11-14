@@ -91,8 +91,10 @@ internal static partial class PresentationTests
         await DialogHostPort();
         await NotificationPort();
         await RealGuest();
+        await RealGuest(retained: true);
         await RealReplacementGuest();
         await ManagementChecks();
+        await ManagementChecks(retained: true);
         await ManagementControllerChecks();
         await DeveloperInteractionChecks();
         await ExactLoadRetirementChecks();
@@ -100,7 +102,7 @@ internal static partial class PresentationTests
             || name.StartsWith("Avalonia", StringComparison.Ordinal) || name == "Nexa.Desktop")));
         Console.WriteLine("PASS: Sidecar compiles guest pages, scopes keys/actions, preserves models, rejects Host escape paths and invokes the real Wasm action without launcher assemblies.");
     }
-    private static async Task RealGuest()
+    private static async Task RealGuest(bool retained = false)
     {
         string? sample = Environment.GetEnvironmentVariable("NEXA_WASM_SAMPLE");
         if (sample is null) throw new InvalidOperationException("NEXA_WASM_SAMPLE must identify the compiled guest fixture.");
@@ -115,7 +117,8 @@ internal static partial class PresentationTests
             var loaded = await app.LoadAsync(package, package.Manifest.RequestedPermissions, default);
             Check(loaded.State == LoadState.Active);
             var page = app.Snapshot().Pages.Single();
-            var host = new TestPageHost { LoseAcknowledgement = true };
+            TestPageHost host = retained ? new RetainedPageHost() : new TestPageHost();
+            host.LoseAcknowledgement = true;
             await using var publisher = new PluginPagePublisher(app, host);
             bool uncertain = false;
             try { await publisher.SynchronizeAsync(); } catch (IOException) { uncertain = true; }
@@ -156,7 +159,13 @@ internal static partial class PresentationTests
             var advancedLoad = await app.LoadAsync(advanced, advanced.Manifest.RequestedPermissions, default);
             Check(advancedLoad.State == LoadState.Active);
             await publisher.SynchronizeAsync(); Check(host.Views.Count == 2 && host.Revision == 3);
-            await RejectedAsync(() => publisher.InvokeActionAsync(form).AsTask()); // Source-set replacement rotates every action epoch.
+            if (retained)
+            {
+                Check(((RetainedPageHost)host).LastMap.SequenceEqual([-1, 0]));
+                Check(Form(host.Views.Single(value => value.Owner == loaded.Identity)).SequenceEqual(form));
+                await publisher.InvokeActionAsync(form);
+            }
+            else await RejectedAsync(() => publisher.InvokeActionAsync(form).AsTask());
             var advancedPage = app.Snapshot().Pages.Single(value => value.Owner == advancedLoad.Identity);
             var update = Abi100Catalog.Operations.Single(value => value.Group == "UI" && value.Name == "UpdateModel");
             var modelResult = await app.Runtime.InvokeAsync(advancedLoad.Identity, update.ContractId, update.MethodId,
@@ -176,16 +185,31 @@ internal static partial class PresentationTests
             Check(app.Runtime.Active.Contains(advancedLoad.Identity) && app.Snapshot().Pages.Any(value => value.Owner == advancedLoad.Identity));
             await RejectedAsync(() => publisher.SetOpenAsync(advancedLoad.Identity, advancedPage.Page.Id, true).AsTask());
             await publisher.SynchronizeAsync(); Check(host.Revision == 5);
-            await RejectedAsync(() => publisher.InvokeActionAsync(beforeRetirementForm).AsTask());
+            if (retained)
+            {
+                Check(Form(host.Views.Single(value => value.Owner == loaded.Identity)).SequenceEqual(beforeRetirementForm));
+                await publisher.InvokeActionAsync(beforeRetirementForm);
+            }
+            else await RejectedAsync(() => publisher.InvokeActionAsync(beforeRetirementForm).AsTask());
             await publisher.SetOpenAsync(advancedLoad.Identity, advancedPage.Page.Id, true);
             await app.StopAsync(advancedLoad.Identity.PluginId);
-            await publisher.SynchronizeAsync(); Check(host.Views.Count == 1 && host.Revision == 6);
+            if (retained)
+            {
+                host.LoseAcknowledgement = true;
+                try { await publisher.SynchronizeAsync(); throw new InvalidOperationException("Lost reconciliation reply not simulated."); }
+                catch (IOException) { }
+                Check(host.Views.Count == 1 && host.Revision == 6);
+                await RejectedAsync(() => publisher.InvokeActionAsync(beforeRetirementForm).AsTask());
+                await publisher.SynchronizeAsync(); Check(host.Revision == 7 && host.Replacements == 3);
+                await RejectedAsync(() => publisher.InvokeActionAsync(beforeRetirementForm).AsTask());
+            }
+            else { await publisher.SynchronizeAsync(); Check(host.Views.Count == 1 && host.Revision == 6); }
 
             await app.StopAsync(loaded.Identity.PluginId);
             Check(app.Runtime.Active.IsEmpty);
             await RejectedAsync(() => publisher.InvokeActionAsync(form).AsTask());
             await RejectedAsync(() => publisher.SetOpenAsync(loaded.Identity, page.Page.Id, true).AsTask());
-            await publisher.SynchronizeAsync(); Check(host.Views.Count == 0 && host.Revision == 7);
+            await publisher.SynchronizeAsync(); Check(host.Views.Count == 0 && host.Revision == (retained ? 8 : 7));
             host.BlockVisibility = true;
             var waiting = publisher.ReportVisibilityAsync().AsTask();
             await host.VisibilityEntered.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -204,7 +228,7 @@ internal static partial class PresentationTests
         try { await action(); } catch (AbiHostException) { return; }
         throw new InvalidOperationException("Retired or foreign presentation action admitted.");
     }
-    private sealed class TestPageHost : IPluginPresentationHost
+    private class TestPageHost : IPluginPresentationHost
     {
         internal long Revision;
         internal int Replacements, ModelUpdates, Visible = -1;
@@ -230,6 +254,24 @@ internal static partial class PresentationTests
             return Visible < 0 ? [] : [Visible];
         }
     }
+    private sealed class RetainedPageHost : TestPageHost, IPluginRetainedPresentationHost
+    {
+        internal int[] LastMap = [];
+        public ValueTask ReconcileAsync(long revision, IReadOnlyList<IPluginHostView> views, IReadOnlyList<int> previousDocuments, CancellationToken token)
+        {
+            Check(revision == Revision && views.Count == previousDocuments.Count);
+            Check(previousDocuments.Where(index => index >= 0).Distinct().Count() == previousDocuments.Count(index => index >= 0));
+            for (int index = 0; index < views.Count; index++)
+                if (previousDocuments[index] >= 0)
+                    Check(SidecarNxmlDocument.Encode(Documents[previousDocuments[index]].Document).SequenceEqual(SidecarNxmlDocument.Encode(views[index].Document)));
+            Visible = previousDocuments.ToList().IndexOf(Visible);
+            if (Visible >= 0 && previousDocuments[Visible] < 0) Visible = -1;
+            LastMap = previousDocuments.ToArray(); Documents = views.ToArray(); Revision++;
+            if (LoseAcknowledgement) { LoseAcknowledgement = false; throw new IOException("Simulated lost reconciliation reply after Host commit."); }
+            return ValueTask.CompletedTask;
+        }
+    }
+
     private sealed class Allow : IActionConfirmation
     {
         internal int Count;

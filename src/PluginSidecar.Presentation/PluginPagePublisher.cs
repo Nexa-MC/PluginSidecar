@@ -18,6 +18,7 @@ public sealed class PluginPagePublisher : IAsyncDisposable
     private readonly CancellationTokenSource _stop = new();
     private readonly CancellationToken _lifetime;
     private PluginPreparedView[] _published = [];
+    private HashSet<(PluginIdentity Owner, QualifiedId Page)> _visible = [];
     private IPluginHostView[] _documents = [];
     private readonly PluginManagementOptions? _management;
     private PluginManagementView? _manager;
@@ -42,20 +43,25 @@ public sealed class PluginPagePublisher : IAsyncDisposable
                 .OrderBy(page => page.Page.Id.Value, StringComparer.Ordinal).ToArray();
             if (pages.Length > 32) throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
             var contributions = _application.AdvancedUi();
-            var next = Prepare(snapshot, pages, contributions, _epoch);
+            bool retain = _host is IPluginRetainedPresentationHost && _revision is not null;
+            var next = retain ? PrepareRetained(snapshot, pages, contributions) : Prepare(snapshot, pages, contributions, _epoch);
             bool replace = _revision is null || !SameSources(_documents, next.Documents);
             if (replace)
             {
                 string epoch = Guid.NewGuid().ToString("N");
-                next = Prepare(snapshot, pages, contributions, epoch);
+                if (!retain) next = Prepare(snapshot, pages, contributions, epoch);
                 // Validate the whole candidate before affecting the acknowledged source set.
                 ValidateBudget(next.Documents);
                 long revision = _revision ?? await _host.ReadRevisionAsync(stop.Token).ConfigureAwait(false);
+                int[] previous = next.Documents.Select(document => Array.FindIndex(_documents, prior => SameSource(prior, document))).ToArray();
+                var visible = next.Documents.Where((view, index) => retain && previous[index] >= 0
+                    && view is PluginPreparedView guest && !guest.IsWorkspace && _visible.Contains((guest.Owner, guest.Page))).OfType<PluginPreparedView>().ToArray();
                 ClearPublished();
-                await _host.ReplaceAsync(revision, next.Documents, stop.Token).ConfigureAwait(false);
+                if (retain) await ((IPluginRetainedPresentationHost)_host).ReconcileAsync(revision, next.Documents, previous, stop.Token).ConfigureAwait(false);
+                else await _host.ReplaceAsync(revision, next.Documents, stop.Token).ConfigureAwait(false);
                 stop.Token.ThrowIfCancellationRequested();
                 _revision = checked(revision + 1); _epoch = epoch; Install(next);
-                _application.ReportVisiblePages([]);
+                ReportVisible(visible);
             }
             else if (!SameModels(_documents, next.Documents))
             {
@@ -71,7 +77,7 @@ public sealed class PluginPagePublisher : IAsyncDisposable
         catch
         {
             // A lost response may conceal a committed Host mutation. Never admit old tokens on guesswork.
-            ClearPublished(); _revision = null; _application.ReportVisiblePages([]);
+            ClearPublished(); _revision = null; ReportVisible([]);
             throw;
         }
         finally { _serial.Release(); }
@@ -96,15 +102,14 @@ public sealed class PluginPagePublisher : IAsyncDisposable
         await _serial.WaitAsync(stop.Token).ConfigureAwait(false);
         try
         {
-            if (_revision is null) { _application.ReportVisiblePages([]); return; }
+            if (_revision is null) { ReportVisible([]); return; }
             var visible = await _host.ReadVisibleAsync(_revision.Value, stop.Token).ConfigureAwait(false);
             if (visible.Any(index => index < 0 || index >= _documents.Length || _documents[index].Document.Operation != SidecarNxmlOperation.Page)
                 || visible.Distinct().Count() != visible.Count)
                 throw new InvalidDataException("Host returned invalid page visibility.");
-            _application.ReportVisiblePages(visible.Select(index => _documents[index]).OfType<PluginPreparedView>()
-                .Where(view => !view.IsWorkspace && IsLive(view)).Select(view => view.Page).ToImmutableArray());
+            ReportVisible(visible.Select(index => _documents[index]).OfType<PluginPreparedView>());
         }
-        catch { _application.ReportVisiblePages([]); throw; }
+        catch { ReportVisible([]); throw; }
         finally { _serial.Release(); }
     }
 
@@ -203,9 +208,39 @@ public sealed class PluginPagePublisher : IAsyncDisposable
         return new([.. ordinary, .. workspace], manager, [manager, manager.Navigation, .. ordinary, .. workspace]);
     }
 
+    private Candidate PrepareRetained(PluginPresentation snapshot, PluginPage[] pages, PluginAdvancedUi ui)
+    {
+        PluginPreparedView PrepareView(PluginIdentity owner, QualifiedId page, bool workspace, Func<string, PluginPreparedView> compile)
+        {
+            var prior = _published.SingleOrDefault(view => view.Owner == owner && view.Page == page && view.IsWorkspace == workspace);
+            var candidate = compile(prior?.PublicationEpoch ?? Guid.NewGuid().ToString("N"));
+            return prior is not null && !SameSource(prior, candidate) ? compile(Guid.NewGuid().ToString("N")) : candidate;
+        }
+        var ordinary = pages.Select(page => PrepareView(page.Owner, page.Page.Id, false,
+            epoch => PluginViewCompiler.Prepare(page, ui, pages, epoch))).ToArray();
+        if (_management is null) return new(ordinary, null, ordinary);
+        var active = _application.Runtime.Active;
+        PluginManagementView Manager(string epoch) => new(snapshot, active, ordinary, ReadManagementPolicy(), _management, epoch);
+        var manager = Manager(_manager?.PublicationEpoch ?? Guid.NewGuid().ToString("N"));
+        if (_manager is not null && !SameSource(_manager, manager)) manager = Manager(Guid.NewGuid().ToString("N"));
+        var workspace = ui.Registrations.Where(r => active.Contains(r.Owner) && (r.Kind == "commands"
+                || r.Kind == "contributions" && UIContribution.Read(r.Value).View == PluginApplication.WorkspaceView
+                || r.Kind == "replacements" && UIViewReplacement.Read(r.Value).View == PluginApplication.WorkspaceView))
+            .Select(r => r.Owner).Distinct().OrderBy(owner => owner.PluginId, StringComparer.Ordinal)
+            .Select(owner => PrepareView(owner, PluginApplication.WorkspaceView, true,
+                epoch => PluginWorkspaceCompiler.Prepare(owner, ui, pages, manager.WorkspaceTarget, epoch))).ToArray();
+        return new([.. ordinary, .. workspace], manager, [manager, manager.Navigation, .. ordinary, .. workspace]);
+    }
+
     private sealed record Candidate(PluginPreparedView[] Guests, PluginManagementView? Manager, IPluginHostView[] Documents);
     private void Install(Candidate value) { _published = value.Guests; _manager = value.Manager; _documents = value.Documents; }
     private void ClearPublished() { _published = []; _documents = []; _manager = null; }
+
+    private void ReportVisible(IEnumerable<PluginPreparedView> views)
+    {
+        _visible = views.Where(view => !view.IsWorkspace && IsLive(view)).Select(view => (view.Owner, view.Page)).ToHashSet();
+        _application.ReportVisiblePages(_visible.Select(view => view.Page).ToImmutableArray());
+    }
 
     private bool IsLive(PluginPreparedView view)
     {
@@ -218,11 +253,13 @@ public sealed class PluginPagePublisher : IAsyncDisposable
     }
 
     private static bool SameSources(IPluginHostView[] left, IPluginHostView[] right) => left.Length == right.Length
-        && left.Zip(right).All(pair => SameOwnership(pair.First, pair.Second)
-            && pair.First.Document.Operation == pair.Second.Document.Operation
-            && pair.First.Document.Target == pair.Second.Document.Target && pair.First.Document.EntryPoint == pair.Second.Document.EntryPoint
-            && pair.First.Document.Files.Count == pair.Second.Document.Files.Count
-            && pair.First.Document.Files.All(file => pair.Second.Document.Files.TryGetValue(file.Key, out var text) && file.Value == text));
+        && left.Zip(right).All(pair => SameSource(pair.First, pair.Second));
+
+    private static bool SameSource(IPluginHostView first, IPluginHostView second) => SameOwnership(first, second)
+        && first.Document.Operation == second.Document.Operation
+        && first.Document.Target == second.Document.Target && first.Document.EntryPoint == second.Document.EntryPoint
+        && first.Document.Files.Count == second.Document.Files.Count
+        && first.Document.Files.All(file => second.Document.Files.TryGetValue(file.Key, out var text) && file.Value == text);
 
     private static bool SameOwnership(IPluginHostView first, IPluginHostView second) => (first, second) switch
     {
@@ -257,7 +294,7 @@ public sealed class PluginPagePublisher : IAsyncDisposable
         if (Interlocked.Exchange(ref _closed, 1) != 0) return;
         await _stop.CancelAsync().ConfigureAwait(false);
         await _serial.WaitAsync().ConfigureAwait(false);
-        try { ClearPublished(); _revision = null; _application.ReportVisiblePages([]); }
+        try { ClearPublished(); _revision = null; ReportVisible([]); }
         finally { _serial.Release(); }
         _stop.Dispose();
     }
