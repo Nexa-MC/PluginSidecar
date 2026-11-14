@@ -55,6 +55,9 @@ internal static class BusinessTests
             using var picker = new FilePickerFixture(observer) { Selection = root };
             Check((await picker.Client.DiscoverAsync()).IsSuccess);
             business.BindFilePicker(picker.Client);
+            using var clipboard = new ClipboardFixture(observer) { Text = "shared clipboard", Image = ClipboardFixture.Png() };
+            Check((await clipboard.Client.DiscoverAsync()).IsSuccess);
+            business.BindClipboard(clipboard.Client, _ => { });
             business.BindPlatform(new((_, _, _, _) => Task.FromResult<string?>(root),
                 _ => Task.FromResult<(string?, byte[]?)>((null, null)), (_, _, _) => Task.CompletedTask));
             await using var app = new PluginApplication(root, (_, _) => throw new InvalidOperationException("Test sources use their own bootstrap factory"),
@@ -63,6 +66,15 @@ internal static class BusinessTests
             var first = new Entry("first"); var second = new Entry("second");
             Check((await app.Runtime.LoadAsync([first.Source(), second.Source()])).All(report => report.State == LoadState.Active));
             using var api = first.Context!.AsAbi100(); using var other = second.Context!.AsAbi100();
+            confirm.Allowed = false;
+            Check(!(await api.Platform.ReadClipboard(new(), Options())).Success && clipboard.Reads == 0);
+            Check(!(await api.Platform.WriteClipboard(new("denied", null), Options())).Success && clipboard.Writes == 0);
+            confirm.Allowed = true;
+            var content = Ok(await api.Platform.ReadClipboard(new(), Options()));
+            Check(content.Text == "shared clipboard" && content.Image is not null && clipboard.Reads == 1);
+            Check(!(await other.Platform.WriteClipboard(content, Options())).Success && clipboard.Writes == 0);
+            Check((await api.Platform.WriteClipboard(content, Options())).Success && clipboard.Writes == 1);
+            Check((await api.Platform.WriteClipboard(new(null, null), Options())).Success && clipboard.Text is null && clipboard.Image is null);
             var account = Ok(await api.Accounts.List(new(null, 32), Options())).Items.Single();
             var eligibility = Ok(await api.Accounts.ReadLaunchEligibility(new(account.Id), Options()));
             Check(eligibility.Allowed && checkedRevision == 4 && eligibility.Reasons.Length == 1);
@@ -119,8 +131,14 @@ internal static class BusinessTests
             var waitingForPicker = api.Platform.PickFile(new(new("Pending", []), FilePickKind.File, []),
                 new(Guid.NewGuid(), TimeSpan.FromSeconds(30), default) { IdempotencyKey = "picker-stop" }).AsTask();
             await picker.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5)); Check(!waitingForPicker.IsCompleted);
+            clipboard.Hold = 3072;
+            var waitingForClipboard = api.Platform.ReadClipboard(new(),
+                new(Guid.NewGuid(), TimeSpan.FromSeconds(30), default) { IdempotencyKey = "clipboard-stop" }).AsTask();
+            await clipboard.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             await app.Runtime.StopAsync("first").AsTask().WaitAsync(TimeSpan.FromSeconds(5));
             Check(!(await waitingForPicker.WaitAsync(TimeSpan.FromSeconds(5))).Success);
+            Check(!(await waitingForClipboard.WaitAsync(TimeSpan.FromSeconds(5))).Success && clipboard.LastReleased > 0);
+            clipboard.Resume.TrySetResult();
             picker.Release.TrySetResult(); await picker.Drained.Task.WaitAsync(TimeSpan.FromSeconds(5));
             Check(!(await api.Platform.QueryPower(new(), Options())).Success);
             Check((await other.Platform.QueryPower(new(), Options())).Success);
@@ -129,6 +147,7 @@ internal static class BusinessTests
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetName().Name?.StartsWith("Nexa.Services", StringComparison.Ordinal) == true));
         await StopCancelsPendingHostQuery();
         await FilePickerFixture.AdapterChecks(observer);
+        await ClipboardFixture.AdapterChecks(observer);
         await ThemeOptionsTests.Run(observer);
         await ThemeActivationTests.Run(observer);
         Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, acknowledged shell effects, typed theme configuration and local document validation, file-grant isolation, revision fencing, lost-state recovery and retirement.");
@@ -168,7 +187,7 @@ internal static class BusinessTests
     }
     private sealed class Observer : IXsrDispatchObserver { public void OnCompleted(XsrDispatchObservation observation) { } }
     private sealed class Allow : IActionConfirmation
-    { public ValueTask<bool> ConfirmAsync(ActionConfirmationRequest request, CancellationToken cancellation) => ValueTask.FromResult(true); }
+    { internal bool Allowed = true; public ValueTask<bool> ConfirmAsync(ActionConfirmationRequest request, CancellationToken cancellation) => ValueTask.FromResult(Allowed); }
     private sealed class Entry(string id) : IPluginBootstrapV1
     {
         internal ABIContext? Context;

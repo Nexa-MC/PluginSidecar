@@ -14,6 +14,13 @@ public sealed record PluginPlatformEffects(
 public sealed partial class PluginBusinessRoutes
 {
     private PluginPlatformEffects? _platform;
+    private SidecarClipboard? _clipboard;
+    public void BindClipboard(Nexa.Sidecar.Host.SidecarClipboardClient client, Action<Exception> cleanupFailure)
+    {
+        ArgumentNullException.ThrowIfNull(client); ArgumentNullException.ThrowIfNull(cleanupFailure);
+        if (Interlocked.CompareExchange(ref _clipboard, new SidecarClipboard(client, cleanupFailure), null) is not null)
+            throw new InvalidOperationException("Clipboard is already bound.");
+    }
     private Func<string, int, string[], CancellationToken, Task<string?>>? _pickFile;
     public void BindFilePicker(Nexa.Sidecar.Host.SidecarFilePickerClient client) => _pickFile = new SidecarFilePicker(client).PickAsync;
     public void BindPlatform(PluginPlatformEffects platform) => _platform = platform;
@@ -100,7 +107,8 @@ public sealed partial class PluginBusinessRoutes
         HostRoutes.Typed<Empty, ClipboardContent>("Platform", "ReadClipboard", async (c, _) =>
         {
             await Confirm(c, "platform/read-clipboard", "Read clipboard text and image", Empty.Write(new()), c.Options.Cancellation).ConfigureAwait(false);
-            var clipboard = await Platform.ReadClipboard(c.Options.Cancellation).ConfigureAwait(false);
+            var clipboard = await (_clipboard is { } clipboardClient ? clipboardClient.ReadAsync(c.Options.Cancellation) : Platform.ReadClipboard(c.Options.Cancellation)).ConfigureAwait(false);
+            c.Options.Cancellation.ThrowIfCancellationRequested();
             if (clipboard.Text?.Length > 65536 || clipboard.Image?.Length > 16 * 1024 * 1024) throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
             return new(clipboard.Text, clipboard.Image is null ? null : Application.AddBlob(c.Identity, clipboard.Image));
         }),
@@ -108,7 +116,10 @@ public sealed partial class PluginBusinessRoutes
         {
             if (v.Text?.Length > 65536 || v.Image?.Size > 16 * 1024 * 1024) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
             await Confirm(c, "platform/write-clipboard", "Replace clipboard content", ClipboardContent.Write(v), c.Options.Cancellation).ConfigureAwait(false);
-            await Platform.WriteClipboard(v.Text, v.Image is null ? null : Application.CopyBlob(c.Identity, v.Image), c.Options.Cancellation).ConfigureAwait(false); return new Empty();
+            byte[]? image = v.Image is null ? null : Application.CopyBlob(c.Identity, v.Image);
+            await (_clipboard is { } clipboardClient ? clipboardClient.WriteAsync(v.Text, image, c.Options.Cancellation)
+                : Platform.WriteClipboard(v.Text, image, c.Options.Cancellation)).ConfigureAwait(false);
+            c.Options.Cancellation.ThrowIfCancellationRequested(); return new Empty();
         })
     ];
     private readonly Dictionary<Guid, (PluginIdentity Owner, FileRef File, SubscriptionRef Subscription, FileStat Stat, string Stamp)> _fileWatches = [];

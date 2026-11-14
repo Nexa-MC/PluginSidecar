@@ -199,3 +199,29 @@ to verify source labels, grant isolation, user dismissal and stop during a pendi
 query. Adapter tests additionally exercise invalid filters, malformed UTF-8,
 paths exceeding 32 KiB and no retry after rejection. Production worker composition
 still remains a separate migration step.
+
+### Clipboard
+
+Discover `SidecarClipboardClient` on the same bidirectional request connection, then
+call `business.BindClipboard(client, reportCleanupFailure)` once. The Host must
+negotiate `LargeGeneratedDtos`. File selection and clipboard bindings are independent.
+
+The adapter allocates a transfer ID before sending a begin request, serializes
+begins, verifies strict UTF-8 and PNG metadata, and transfers images in 256 KiB
+chunks. It preserves the existing 65,536 UTF-16 text and 16 MiB image limits.
+SHA-256 checks protect the assembled snapshot; the Host's native backend validates
+the complete image before writing. Null and empty text remain distinct.
+
+Guest permissions, per-action confirmation and blob ownership remain in the
+business/application layer. Rejected confirmation causes no clipboard IPC. Foreign
+blob handles cannot be written. A stopped guest cannot acquire a late read result.
+Every known transfer ID is released, including after a lost begin reply, using an
+independent one-second cleanup budget. Report cleanup failures without replacing
+the original operation result; the Host also expires transfers after two minutes.
+Do not retry a commit after cancellation or a lost response: it may already have
+changed the clipboard. The worker receive loop must keep processing replies and
+cancellation while awaiting a native operation.
+
+This adapter is covered by a frozen binary Host fixture and application/guest
+ownership tests. It does not yet replace the deployed Host plugin controller;
+production worker composition must complete the remaining generic UI contracts.
