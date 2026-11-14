@@ -211,6 +211,6 @@ internal static partial class PresentationTests
     private sealed class Allow : IActionConfirmation
     {
         internal int Count;
-        public ValueTask<bool> ConfirmAsync(ActionConfirmationRequest request, CancellationToken cancellation) { Count++; return ValueTask.FromResult(true); }
+        public ValueTask<bool> ConfirmAsync(ActionConfirmationRequest request, CancellationToken cancellation) { Count++; return ConfirmThroughHost(request, cancellation); }
     }
 }

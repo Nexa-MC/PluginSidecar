@@ -113,3 +113,31 @@ view-state and page-control catalogs and returns the generated binary adapter fo
 single receive loop must route Host replies to `SidecarHostRequestClient` while
 publisher work runs outside that loop. The adapter sends documents, UTF-8 model
 fields, revisions and document indices only; it does not send guest DTOs.
+
+## Confirming an action
+
+`SidecarActionConfirmation.CreateAsync` discovers the general Host confirmation
+catalog. Pass the resulting `IActionConfirmation` to `PluginApplication` and bind
+it to `PluginBusinessRoutes`. This adapter only asks for a decision; the existing
+action coordinator continues to enforce caller/provider identity, input binding,
+permissions, idempotency and cancellation. It does not execute or retry an action.
+
+`PluginConfirmationText` formats the caller, provider, action, title, target and
+complete inputs as literal text. Map keys are sorted ordinally; numeric values
+use invariant formatting, and string control characters are escaped. Byte values
+are represented exactly as hexadecimal. Descriptions exceeding 65,536 characters
+or 16 nested containers are rejected instead of being truncated. The Host
+independently validates UTF-8 and display budgets and owns its accept/cancel
+controls. Plugin-supplied text cannot replace an existing Host modal.
+
+A successful decline returns `false`. Unavailable catalogs, a busy UI and failed
+Host requests cannot become approval. Caller cancellation is propagated, and a
+retired Host dialog cannot be reused for a different request. The adapter relies
+on the worker's single receive loop to deliver replies while it waits.
+
+Tests exercise the real Wasm action coordinator through the generated confirmation
+client using a frozen Host wire fixture. They cover decline, rejected requests,
+cancellation before sending, literal text formatting, oversized inputs, explicit
+approval and terminal action completion. The Host repository separately exercises
+actual dialog rendering/clicking and cancellation when its Sidecar connection
+retires. Production worker composition is still pending.

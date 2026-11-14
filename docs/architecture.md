@@ -446,3 +446,13 @@ No publisher lock is held while a guest callback executes. Disposal closes local
 admission and cancels outstanding Host work; the session owner must retire the
 Host session to remove its presentation. Worker composition remains a separate
 migration step, so this unit must not enable duplicate guest loading.
+
+## Action confirmation over the general Host catalog
+
+Sidecar formats each immutable guest action confirmation into bounded literal text
+and invokes the Host's independent confirmation catalog. The Host receives no
+ABI 100 action, permission or guest identity DTO. The Sidecar's existing action
+coordinator still binds approval to the caller, provider, input and cancellation
+scope. A declined decision returns false; unavailable UI and transport failures
+never count as approval. The adapter does not execute or automatically retry an
+action. This is an internal migration, with no guest operation or schema change.

@@ -25,7 +25,7 @@ NexaCL 二进制 Sidecar ABI，目录编号不是新的传输消息编号。SDK 
 运行时行为、恢复规则与剩余限制见 [运行时说明](docs/runtime-services.md) 和 [验收进度](docs/roadmap.md)。
 
 独立化迁移已建立 Sidecar 拥有的应用、业务和插件页面编译模块。
-[页面迁移说明](docs/presentation-migration.md) 介绍页面校验、输入隔离、动作翻译和普通页面发布。
+[页面迁移说明](docs/presentation-migration.md) 介绍页面校验、输入隔离、动作翻译、普通页面发布与宿主确认交互。
 这些模块已脱离宿主服务程序集进行验证；生产 Worker 仍使用原执行入口，SDK Beta
 需要在完整切换和发布验证完成后发布。
 
