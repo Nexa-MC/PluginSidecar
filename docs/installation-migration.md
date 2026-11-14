@@ -103,8 +103,29 @@ loads, and rejects new calls. Concurrent disposal calls await the same cleanup.
 
 ## Remaining production wiring
 
-The Worker must supply native picker and consent implementations, observe errors
-from management commands, display restoration issues, and drive policy
+`SidecarDeveloperPackageInteraction` supplies the native picker and consent
+callbacks through the existing generated Host contracts. After the Sidecar
+session is active, create it with the session's `SidecarHostRequestClient` and
+dispatch observer, then pass `PickAsync` and `ConfirmAsync` to the controller.
+
+```csharp
+var interaction = await SidecarDeveloperPackageInteraction.CreateAsync(
+    hostRequests, dispatchObserver, cancellationToken);
+await using var manager = new PluginManagementController(
+    application, catalog, ReadInstallationPolicy,
+    interaction.PickAsync, interaction.ConfirmAsync);
+```
+
+The first confirmation shows the quoted package identity and complete requested
+permission list, warns that developer packages do not have Market publisher
+verification, and asks whether to load. Declining ends the import. The second
+asks whether to remember that approval. Its text explicitly states that declining
+means loading only for the current session. An interrupted or failed request is
+an error, not an implied session-only or remembered approval. These are two
+ordinary Host confirmations; no plugin-specific dialog contract is added.
+
+The Worker still must observe errors from management commands, display
+restoration issues, and drive policy
 synchronization when readiness, session or developer mode changes. `IsBusy` is
 available for the management-page policy. All state-changing management calls are
 serialized by the controller; the Worker must not load or stop plugins through a
@@ -125,3 +146,8 @@ dependency restoration, exact disable, policy cancellation, corrupt records,
 dependency cycles, concurrent record replacement and shutdown. These tests do not
 claim that the unfinished production picker, consent or startup integration has
 switched owners.
+
+`DeveloperInteractionChecks` verifies the generated binary picker/confirmation
+messages, path bounds, escaped package text, both decisions and cancellation. It
+also composes the adapter with the controller to install and disable a real Wasm
+fixture. Interactive native-window testing remains part of the Worker cutover.

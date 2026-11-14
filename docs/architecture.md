@@ -674,3 +674,19 @@ Restoration is attempted once per permitted session; policy revocation resets
 that attempt. Production composition must drive policy synchronization and use
 this controller as the sole owner. These library changes do not enable a second
 Worker restoration loop while the Host still owns startup.
+
+## Developer package interactions
+
+The native Sidecar interaction adapter discovers the existing general file-picker
+and confirmation catalogs. It requests a local ZIP file and validates the bounded
+absolute UTF-8 path returned by the Host. Package parsing remains in the management
+controller. The Host receives no manifest, guest grant object or plugin-specific
+operation.
+
+Installation uses two explicit general confirmations: first approve the verified
+package identity and requested permissions; then choose whether to remember that
+approval for later developer-mode sessions. Declining the first does not load.
+Declining the second means session-only loading, stated in that dialog. Transport
+failure, timeout or cancellation is not approval and never becomes a default
+remember decision. Package-provided values are quoted and bounded literal text.
+This uses the existing immutable Host catalogs and adds no guest ABI operation.

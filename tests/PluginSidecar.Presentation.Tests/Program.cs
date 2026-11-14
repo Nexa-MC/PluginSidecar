@@ -93,6 +93,7 @@ internal static partial class PresentationTests
         await RealReplacementGuest();
         await ManagementChecks();
         await ManagementControllerChecks();
+        await DeveloperInteractionChecks();
         await ExactLoadRetirementChecks();
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name is { } name && (name.StartsWith("Nexa.Services.", StringComparison.Ordinal)
             || name.StartsWith("Avalonia", StringComparison.Ordinal) || name == "Nexa.Desktop")));

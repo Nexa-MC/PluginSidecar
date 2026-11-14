@@ -58,8 +58,9 @@ terminal task completion. The test also rejects any loaded Desktop, Avalonia or
 
 The publisher below implements ordinary pages, content contributions and
 whole-view replacement. When explicitly configured, it also publishes Sidecar
-management controls and isolated workspace extensions. Production Worker
-composition and real package-management effects, dialogs, shortcuts and drawing
+management controls and isolated workspace extensions. The management controller
+and native interaction adapter now implement import, consent, offline restoration
+and disable. Production Worker composition, dialogs, shortcuts and drawing
 remain to be completed. Production end-to-end verification is still
 required before removing the old Desktop controller or publishing SDK Beta.
 
