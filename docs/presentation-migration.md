@@ -294,6 +294,9 @@ automatically retries an uncertain effect. The Worker must observe and drain the
 lifetime supervision. The tests use a controlled effects port; they do not claim
 that production import or offline restoration has switched owners.
 
+The approved-package transaction and its remaining owner requirements are
+described in [Installation ownership migration](installation-migration.md).
+
 Workspace content uses the stable logical view `nexa:plugins/content` and an empty
 original model for each load. Ordinary contribution ordering and replacement
 schema checks apply. A replacement target therefore needs the workspace's

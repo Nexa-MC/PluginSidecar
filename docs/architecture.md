@@ -626,3 +626,26 @@ a newer installation. The revision is native Sidecar metadata, never a guest
 capability or a new SDK operation. It does not authenticate the publisher; package
 approval and protected-key validation remain separate requirements. File locks
 coordinate cooperating writers, not arbitrary filesystem edits.
+
+## Approved installation attempts
+
+`PluginApprovedInstaller` accepts only an already approved native package and
+grant set. The picker, developer warning, permission display and remember choice
+remain the responsibility of the trusted management owner; a guest cannot call
+this port. The installer snapshots the supplied bytes, serializes its attempts,
+and checks developer mode, readiness, safe mode and the captured session before
+persisting, before loading and after activation. Replacing an active plugin is
+rejected before touching its offline record.
+
+Remembered installations preserve the prior decrypted record until activation
+finishes. Failure or cancellation restores its bytes and grants, or removes a new
+record, using only the revision written by that attempt. A competing newer record
+is left intact. If policy changes during activation, the exact newly activated
+load is retired before rollback. Cleanup failures are surfaced alongside the
+original failure instead of being silently reported as a successful installation.
+Session-only installations do not change a previous remembered installation.
+
+This is the installation transaction used by the future management owner, not a
+second startup or restoration loop. Production Worker composition and consent UI
+are still required before removing the current Host owner. The single owner must
+serialize restoration, disable and Market installation with these attempts.

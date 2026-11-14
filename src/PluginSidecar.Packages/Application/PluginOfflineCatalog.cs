@@ -83,6 +83,10 @@ public sealed partial class PluginOfflineCatalog : IDisposable
         finally { CryptographicOperations.ZeroMemory(key); if (plain is not null) CryptographicOperations.ZeroMemory(plain); _gate.Release(); }
     }
 
+    /// <summary>Open the existing installation for this ID; missing or invalid records fail closed.</summary>
+    public Task<PluginOfflineInstall> OpenInstalledAsync(string id, CancellationToken token)
+        => OpenAsync(PathFor(id), token);
+
     public async Task<PluginOfflineInstall> OpenAsync(string record, CancellationToken token)
     {
         if (!Records().Contains(record, StringComparer.Ordinal)) throw new IOException("plugin.catalog.record-invalid");
