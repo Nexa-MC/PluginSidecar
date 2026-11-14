@@ -84,6 +84,7 @@ internal static partial class PresentationTests
         PluginViewCompiler.ValidateComponent("<nxml-dynamic><Text Content=\"Component\" /></nxml-dynamic>");
         Reject(() => PluginViewCompiler.ValidateComponent("<nxml-dynamic><Button DismissCommand=\"ui.host.erase\" /></nxml-dynamic>"));
         await HostPort(view);
+        await NotificationPort();
         await RealGuest();
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name is { } name && (name.StartsWith("Nexa.Services.", StringComparison.Ordinal)
             || name.StartsWith("Avalonia", StringComparison.Ordinal) || name == "Nexa.Desktop")));

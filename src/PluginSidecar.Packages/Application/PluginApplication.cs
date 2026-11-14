@@ -26,7 +26,7 @@ public sealed partial class PluginApplication : IAsyncDisposable
     private readonly Dictionary<QualifiedId, StateSnapshot> _models = [];
     private readonly Dictionary<ulong, PluginIdentity> _navigation = [];
     private readonly Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask<IWasmPluginMachine>> _machine;
-    private readonly Action<PluginIdentity, UINotification> _notify;
+    private readonly Func<PluginIdentity, UINotification, CancellationToken, ValueTask> _notify;
     private readonly Action<PluginIdentity, QualifiedId> _navigate;
     private readonly Action<string> _validatePage;
     private readonly Action<string> _validateComponent;
@@ -38,10 +38,17 @@ public sealed partial class PluginApplication : IAsyncDisposable
     public PluginApplication(string storage, Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask<IWasmPluginMachine>> machine,
         IEnumerable<HostCapabilityRoute> business, IActionConfirmation confirmation,
         Action<PluginIdentity, UINotification> notify, Action<PluginIdentity, QualifiedId> navigate, Action<string> validatePage, Action<string>? validateComponent = null)
+        : this(storage, machine, business, confirmation, (owner, notice, token) =>
+        { token.ThrowIfCancellationRequested(); notify(owner, notice); return ValueTask.CompletedTask; }, navigate, validatePage, validateComponent) { }
+
+    public PluginApplication(string storage, Func<ReadOnlyMemory<byte>, CancellationToken, ValueTask<IWasmPluginMachine>> machine,
+        IEnumerable<HostCapabilityRoute> business, IActionConfirmation confirmation,
+        Func<PluginIdentity, UINotification, CancellationToken, ValueTask> notify, Action<PluginIdentity, QualifiedId> navigate,
+        Action<string> validatePage, Action<string>? validateComponent = null)
     {
         if (OperatingSystem.IsWindows()) Directory.CreateDirectory(storage);
         else Directory.CreateDirectory(storage, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        _machine = machine; _notify = notify; _navigate = navigate; _validatePage = validatePage; _validateComponent = validateComponent ?? validatePage;
+        _machine = machine; _notify = notify ?? throw new ArgumentNullException(nameof(notify)); _navigate = navigate; _validatePage = validatePage; _validateComponent = validateComponent ?? validatePage;
         Runtime = new(storage, d => Abi100Schemas.Validate(d.Schema, d.Body), Abi100Schemas.Validate,
             Routes.Concat(AdvancedUiRoutes).Concat(DrawingRoutes).Concat(business), new() { ActionConfirmation = confirmation });
         Files.IsOwnerActive = owner => Runtime.Active.Contains(owner);
@@ -164,12 +171,15 @@ public sealed partial class PluginApplication : IAsyncDisposable
         HostRoutes.Typed<UINotification, Empty>("UI", "Notify", Notify),
         HostRoutes.Typed<UINotification, Empty>("Platform", "Notify", Notify)
     ];
-    private ValueTask<Empty> Notify(HostInvocation c, UINotification value)
+    private async ValueTask<Empty> Notify(HostInvocation c, UINotification value)
     {
         if (!value.Title.Arguments.IsEmpty || !value.Body.Arguments.IsEmpty || value.Title.MessageKey.Length > 256 || value.Body.MessageKey.Length > 4096)
             throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         if (value.Action is not null) throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
-        _notify(c.Identity, value); return ValueTask.FromResult(new Empty());
+        c.Options.Cancellation.ThrowIfCancellationRequested();
+        await _notify(c.Identity, value, c.Options.Cancellation).ConfigureAwait(false);
+        c.Options.Cancellation.ThrowIfCancellationRequested();
+        return new Empty();
     }
     private ValueTask<RegistrationRef> RegisterPage(HostInvocation c, UIPage v)
     {

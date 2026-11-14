@@ -136,3 +136,32 @@ source is no longer valid, Desktop restores the built-in theme. If a user action
 interrupts restoration and then fails, cleanup rechecks its native identity and
 resumes restoration. A successful user replacement remains intact. The worker's
 production receive loop and application composition remain separate migration work.
+
+### Acknowledged guest notifications
+
+Create `SidecarNotifications` with the authenticated `SidecarHostRequestClient`
+and dispatch observer. `CreateAsync` discovers the separate general Host catalog;
+it fails when that catalog is unavailable. Pass `notifier.NotifyAsync` to the
+asynchronous `PluginApplication` constructor. Existing synchronous notification
+callbacks remain supported for embedders during migration.
+
+The `UI.Notify` and `Platform.Notify` routes remain active-phase mutations. The
+local runtime checks their respective permissions and required idempotency key.
+The application rejects notification actions and localization arguments before
+calling the adapter. Title and body keep their existing guest limits of 256 and
+4096 UTF-16 code units. The adapter adds the admitted plugin ID to the title and
+sends an informational notification. Literal text, including markup-like content,
+is not executed by the Host. Control characters other than newline, carriage
+return and tab fail before IPC.
+
+The route awaits Host acceptance; it no longer reports success solely because a
+local callback scheduled delivery. Host acceptance does not mean a frame has been
+painted. Cancellation and guest retirement cancel the pending call. A notification
+already accepted by the Host may still appear if its reply is lost or cancelled,
+so the adapter never retries. Runtime idempotency prevents a repeated completed
+invocation with the same key from publishing twice; callers must not create a new
+key merely to replay an uncertain effect.
+
+This adapter is verified through the real application/guest route against an
+independent binary Host fixture. Production worker composition, environment,
+file-picker/clipboard and advanced presentation migration remain outstanding.

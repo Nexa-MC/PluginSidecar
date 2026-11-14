@@ -496,3 +496,14 @@ replays activation. Guest retirement uses the existing cleanup registration.
 Host retirement additionally covers process failure, when no guest callback can
 run. Ordinary NXML replacement does not end a theme preview. The guest ABI stays
 frozen and the production worker remains unchanged until all ports are composed.
+
+## Acknowledged notifications
+
+Guest UI and platform notification routes remain active-phase mutations with
+permissions and idempotency enforced by the local runtime. The application accepts
+an asynchronous notification port and awaits it with the admitted invocation's
+cancellation token. The old synchronous constructor remains a compatibility adapter.
+The presentation adapter adds the plugin identity to bounded literal text and
+sends a general Host notification. Acknowledgement means Host feedback admission,
+not screen paint; unknown outcomes are never retried. Unsupported guest actions
+and localization arguments fail before IPC. No guest SDK type enters the Host.
