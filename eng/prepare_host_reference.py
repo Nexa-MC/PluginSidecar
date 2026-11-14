@@ -2,9 +2,11 @@
 """Prepare pinned public Host protocol packages outside this repository's source graph."""
 import argparse,json,os,subprocess,hashlib,sys
 from pathlib import Path
+from verify_host_references import verify
 root=Path(__file__).resolve().parents[1]
 spec=json.loads((root/'eng/references/nexacl.json').read_text())
 parser=argparse.ArgumentParser();parser.add_argument('--source',type=Path);parser.add_argument('--dotnet',default='dotnet');args=parser.parse_args()
+verify(root)
 checkout=Path.home()/'.cache/nexa-references'/spec['commit']
 feed=root/'artifacts/references/nexacl-feed'
 manifest=feed/'feed-manifest.json'

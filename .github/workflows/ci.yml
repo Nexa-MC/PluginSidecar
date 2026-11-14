@@ -44,6 +44,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - run: python eng/test_host_references.py
       - run: python eng/prepare_host_reference.py
       - run: python eng/generate_abi100.py --verify
       - run: dotnet build PluginSidecar.slnx -c Release
