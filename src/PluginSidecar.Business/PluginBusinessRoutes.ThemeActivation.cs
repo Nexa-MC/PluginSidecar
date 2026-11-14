@@ -19,7 +19,7 @@ public sealed partial class PluginBusinessRoutes
             }
             var plan = Plan(c, "themes/activate", EntityRequest.Write(v), "Activate theme " + theme.Manifest.Id, Validate, async token =>
             {
-                var activated = await ThemeEffects.Activate(theme.SourceIdentity, theme.SourceRevision, current.Revision, false, token).ConfigureAwait(false);
+                var activated = await ThemeActivationEffects.Activate(theme.SourceIdentity, theme.SourceRevision, current.Revision, false, token).ConfigureAwait(false);
                 if (!activated.IsSuccess) throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
                 return ThemeSummary.Write(ProjectTheme(c, theme, await ThemeCurrent(token).ConfigureAwait(false)));
             }, async (previewCaller, token) =>
@@ -33,14 +33,14 @@ public sealed partial class PluginBusinessRoutes
                     try
                     {
                         if (await finished.Task.WaitAsync(cleanupToken).ConfigureAwait(false) is { } generation)
-                            Require(await ThemeEffects.Revert(generation, cleanupToken).ConfigureAwait(false));
+                            Require(await ThemeActivationEffects.Revert(generation, cleanupToken).ConfigureAwait(false));
                     }
                     finally { lifetime.Dispose(); if (registration is not null) lock (_watchGate) _themePreviews.Remove(registration.Handle); }
                 });
                 try
                 {
                     lock (_watchGate) _themePreviews.Add(registration.Handle, (c.Identity, registration));
-                    var activated = await ThemeEffects.Activate(theme.SourceIdentity, theme.SourceRevision, current.Revision, true, lifetime.Token).ConfigureAwait(false);
+                    var activated = await ThemeActivationEffects.Activate(theme.SourceIdentity, theme.SourceRevision, current.Revision, true, lifetime.Token).ConfigureAwait(false);
                     if (!activated.IsSuccess) throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
                     finished.TrySetResult(activated.Value); return registration;
                 }

@@ -113,6 +113,7 @@ internal static class BusinessTests
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetName().Name?.StartsWith("Nexa.Services", StringComparison.Ordinal) == true));
         await StopCancelsPendingHostQuery();
         await ThemeOptionsTests.Run(observer);
+        await ThemeActivationTests.Run(observer);
         Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, acknowledged shell effects, typed theme configuration and local document validation, file-grant isolation, revision fencing, lost-state recovery and retirement.");
     }
     private static async Task StopCancelsPendingHostQuery()

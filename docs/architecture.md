@@ -481,6 +481,18 @@ or activation ownership: those require a separate session-lifetime migration.
 ThemeOptions client. Save/reset preserve expected revision and owner error codes.
 Import parses NTP-options/1 with a 1 MiB character limit, depth 16, strict field
 sets and duplicate rejection before encoding typed values. This adapter owns no
-UI state or preview lease and does not compose the production worker. Existing
-activation callbacks remain until their independent session cleanup contract is
-implemented. ABI 100 and the public SDK are unchanged.
+UI state or preview lease and does not compose the production worker. Activation
+and preview cleanup use the separate adapter described below. Compatibility
+callbacks remain available while composition migrates. ABI 100 and the public SDK
+are unchanged.
+
+## Theme activation ownership
+
+The general Host owns native activation and preview restoration; the Sidecar owns
+guest preparation plans and cleanup registrations. The adapter assigns a positive
+monotonic wire lease ID before sending a preview. If the result is uncertain, it
+ends that same ID with an independent bounded cancellation budget; it never
+replays activation. Guest retirement uses the existing cleanup registration.
+Host retirement additionally covers process failure, when no guest callback can
+run. Ordinary NXML replacement does not end a theme preview. The guest ABI stays
+frozen and the production worker remains unchanged until all ports are composed.

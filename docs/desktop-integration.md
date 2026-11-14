@@ -102,3 +102,37 @@ migration compatibility hook for the existing activation/revert delegates. The
 production worker has not yet been switched to these business modules, and the
 Host's old plugin controller must not be removed until the remaining ports and
 single receive loop are composed and verified.
+
+### Theme activation and preview retirement
+
+Discover `SidecarThemeActivationClient`, then call
+`PluginBusinessRoutes.BindThemeActivation(client, reportCleanupFailure)`. The
+business module continues to own preparation plans, guest revisions, permission
+checks, user confirmation and cleanup registrations. The adapter sends only source
+identity, source revision, expected current revision and a local preview ID.
+`SidecarThemeActivationEffects.Create` exposes the same two effects for composition
+and contract tests. Supply a diagnostics callback: a failed compensating release
+must not disappear silently.
+
+Preview IDs are allocated with a process-wide monotonic counter before IPC. They
+are distinct from the guest's opaque registration handle and from the Host's
+native UI identity. Multiple client instances therefore cannot reuse a preview
+ID on the same connection. On successful preview, the existing guest cleanup
+registration stores that ID and ends it on release or guest retirement.
+
+An unsuccessful or cancelled preview may already have changed the UI. The adapter
+ends its known ID using a fresh five-second cancellation budget. It does this even
+when the original request token is already cancelled. The Host treats end as
+idempotent and fences an activation that arrives later. Failed compensation is
+reported; activation is never retried. A persistent commit has different semantics:
+it is never compensated merely because its reply was lost. Refresh theme state
+before presenting the outcome or asking the user to submit again.
+
+The Host also owns cleanup on Sidecar deactivation, disconnection and UI detachment,
+covering process crashes where guest cleanup cannot run. A later user preview or
+selection has its own native identity and survives cleanup of an older lease.
+NXML page replacement does not end a theme preview. If the original committed
+source is no longer valid, Desktop restores the built-in theme. If a user action
+interrupts restoration and then fails, cleanup rechecks its native identity and
+resumes restoration. A successful user replacement remains intact. The worker's
+production receive loop and application composition remain separate migration work.

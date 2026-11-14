@@ -20,17 +20,19 @@ public sealed record PluginThemeEffects(
 
 public sealed partial class PluginBusinessRoutes
 {
-    private PluginThemeEffects? _themeEffects;
+    private PluginThemeActivationEffects? _themeActivationEffects;
     private PluginThemeOptionsEffects? _themeOptionsEffects;
     public void BindThemes(PluginThemeEffects effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
-        _themeEffects = effects;
+        _themeActivationEffects = new(effects.Activate, effects.Revert);
         _themeOptionsEffects = new(effects.Save, effects.Reset, effects.Import);
     }
     public void BindThemeOptions(Nexa.Sidecar.Host.SidecarThemeOptionsClient client) => _themeOptionsEffects = SidecarThemeOptionsEffects.Create(client);
     private PluginThemeOptionsEffects ThemeOptionsEffects => _themeOptionsEffects ?? throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
-    private PluginThemeEffects ThemeEffects => _themeEffects ?? throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
+    public void BindThemeActivation(Nexa.Sidecar.Host.SidecarThemeActivationClient client, Action<XsrError> cleanupFailed)
+        => _themeActivationEffects = SidecarThemeActivationEffects.Create(client, cleanupFailed);
+    private PluginThemeActivationEffects ThemeActivationEffects => _themeActivationEffects ?? throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
     private ValueTask<ThemeCatalogueSnapshot> ThemeCatalogue(CancellationToken token) => Query<ThemeCatalogueQuery, ThemeCatalogueSnapshot>(foundationQueries, ThemesContract.Catalogue, new(), token);
     private ValueTask<ThemeCurrentSnapshot> ThemeCurrent(CancellationToken token) => Query<ThemeCurrentQuery, ThemeCurrentSnapshot>(foundationQueries, ThemesContract.Current, new(), token);
     private EntityId ThemeId(HostInvocation c, ThemeCatalogueEntry theme) => new(Token(c, "theme:" + theme.SourceIdentity));
