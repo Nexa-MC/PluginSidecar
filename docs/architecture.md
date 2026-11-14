@@ -466,3 +466,21 @@ file grants and action confirmation remain local. A failed or cancelled Host
 request is not retried; late results cannot authorize another operation. Display
 queries use the same independent catalog. File pickers and clipboard transport
 remain separate migration work and are not advertised as implemented by this port.
+
+## Typed theme configuration transport
+
+The Sidecar binds save/reset/import through the general Host ThemeOptions catalog.
+It parses user-selected NTP-options files locally into bounded typed values after
+checking guest file ownership; no JSON command crosses IPC. The Host revalidates
+source, current revision, option definitions and the imported header against its
+prepared theme candidate before applying presentation changes. Guest plans,
+confirmation and revision tokens remain local. This port does not claim preview
+or activation ownership: those require a separate session-lifetime migration.
+
+`SidecarThemeOptionsEffects.Create` adapts local theme effects to the discovered
+ThemeOptions client. Save/reset preserve expected revision and owner error codes.
+Import parses NTP-options/1 with a 1 MiB character limit, depth 16, strict field
+sets and duplicate rejection before encoding typed values. This adapter owns no
+UI state or preview lease and does not compose the production worker. Existing
+activation callbacks remain until their independent session cleanup contract is
+implemented. ABI 100 and the public SDK are unchanged.

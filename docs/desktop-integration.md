@@ -73,3 +73,32 @@ Desktop 负责准入、权限、业务路由和持久状态；独立 Wasm 工作
 Provider 回调只收到声明的数据，查询回调不能借机产生业务副作用。修改操作仍须经过
 宿主确认、版本检查和所有者服务；卸载插件会撤销回调并使关联计划失效。
 完成接口接入不等于配置了生产 Market 凭据或发行签名。
+
+### Theme configuration through the general Host
+
+After discovering a `SidecarThemeOptionsClient`, bind it with
+`PluginBusinessRoutes.BindThemeOptions(client)`. This supplies save, reset and
+import operations without introducing a reference to Desktop or theme service
+implementations. The existing guest route still resolves the caller's opaque
+theme handle, checks its revision and asks for confirmation before invoking the
+adapter. Import still reads through the caller's file grant.
+
+`SidecarThemeOptionsEffects.Create(client)` is also available to composition and
+contract tests. It returns three asynchronous effects. Each waits for the Host's
+completion and preserves its result. No effect retries a lost or rejected reply.
+The adapter maps option kinds and values to the neutral Host DTO namespace; it
+never exports guest identifiers or a JSON command over the transport.
+
+For import, the adapter accepts only `NTP-options/1`, with `themeId`, integer
+`schemaVersion` and an object of option `values`. Duplicate or unknown fields,
+missing required fields, invalid kinds, invalid strings and malformed JSON fail
+with `SCHEMA_INVALID` before IPC. Documents above 1 MiB of UTF-16 characters fail
+with `MESSAGE_TOO_LARGE`. Parsing allows depth 16, 256 options and 256 file entries
+per option. The Host separately checks the imported header against its prepared
+theme and performs authoritative option, revision and resource validation.
+
+This is configuration transport, not preview ownership. `BindThemes` remains a
+migration compatibility hook for the existing activation/revert delegates. The
+production worker has not yet been switched to these business modules, and the
+Host's old plugin controller must not be removed until the remaining ports and
+single receive loop are composed and verified.

@@ -66,9 +66,14 @@ internal static class BusinessTests
             Check(!(await other.Accounts.ReadPublic(new(account.Id), Options())).Success);
             var power = Ok(await api.Platform.QueryPower(new(), Options()));
             Check(power.OnBattery && power.ChargePercent == 60);
+            // macOS temporary roots can contain /var -> /private/var. Grants resolve
+            // links intentionally; verify the revealed directory's identity, not its alias.
+            File.WriteAllText(Path.Combine(root, "reveal-marker.txt"), "selected test directory");
             var picked = Ok(await api.Platform.PickFile(new(new("Directory", []), FilePickKind.Directory, []), Options()));
             Check(!(await other.Platform.RevealFile(picked, Options())).Success && shell.Reveals == 0);
-            Check((await api.Platform.RevealFile(picked, Options())).Success && shell.Reveals == 1 && shell.DirectoryPath == root);
+            Check((await api.Platform.RevealFile(picked, Options())).Success && shell.Reveals == 1);
+            Check(shell.DirectoryPath is { } revealed && Path.GetFileName(revealed) == Path.GetFileName(root)
+                && File.ReadAllText(Path.Combine(revealed, "reveal-marker.txt")) == "selected test directory");
             var displays = Ok(await api.Platform.QueryDisplay(new(), Options()));
             Check(displays.Items.Length == 1 && displays.Items[0].Scale == 1.25);
             Check(!(await api.Platform.OpenUri(new("http://example.com"), Options())).Success && shell.Opens == 0);
@@ -107,7 +112,8 @@ internal static class BusinessTests
         finally { await state.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetName().Name?.StartsWith("Nexa.Services", StringComparison.Ordinal) == true));
         await StopCancelsPendingHostQuery();
-        Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, acknowledged shell effects, file-grant isolation, revision fencing, lost-state recovery and retirement.");
+        await ThemeOptionsTests.Run(observer);
+        Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, acknowledged shell effects, typed theme configuration and local document validation, file-grant isolation, revision fencing, lost-state recovery and retirement.");
     }
     private static async Task StopCancelsPendingHostQuery()
     {

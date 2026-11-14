@@ -21,7 +21,15 @@ public sealed record PluginThemeEffects(
 public sealed partial class PluginBusinessRoutes
 {
     private PluginThemeEffects? _themeEffects;
-    public void BindThemes(PluginThemeEffects effects) => _themeEffects = effects;
+    private PluginThemeOptionsEffects? _themeOptionsEffects;
+    public void BindThemes(PluginThemeEffects effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        _themeEffects = effects;
+        _themeOptionsEffects = new(effects.Save, effects.Reset, effects.Import);
+    }
+    public void BindThemeOptions(Nexa.Sidecar.Host.SidecarThemeOptionsClient client) => _themeOptionsEffects = SidecarThemeOptionsEffects.Create(client);
+    private PluginThemeOptionsEffects ThemeOptionsEffects => _themeOptionsEffects ?? throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
     private PluginThemeEffects ThemeEffects => _themeEffects ?? throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
     private ValueTask<ThemeCatalogueSnapshot> ThemeCatalogue(CancellationToken token) => Query<ThemeCatalogueQuery, ThemeCatalogueSnapshot>(foundationQueries, ThemesContract.Catalogue, new(), token);
     private ValueTask<ThemeCurrentSnapshot> ThemeCurrent(CancellationToken token) => Query<ThemeCurrentQuery, ThemeCurrentSnapshot>(foundationQueries, ThemesContract.Current, new(), token);
@@ -61,7 +69,7 @@ public sealed partial class PluginBusinessRoutes
         if (change.ExpectedRevision != ProjectOptions(c, theme, current).Revision || change.Options.Revision != change.ExpectedRevision) throw new AbiHostException(AbiErrors.CONFLICT);
         var values = ParseOptions(change.Options);
         await Confirm(c, "themes/options", "Change theme options for " + theme.Manifest.Id, ThemeOptionChange.Write(change), c.Options.Cancellation).ConfigureAwait(false);
-        Require(await ThemeEffects.Save(new(theme.SourceIdentity, values, current.Revision), c.Options.Cancellation).ConfigureAwait(false));
+        Require(await ThemeOptionsEffects.Save(new(theme.SourceIdentity, values, current.Revision), c.Options.Cancellation).ConfigureAwait(false));
         return ProjectOptions(c, theme, await ThemeCurrent(c.Options.Cancellation).ConfigureAwait(false));
     }
     private IEnumerable<HostCapabilityRoute> ThemeRoutes => ThemeActivationRoutes.Concat(ThemeReadRoutes).Concat(ThemeResourceRoutes);
@@ -78,7 +86,7 @@ public sealed partial class PluginBusinessRoutes
         {
             var theme = await FindTheme(c, v.Id).ConfigureAwait(false); var current = await ThemeCurrent(c.Options.Cancellation).ConfigureAwait(false);
             await Confirm(c, "themes/reset-options", "Reset theme options for " + theme.Manifest.Id, EntityRequest.Write(v), c.Options.Cancellation).ConfigureAwait(false);
-            Require(await ThemeEffects.Reset(new(theme.SourceIdentity, current.Revision), c.Options.Cancellation).ConfigureAwait(false));
+            Require(await ThemeOptionsEffects.Reset(new(theme.SourceIdentity, current.Revision), c.Options.Cancellation).ConfigureAwait(false));
             return ProjectOptions(c, theme, await ThemeCurrent(c.Options.Cancellation).ConfigureAwait(false));
         }),
         HostRoutes.Typed<ThemeTransfer, OperationRef>("Themes", "ImportOptions", async (c, v) =>
@@ -90,7 +98,7 @@ public sealed partial class PluginBusinessRoutes
             return Services.StartHostOperation(c, "nexa.themes.write", Abi100Schemas.ThemeOptions, async token =>
             {
                 await Confirm(c, "themes/import-options", "Import options for " + theme.Manifest.Id, ThemeTransfer.Write(v), token).ConfigureAwait(false);
-                Require(await ThemeEffects.Import(new(theme.SourceIdentity, json, current.Revision), token).ConfigureAwait(false));
+                Require(await ThemeOptionsEffects.Import(new(theme.SourceIdentity, json, current.Revision), token).ConfigureAwait(false));
                 return AbiReply<AbiValue>.Ok(ThemeOptions.Write(ProjectOptions(c, theme, await ThemeCurrent(token).ConfigureAwait(false))));
             });
         }),

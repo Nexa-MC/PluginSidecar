@@ -32,7 +32,7 @@ Runtime behavior and remaining limits are documented in [runtime services](docs/
 
 The standalone migration now has Sidecar-owned application, business and guest
 presentation modules. [Guest presentation ownership](docs/presentation-migration.md)
-explains page validation, scoped inputs, action translation, ordinary-page publication and Host confirmation. The business module also calls the general Host Shell catalog for asynchronous HTTPS navigation, directory reveal and display queries. These modules are
+explains page validation, scoped inputs, action translation, ordinary-page publication and Host confirmation. The business module also calls the general Host Shell catalog for asynchronous HTTPS navigation, directory reveal and display queries. Theme configuration save/reset/import also have a typed Host adapter; import documents are parsed inside Sidecar. These modules are
 tested independently of launcher service assemblies; the production worker still
 uses its existing execution entry, and SDK Beta remains pending the full cutover.
 
