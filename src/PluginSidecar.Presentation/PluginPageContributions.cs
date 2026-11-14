@@ -17,6 +17,17 @@ internal static class PluginPageContributions
         snapshot.Registrations.Where(r => r.Owner == owner && r.Kind is "components" or "contributions" or "replacements" or "commands")
             .Select(r => r.Registration.Handle).Order().Select(handle => handle.ToString(CultureInfo.InvariantCulture)));
 
+    internal static string Stamp(PluginIdentity owner, PluginAdvancedUi snapshot, QualifiedId view)
+    {
+        var owned = snapshot.Registrations.Where(item => item.Owner == owner).ToArray();
+        var contributions = owned.Where(item => item.Kind == "contributions" && UIContribution.Read(item.Value).View == view).ToArray();
+        var components = contributions.Select(item => UIContribution.Read(item.Value).Component).ToHashSet();
+        return string.Join(',', contributions.Concat(owned.Where(item =>
+                item.Kind == "components" && components.Contains(item.Registration.DefinitionId)
+                || item.Kind == "replacements" && UIViewReplacement.Read(item.Value).View == view))
+            .Select(item => item.Registration.Handle).Order().Select(handle => handle.ToString(CultureInfo.InvariantCulture)));
+    }
+
     internal static PluginPage Compose(PluginPage page, PluginAdvancedUi snapshot, AbiValue? contributionModel = null)
     {
         var owned = snapshot.Registrations.Where(r => r.Owner == page.Owner).ToArray();

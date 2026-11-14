@@ -60,8 +60,9 @@ The publisher below implements ordinary pages, content contributions and
 whole-view replacement. When explicitly configured, it also publishes Sidecar
 management controls and isolated workspace extensions. The management controller
 and native interaction adapter now implement import, consent, offline restoration
-and disable. Production Worker composition, dialogs, shortcuts and drawing
-remain to be completed. Production end-to-end verification is still
+and disable. The same publisher now owns guest dialogs when supplied with the
+modal-control port. Production Worker composition, shortcuts and drawing remain
+to be completed. Production end-to-end verification is still
 required before removing the old Desktop controller or publishing SDK Beta.
 
 ## Owning publication
@@ -73,7 +74,8 @@ documents may be published, including management, navigation and workspace
 fragments when management is enabled. It validates the complete candidate against the Host's source/model budgets
 before sending it. It composes active, same-load content contributions locally.
 Workspace composition is enabled with the management options described below;
-dialogs and drawing remain separate migration work.
+modal publication is enabled with the separate control port described below.
+Drawing and shortcut input remain separate migration work.
 
 The publisher distinguishes source reconciliation from model updates. With
 `IPluginRetainedPresentationHost`, each ordinary page and workspace has its own
@@ -348,9 +350,9 @@ command automatically. After an uncertain reply, query state before deciding
 what to do. The Host may already have opened the window.
 
 This adapter is tested against the generated binary protocol, including malformed
-state, cancellation and lost acknowledgements. Guest dialog publication and
-lifecycle reconciliation still need to be added to the sole presentation owner;
-creating this adapter does not enable them in the production Worker.
+state, cancellation and lost acknowledgements. Pass it to the sole publisher to
+enable guest dialog publication and native-close reconciliation. Creating the
+adapter alone does not enable dialogs or switch the production Worker owner.
 
 ```csharp
 var dialogs = await SidecarDialogHost.CreateAsync(requests, observer, token);
@@ -390,3 +392,86 @@ pages through both legacy replacement and retained publication. They cover
 reordering after another load appears, unchanged action tokens, contribution
 retirement, manager/workspace dependencies, malformed index maps and explicit
 fresh-source recovery after a lost reconciliation acknowledgement.
+
+
+## Preparing a guest dialog
+
+`PluginDialogCompiler.Prepare(dialog, advancedUi, activePages, publicationEpoch)`
+uses the same source, contribution and replacement validation as ordinary pages.
+It returns a `PluginPreparedView` with `DialogReference` set and a general NXML
+`Dialog` document. Its opaque target, keys and action tokens include the exact
+reference ID and view scope as well as the load identity and publication epoch.
+A form captured from the ordinary page, a different dialog scope or a previous
+publication epoch cannot be translated by this projection.
+
+The logical action target remains the original guest page. Drafts overlay the
+original typed dialog model, even when a replacement page supplies the rendered
+content. Model-only updates keep source identity; typed values are refreshed in
+the local action model. The compiler does not publish or open the dialog. The
+single publisher checks exact-reference lifetime and reconciles native closure
+when its modal-control port is configured. Production Worker composition still
+needs to select that owner.
+
+
+## Publishing and retiring dialogs
+
+Compose one publisher with both native ports:
+
+```csharp
+var views = await SidecarPresentationHost.CreateAsync(requests, observer, token);
+var modals = await SidecarDialogHost.CreateAsync(requests, observer, token);
+await using var publisher = new PluginPagePublisher(application, views,
+    management: managementOptions, dialogs: modals);
+await publisher.SynchronizeAsync(token);
+await publisher.ReportVisibilityAsync(token);
+```
+
+The process owner must supervise subsequent synchronization after application
+changes and periodically while dialogs are open, so native closure reaches the
+guest lifecycle subscriptions. All publication and modal-control work uses the
+publisher's one gate. The modal port requires retained presentation; a legacy
+whole-set-only port cannot be used for modal publication. The ordinary page
+navigation and visibility methods never select a modal projection.
+
+A new dialog is compiled and published closed, then receives one open attempt.
+Its original page and another dialog keep independent targets, input keys and
+action tokens. Model-only updates preserve the window and drafts. A guest action
+is admitted only while the exact reference, owner load and model revision remain
+current. The original typed dialog model is used even if another page replaces
+its rendered content.
+
+Before each synchronization, the publisher reads native state at the acknowledged
+revision. The response must describe every published modal exactly once with the
+matching index and target. Invalid, incomplete or failed responses leave guest
+lifetimes intact. A valid closed state for an attempted dialog closes that exact
+application reference; its lifecycle subscribers receive `closed`. A native close
+that occurs after the read is preserved by source retention and is observed on
+the next synchronization. It cannot cause an implicit reopen.
+
+An open command may have committed before its reply is lost. The publisher marks
+the attempt before sending and preserves its acknowledged publication on control
+failure. The next synchronization queries actual state; it does not replay the
+open. A definite failed open is also terminal for that reference once native
+closed state is observed. Callers must surface synchronization failures and keep
+state reconciliation supervised instead of swallowing them.
+
+If a source/model mutation has an uncertain result, action admission is sealed
+and explicit recovery uses fresh sources. Previously attempted dialogs are not
+reopened during recovery; their new closed state retires the logical references
+on the next state read. New references that have never received an open attempt
+may open after their source is acknowledged. This deliberate recovery behavior
+prevents a previously closed window from returning after a lost acknowledgement.
+
+Changing or retiring a dialog's contributing source retires that dialog instead
+of reopening a replacement window from an earlier state snapshot. Contributions
+are tracked for that specific view; unrelated commands and components from the
+same load do not retire it. Closing a guest dialog or retiring its load removes
+its source on synchronization and immediately blocks its old action tokens.
+Publisher disposal cancels and drains pending native requests. The process owner
+must also retire the Host session to remove its remaining documents.
+
+Tests use two real Wasm guests and a controlled native-state port. They cover
+ordinary/modal form isolation, typed model updates, simultaneous windows,
+native-close races, lost open and mutation replies, malformed state, targeted
+contribution retirement, lifecycle events and cancellation during a state read.
+These tests do not claim that production Worker composition has switched owners.

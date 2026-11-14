@@ -1,4 +1,7 @@
 #include <nexa/abi100.h>
+#ifndef NX_ADVANCED_VIEW
+#define NX_ADVANCED_VIEW "nexa:plugins/content"
+#endif
 static nx_u8 input[65536], output[65536], arguments[32768];
 static int step;
 NX_EXPORT("nexa_alloc") nx_u32 nexa_alloc(nx_u32 size) { nx_require(size<=sizeof input); return (nx_u32)(__UINTPTR_TYPE__)input; }
@@ -23,7 +26,7 @@ NX_EXPORT("nexa_resume") nx_u64 nexa_resume(nx_u32 address,nx_u32 size) {
    options.idempotency_key="component";step=5;nx_UI_RegisterComponent(&reply,nx_UIComponent_write(&args,nx_literal("example.advanced:component"),file,nx_schema_Empty(&args)),&options);
   } else if(step==5) {
    options.idempotency_key="contribution";step=6;
-   nx_UI_RegisterContribution(&reply,nx_UIContribution_write(&args,nx_literal("example.advanced:contribution"),nx_literal("nexa:plugins/content"),nx_literal("content"),nx_UIContributionMode_Append,nx_literal("example.advanced:component"),nx_QualifiedIdArray_write(&args,0,0),nx_QualifiedIdArray_write(&args,0,0)),&options);
+   nx_UI_RegisterContribution(&reply,nx_UIContribution_write(&args,nx_literal("example.advanced:contribution"),nx_literal(NX_ADVANCED_VIEW),nx_literal("content"),nx_UIContributionMode_Append,nx_literal("example.advanced:component"),nx_QualifiedIdArray_write(&args,0,0),nx_QualifiedIdArray_write(&args,0,0)),&options);
   } else if(step==6) {
    nx_stringArray strings=nx_stringArray_write(&args,0,0);
    nx_LocalizedText title=nx_LocalizedText_write(&args,nx_literal("Run command"),nx_NamedValueArray_write(&args,0,0));

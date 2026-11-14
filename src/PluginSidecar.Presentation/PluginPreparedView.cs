@@ -18,6 +18,7 @@ public sealed class PluginPreparedView : IPluginHostView
     private readonly IReadOnlyDictionary<string, string> _commands;
     internal string PublicationEpoch { get; init; } = "";
     public bool IsWorkspace { get; private init; }
+    public UIDialogRef? DialogReference { get; private init; }
     public PluginIdentity Owner => _page.Owner;
     public QualifiedId Page => _page.Page.Id;
     public Revision Revision => _page.Revision;
@@ -39,6 +40,10 @@ public sealed class PluginPreparedView : IPluginHostView
     internal PluginPreparedView AsWorkspace(SidecarNxmlDocument document, Dictionary<string, string> model, Dictionary<string, string> commands)
         => new(_page, document, model, new(_inputs), new(_actions), commands)
         { PublicationEpoch = PublicationEpoch, IsWorkspace = true, ContributionStamp = ContributionStamp, ReplacementDependency = ReplacementDependency };
+
+    internal PluginPreparedView AsDialog(UIDialogRef reference, string publicationEpoch)
+        => new(_page, new(Document.Target, SidecarNxmlOperation.Dialog, Document.EntryPoint, Document.Files), new(Model), new(_inputs), new(_actions), new(_commands))
+        { DialogReference = reference, PublicationEpoch = publicationEpoch, ContributionStamp = ContributionStamp, ReplacementDependency = ReplacementDependency };
 
     internal bool OwnsAction(string token) => _actions.ContainsKey(token) || _commands.ContainsKey(token);
 

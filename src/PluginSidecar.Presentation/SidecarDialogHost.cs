@@ -10,7 +10,13 @@ namespace PluginSidecar.Presentation;
 public sealed record PluginHostDialogState(int Document, string Target, bool Open);
 
 /// <summary>Controls modal documents under the presentation owner's source/model serialization gate.</summary>
-public sealed class SidecarDialogHost
+public interface IPluginDialogHost
+{
+    ValueTask SetOpenAsync(long revision, int document, bool open, CancellationToken token = default);
+    ValueTask<IReadOnlyList<PluginHostDialogState>> ReadAsync(long revision, CancellationToken token = default);
+}
+
+public sealed class SidecarDialogHost : IPluginDialogHost
 {
     private readonly SidecarDialogControlClient _client;
     private SidecarDialogHost(SidecarHostRequestClient requests, IXsrDispatchObserver observer) => _client = new(requests, observer);

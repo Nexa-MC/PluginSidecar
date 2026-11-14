@@ -83,9 +83,10 @@ print(args.out/'desktop.zip')
 
 # Advanced Desktop UI: a verified package asset, staged page and confirmed action.
 desktop = args.out / 'advanced.wasm'
-subprocess.run([args.clang, '--target=wasm32-unknown-unknown', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+advanced_command = [args.clang, '--target=wasm32-unknown-unknown', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
     '-ffreestanding', '-fno-builtin', '-nostdlib', '-I', str(root / 'sdk/wasm/include'), str(root / 'samples/WasmAdvancedUi/plugin.c'),
-    '-Wl,--no-entry', '-Wl,--export-memory', '-Wl,-z,stack-size=131072', '-Wl,--initial-memory=1048576', '-Wl,--max-memory=1048576', '-o', str(desktop)], check=True)
+    '-Wl,--no-entry', '-Wl,--export-memory', '-Wl,-z,stack-size=131072', '-Wl,--initial-memory=1048576', '-Wl,--max-memory=1048576', '-o', str(desktop)]
+subprocess.run(advanced_command, check=True)
 files = {'advanced.wasm': desktop.read_bytes(), 'page.nxml': (root / 'samples/WasmAdvancedUi/page.nxml').read_bytes()}
 files['component.nxml'] = (root/'samples/WasmAdvancedUi/component.nxml').read_bytes()
 manifest.update(pluginId='example.advanced', webAssemblyEntryPath='advanced.wasm',
@@ -98,6 +99,20 @@ with zipfile.ZipFile(args.out/'advanced.zip','w',compression=zipfile.ZIP_DEFLATE
     for name,data in files.items():
         entry=zipfile.ZipInfo(name,date_time=(1980,1,1,0,0,0));entry.external_attr=0o100644<<16;archive.writestr(entry,data)
 print(args.out/'advanced.zip')
+
+# The same real guest contributes to its own page for modal source-retirement tests.
+modal = args.out / 'modal.wasm'
+subprocess.run([*advanced_command[:-2], '-DNX_ADVANCED_VIEW="example.advanced:home"', '-o', str(modal)], check=True)
+modal_files = {'modal.wasm': modal.read_bytes(),
+    'page.nxml': (root/'samples/WasmAdvancedUi/page.nxml').read_bytes(),
+    'component.nxml': (root/'samples/WasmAdvancedUi/component.nxml').read_bytes()}
+modal_manifest = dict(manifest, webAssemblyEntryPath='modal.wasm',
+    payloads=[{'path': name, 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()} for name,data in modal_files.items()])
+modal_files['plugin.json'] = json.dumps(modal_manifest, sort_keys=True, separators=(',', ':')).encode()
+with zipfile.ZipFile(args.out/'modal.zip','w',compression=zipfile.ZIP_DEFLATED) as archive:
+    for name,data in modal_files.items():
+        entry=zipfile.ZipInfo(name,date_time=(1980,1,1,0,0,0));entry.external_attr=0o100644<<16;archive.writestr(entry,data)
+print(args.out/'modal.zip')
 
 # Real Wasm page-replacement fixture, exercised through application ownership and publication.
 replacement = args.out / 'replacement.wasm'

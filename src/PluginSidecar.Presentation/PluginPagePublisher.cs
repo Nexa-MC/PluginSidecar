@@ -9,7 +9,7 @@ using PluginSidecar.Application;
 namespace PluginSidecar.Presentation;
 
 /// <summary>Owns one Sidecar session's page publication, revision and action admission.</summary>
-public sealed class PluginPagePublisher : IAsyncDisposable
+public sealed partial class PluginPagePublisher : IAsyncDisposable
 {
     public const string ManagementCommand = PluginManagementView.Command;
     private readonly PluginApplication _application;
@@ -27,17 +27,31 @@ public sealed class PluginPagePublisher : IAsyncDisposable
     private string _epoch = Guid.NewGuid().ToString("N");
     private int _closed;
 
-    public PluginPagePublisher(PluginApplication application, IPluginPresentationHost host, PluginManagementOptions? management = null)
-    { _application = application; _host = host; _management = management; _lifetime = _stop.Token; }
+    public PluginPagePublisher(PluginApplication application, IPluginPresentationHost host, PluginManagementOptions? management = null, IPluginDialogHost? dialogs = null)
+    {
+        if (dialogs is not null && host is not IPluginRetainedPresentationHost) throw new ArgumentException("Modal publication requires retained presentation.", nameof(host));
+        _application = application; _host = host; _management = management; _lifetime = _stop.Token; _modalHost = dialogs;
+    }
 
-    /// <summary>Publish the current active ordinary pages. Call again explicitly after an uncertain Host outcome.</summary>
+    /// <summary>Publish the current active guest views. Call again explicitly after an uncertain Host outcome.</summary>
     public async ValueTask SynchronizeAsync(CancellationToken cancellationToken = default)
     {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime);
         await _serial.WaitAsync(stop.Token).ConfigureAwait(false);
         try
         {
-            stop.Token.ThrowIfCancellationRequested();
+            await ObserveDialogsAsync(stop.Token).ConfigureAwait(false);
+            await PublishAsync(stop.Token).ConfigureAwait(false);
+            await OpenNewDialogsAsync(stop.Token).ConfigureAwait(false);
+        }
+        finally { _serial.Release(); }
+    }
+
+    private async ValueTask PublishAsync(CancellationToken token)
+    {
+        try
+        {
+            token.ThrowIfCancellationRequested();
             var snapshot = _application.Snapshot();
             var pages = snapshot.Pages.Where(page => _application.Runtime.Active.Contains(page.Owner))
                 .OrderBy(page => page.Page.Id.Value, StringComparer.Ordinal).ToArray();
@@ -52,14 +66,14 @@ public sealed class PluginPagePublisher : IAsyncDisposable
                 if (!retain) next = Prepare(snapshot, pages, contributions, epoch);
                 // Validate the whole candidate before affecting the acknowledged source set.
                 ValidateBudget(next.Documents);
-                long revision = _revision ?? await _host.ReadRevisionAsync(stop.Token).ConfigureAwait(false);
+                long revision = _revision ?? await _host.ReadRevisionAsync(token).ConfigureAwait(false);
                 int[] previous = next.Documents.Select(document => Array.FindIndex(_documents, prior => SameSource(prior, document))).ToArray();
                 var visible = next.Documents.Where((view, index) => retain && previous[index] >= 0
-                    && view is PluginPreparedView guest && !guest.IsWorkspace && _visible.Contains((guest.Owner, guest.Page))).OfType<PluginPreparedView>().ToArray();
+                    && view is PluginPreparedView guest && !guest.IsWorkspace && guest.DialogReference is null && _visible.Contains((guest.Owner, guest.Page))).OfType<PluginPreparedView>().ToArray();
                 ClearPublished();
-                if (retain) await ((IPluginRetainedPresentationHost)_host).ReconcileAsync(revision, next.Documents, previous, stop.Token).ConfigureAwait(false);
-                else await _host.ReplaceAsync(revision, next.Documents, stop.Token).ConfigureAwait(false);
-                stop.Token.ThrowIfCancellationRequested();
+                if (retain) await ((IPluginRetainedPresentationHost)_host).ReconcileAsync(revision, next.Documents, previous, token).ConfigureAwait(false);
+                else await _host.ReplaceAsync(revision, next.Documents, token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
                 _revision = checked(revision + 1); _epoch = epoch; Install(next);
                 ReportVisible(visible);
             }
@@ -68,8 +82,8 @@ public sealed class PluginPagePublisher : IAsyncDisposable
                 ValidateBudget(next.Documents);
                 long revision = _revision!.Value;
                 ClearPublished();
-                await _host.UpdateModelsAsync(revision, next.Documents, stop.Token).ConfigureAwait(false);
-                stop.Token.ThrowIfCancellationRequested();
+                await _host.UpdateModelsAsync(revision, next.Documents, token).ConfigureAwait(false);
+                token.ThrowIfCancellationRequested();
                 _revision = checked(revision + 1); Install(next);
             }
             else Install(next); // Typed models and guest revisions may change without changing rendered text.
@@ -80,7 +94,6 @@ public sealed class PluginPagePublisher : IAsyncDisposable
             ClearPublished(); _revision = null; ReportVisible([]);
             throw;
         }
-        finally { _serial.Release(); }
     }
 
     public async ValueTask SetOpenAsync(PluginIdentity owner, QualifiedId page, bool open, CancellationToken cancellationToken = default)
@@ -89,7 +102,7 @@ public sealed class PluginPagePublisher : IAsyncDisposable
         await _serial.WaitAsync(stop.Token).ConfigureAwait(false);
         try
         {
-            int index = Array.FindIndex(_documents, view => view is PluginPreparedView guest && !guest.IsWorkspace && guest.Owner == owner && guest.Page == page);
+            int index = Array.FindIndex(_documents, view => view is PluginPreparedView guest && !guest.IsWorkspace && guest.DialogReference is null && guest.Owner == owner && guest.Page == page);
             if (index < 0 || _revision is null || !IsLive((PluginPreparedView)_documents[index])) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
             await _host.SetOpenAsync(_revision.Value, index, open, stop.Token).ConfigureAwait(false);
         }
@@ -197,7 +210,8 @@ public sealed class PluginPagePublisher : IAsyncDisposable
     private Candidate Prepare(PluginPresentation snapshot, PluginPage[] pages, PluginAdvancedUi ui, string epoch)
     {
         var ordinary = pages.Select(page => PluginViewCompiler.Prepare(page, ui, pages, epoch)).ToArray();
-        if (_management is null) return new(ordinary, null, ordinary);
+        var dialogs = PrepareDialogs(ui, pages, epoch, retain: false);
+        if (_management is null) return new([.. ordinary, .. dialogs], null, [.. ordinary, .. dialogs]);
         var active = _application.Runtime.Active;
         var manager = new PluginManagementView(snapshot, active, ordinary, ReadManagementPolicy(), _management, epoch);
         var workspace = ui.Registrations.Where(r => active.Contains(r.Owner) && (r.Kind == "commands"
@@ -205,20 +219,21 @@ public sealed class PluginPagePublisher : IAsyncDisposable
                 || r.Kind == "replacements" && UIViewReplacement.Read(r.Value).View == PluginApplication.WorkspaceView))
             .Select(r => r.Owner).Distinct().OrderBy(owner => owner.PluginId, StringComparer.Ordinal)
             .Select(owner => PluginWorkspaceCompiler.Prepare(owner, ui, pages, manager.WorkspaceTarget, epoch)).ToArray();
-        return new([.. ordinary, .. workspace], manager, [manager, manager.Navigation, .. ordinary, .. workspace]);
+        return new([.. ordinary, .. workspace, .. dialogs], manager, [manager, manager.Navigation, .. ordinary, .. workspace, .. dialogs]);
     }
 
     private Candidate PrepareRetained(PluginPresentation snapshot, PluginPage[] pages, PluginAdvancedUi ui)
     {
         PluginPreparedView PrepareView(PluginIdentity owner, QualifiedId page, bool workspace, Func<string, PluginPreparedView> compile)
         {
-            var prior = _published.SingleOrDefault(view => view.Owner == owner && view.Page == page && view.IsWorkspace == workspace);
+            var prior = _published.SingleOrDefault(view => view.Owner == owner && view.Page == page && view.IsWorkspace == workspace && view.DialogReference is null);
             var candidate = compile(prior?.PublicationEpoch ?? Guid.NewGuid().ToString("N"));
             return prior is not null && !SameSource(prior, candidate) ? compile(Guid.NewGuid().ToString("N")) : candidate;
         }
         var ordinary = pages.Select(page => PrepareView(page.Owner, page.Page.Id, false,
             epoch => PluginViewCompiler.Prepare(page, ui, pages, epoch))).ToArray();
-        if (_management is null) return new(ordinary, null, ordinary);
+        var dialogs = PrepareDialogs(ui, pages, "", retain: true);
+        if (_management is null) return new([.. ordinary, .. dialogs], null, [.. ordinary, .. dialogs]);
         var active = _application.Runtime.Active;
         PluginManagementView Manager(string epoch) => new(snapshot, active, ordinary, ReadManagementPolicy(), _management, epoch);
         var manager = Manager(_manager?.PublicationEpoch ?? Guid.NewGuid().ToString("N"));
@@ -229,7 +244,7 @@ public sealed class PluginPagePublisher : IAsyncDisposable
             .Select(r => r.Owner).Distinct().OrderBy(owner => owner.PluginId, StringComparer.Ordinal)
             .Select(owner => PrepareView(owner, PluginApplication.WorkspaceView, true,
                 epoch => PluginWorkspaceCompiler.Prepare(owner, ui, pages, manager.WorkspaceTarget, epoch))).ToArray();
-        return new([.. ordinary, .. workspace], manager, [manager, manager.Navigation, .. ordinary, .. workspace]);
+        return new([.. ordinary, .. workspace, .. dialogs], manager, [manager, manager.Navigation, .. ordinary, .. workspace, .. dialogs]);
     }
 
     private sealed record Candidate(PluginPreparedView[] Guests, PluginManagementView? Manager, IPluginHostView[] Documents);
@@ -238,16 +253,22 @@ public sealed class PluginPagePublisher : IAsyncDisposable
 
     private void ReportVisible(IEnumerable<PluginPreparedView> views)
     {
-        _visible = views.Where(view => !view.IsWorkspace && IsLive(view)).Select(view => (view.Owner, view.Page)).ToHashSet();
+        _visible = views.Where(view => !view.IsWorkspace && view.DialogReference is null && IsLive(view)).Select(view => (view.Owner, view.Page)).ToHashSet();
         _application.ReportVisiblePages(_visible.Select(view => view.Page).ToImmutableArray());
     }
 
     private bool IsLive(PluginPreparedView view)
     {
-        if (!_application.Runtime.Active.Contains(view.Owner)
-            || view.ContributionStamp != PluginPageContributions.Stamp(view.Owner, _application.AdvancedUi())) return false;
+        if (!_application.Runtime.Active.Contains(view.Owner)) return false;
+        var ui = _application.AdvancedUi();
+        string stamp = view.DialogReference is null ? PluginPageContributions.Stamp(view.Owner, ui)
+            : PluginPageContributions.Stamp(view.Owner, ui, view.Page);
+        if (view.ContributionStamp != stamp) return false;
         var pages = _application.Snapshot().Pages;
-        return (view.IsWorkspace || pages.Any(page => page.Owner == view.Owner && page.Page.Id == view.Page))
+        bool exists = view.DialogReference is { } reference
+            ? ui.Dialogs.Any(dialog => dialog.Owner == view.Owner && dialog.Reference == reference && dialog.Page.Revision == view.Revision)
+            : view.IsWorkspace || pages.Any(page => page.Owner == view.Owner && page.Page.Id == view.Page);
+        return exists
             && (view.ReplacementDependency is not { } target || pages.Any(page => page.Owner == target.Owner
                 && page.Page == target.Page && page.Revision == target.Revision));
     }
@@ -263,7 +284,7 @@ public sealed class PluginPagePublisher : IAsyncDisposable
 
     private static bool SameOwnership(IPluginHostView first, IPluginHostView second) => (first, second) switch
     {
-        (PluginPreparedView a, PluginPreparedView b) => a.Owner == b.Owner && a.Page == b.Page && a.IsWorkspace == b.IsWorkspace && a.ContributionStamp == b.ContributionStamp,
+        (PluginPreparedView a, PluginPreparedView b) => a.Owner == b.Owner && a.Page == b.Page && a.IsWorkspace == b.IsWorkspace && a.DialogReference == b.DialogReference && a.ContributionStamp == b.ContributionStamp,
         _ => first.GetType() == second.GetType()
     };
 

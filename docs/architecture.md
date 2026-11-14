@@ -728,3 +728,42 @@ epochs; it never assumes an uncertain retention succeeded or replays modal opens
 Legacy presentation ports retain their existing whole-set replacement behavior.
 Production native composition must discover retention before using this path.
 This change does not switch the Worker restoration or presentation owner.
+
+## Compiling guest dialog projections
+
+A dialog projection keeps its guest page ID and typed dialog model for action
+translation, while its NXML target, local keys and action tokens additionally
+include the exact dialog ID and view scope. The same page displayed ordinarily
+and modally therefore has separate form ownership, as do successive dialog
+instances in one load. The Sidecar converts the result to the general Dialog
+operation; the Host receives no guest dialog reference or plugin model.
+
+The canonical page compiler still validates source, expanded controls,
+contributions and replacement contracts. Replacing a page's visual content does
+not replace the logical dialog action model. Model-only dialog updates retain
+source identity within the same publication epoch. The sole presentation owner
+must check the current exact dialog reference and load before admitting actions;
+compilation alone neither opens a window nor proves that a dialog is live.
+
+## Single-owner dialog publication and closure
+
+The page publisher may also receive a modal-control port, but only together with
+the retained-presentation port. Its existing gate serializes native-close
+observation, source/model publication and modal opens. A dialog's first open is
+attempted once after source acknowledgement. A lost or cancelled open reply is
+reconciled by reading actual native state; it never triggers an automatic retry.
+Control failures do not discard an acknowledged source revision.
+
+Only the current exact dialog reference and load may translate its actions.
+Ordinary navigation and page visibility exclude modal documents. Model changes
+retain the existing window. Changes that retire a dialog's contributing source
+or replacement dependency retire that logical dialog rather than reopening a
+replacement window from an earlier open-state snapshot. Dialog contribution
+ownership is scoped to that page, so unrelated registrations do not retire it.
+
+Source mutations retain their existing fail-closed recovery. Open-attempt history
+survives an uncertain mutation: fresh-source recovery cannot replay an attempted
+modal open. Native closure retires the exact application dialog and its lifecycle
+subscriptions; malformed or incomplete native state never becomes synthetic
+closure. Production Worker composition must use this sole publisher and drain
+its operations before the old Host controller can be removed.
