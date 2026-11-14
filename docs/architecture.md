@@ -608,3 +608,21 @@ dependency shutdown. A request queued behind a reload cannot stop the new load.
 The existing ID-based stop remains available for deliberate shutdown-by-ID;
 management effects use the exact-load operation. Offline-record changes remain
 the responsibility of the single installation owner.
+
+## Conditional offline-record updates
+
+The encrypted installation format stays `NEXAPC01`. A successful read can also
+return a SHA-256 revision of the complete encrypted record. Conditional save and
+remove operations compare that revision while holding both the catalog's local
+gate and a persistent file lock shared by cooperating catalog instances. A null
+expected revision means that the record must not exist. Existing unconditional
+operations use the same writer lock, so they cannot race a conditional mutation.
+Lock contention has a finite wait and honors cancellation.
+
+This gives the installation owner a rollback boundary: a failed activation may
+restore the previous package/grants or remove a newly created record only while
+the catalog still contains the record that this attempt wrote. It must not erase
+a newer installation. The revision is native Sidecar metadata, never a guest
+capability or a new SDK operation. It does not authenticate the publisher; package
+approval and protected-key validation remain separate requirements. File locks
+coordinate cooperating writers, not arbitrary filesystem edits.

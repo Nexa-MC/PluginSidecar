@@ -3,6 +3,7 @@ using Nexa.Plugin.Bootstrap.V1;
 using Nexa.Plugin.Sdk.Abi100;
 using PluginSidecar.RuntimeAdapter;
 
+if (args is ["--catalog-hold-lock", var catalogDirectory]) { await CatalogRevisionTests.HoldLock(catalogDirectory); return; }
 if (args is ["--key-protection-only"]) { await KeyProtectionTests.Run(); return; }
 if (args is ["--remote-only"]) { await RemoteExecutionTests.Run(); return; }
 if (args is ["--application-only"]) { await KeyProtectionTests.Run(); await ApplicationTests.Run(); return; }

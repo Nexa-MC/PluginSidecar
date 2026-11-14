@@ -13,6 +13,7 @@ internal static class ApplicationTests
         if (sample is null) { Console.WriteLine("SKIP: Sidecar application fixture requires the compiled guest samples."); return; }
         string path = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sample))!, "desktop.zip");
         byte[] bytes = await File.ReadAllBytesAsync(path);
+        await CatalogRevisionTests.Run(bytes);
         string root = Path.Combine(Path.GetTempPath(), "nexa-sidecar-application-" + Guid.NewGuid().ToString("N"));
         using var secrets = new KeyProtectionTests.FakeSecrets();
         try
