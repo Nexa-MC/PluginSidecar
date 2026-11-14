@@ -283,8 +283,11 @@ manager through the same revision-fenced page-control channel.
 The effects port is intentionally separate from rendering. Its production
 implementation must perform native file selection, package verification, explicit
 permission consent and offline-installation updates, then recheck policy after
-user interaction. Disable must retire the exact admitted load under the lifecycle
-owner's synchronization and update its offline records. A successful button
+user interaction. Disable must use `PluginApplication.StopLoadAsync(exactLoad, token)` and update
+its offline records through the single installation owner. The application checks
+the exact identity under its load/stop gate and returns all identities retired by
+dependency shutdown. A stale stop queued behind a reload fails without touching
+the new load's assets or registrations. A successful button
 admission is not proof that any of these effects completed. The publisher permits
 one import/disable effect at a time, passes cancellation through and never
 automatically retries an uncertain effect. The Worker must observe and drain these calls as part of its

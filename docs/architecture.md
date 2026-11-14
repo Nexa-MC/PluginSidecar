@@ -597,3 +597,14 @@ Workspace fragments cannot be opened as standalone pages or reported as ordinary
 page visibility. All documents share the existing 32-document and byte budgets.
 Production composition must explicitly enable this owner; no second manager or
 automatic restoration owner is enabled by these library changes.
+
+## Exact-load retirement
+
+Management disable captures a load identity, not merely a plugin ID. The
+application's `StopLoadAsync` validates that identity while holding the same
+lifecycle gate used by loading, then retires the runtime and reconciles owned
+resources before releasing the gate. It returns the exact identities retired by
+dependency shutdown. A request queued behind a reload cannot stop the new load.
+The existing ID-based stop remains available for deliberate shutdown-by-ID;
+management effects use the exact-load operation. Offline-record changes remain
+the responsibility of the single installation owner.

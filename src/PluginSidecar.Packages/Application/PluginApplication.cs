@@ -113,6 +113,23 @@ public sealed partial class PluginApplication : IAsyncDisposable
         try { await Runtime.StopAsync(id, token).ConfigureAwait(false); Reconcile(); }
         finally { _loads.Release(); }
     }
+
+    /// <summary>Retire this exact active load, including dependents, without targeting a later reload of the same ID.</summary>
+    public async Task<ImmutableArray<PluginIdentity>> StopLoadAsync(PluginIdentity identity, CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        await _loads.WaitAsync(token).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+            var before = Runtime.Active;
+            if (!before.Contains(identity)) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
+            try { await Runtime.StopAsync(identity.PluginId, token).ConfigureAwait(false); }
+            finally { Reconcile(); }
+            return before.Where(owner => !Runtime.Active.Contains(owner)).ToImmutableArray();
+        }
+        finally { _loads.Release(); }
+    }
     private void Reconcile()
     {
         var active = Runtime.Active.Select(p => p.PluginId).ToHashSet(StringComparer.Ordinal);

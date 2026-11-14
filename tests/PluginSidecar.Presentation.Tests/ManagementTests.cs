@@ -123,7 +123,8 @@ internal static partial class PresentationTests
         public async ValueTask DisableAsync(PluginIdentity exactLoad, CancellationToken token)
         {
             Check(application.Runtime.Active.Contains(exactLoad)); Disabled = exactLoad;
-            await application.StopAsync(exactLoad.PluginId, token);
+            var retired = await application.StopLoadAsync(exactLoad, token);
+            Check(retired.Contains(exactLoad));
         }
     }
 }
