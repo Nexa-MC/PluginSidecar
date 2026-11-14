@@ -456,3 +456,13 @@ coordinator still binds approval to the caller, provider, input and cancellation
 scope. A declined decision returns false; unavailable UI and transport failures
 never count as approval. The adapter does not execute or automatically retry an
 action. This is an internal migration, with no guest operation or schema change.
+
+## Asynchronous shell effects
+
+Platform navigation and directory reveal await the general Host Shell catalog.
+The business port takes cancellation-aware asynchronous callbacks so it cannot
+report success before the Host acknowledges the action. Guest HTTPS validation,
+file grants and action confirmation remain local. A failed or cancelled Host
+request is not retried; late results cannot authorize another operation. Display
+queries use the same independent catalog. File pickers and clipboard transport
+remain separate migration work and are not advertised as implemented by this port.

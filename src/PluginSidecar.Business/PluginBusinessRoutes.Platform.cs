@@ -16,7 +16,7 @@ public sealed partial class PluginBusinessRoutes
         }),
         HostRoutes.Typed<Empty, Page<DisplayInfo>>("Platform", "QueryDisplay", async (c, _) =>
         {
-            var displays = await Platform.Displays(c.Options.Cancellation).ConfigureAwait(false);
+            var displays = await Shell.Displays(c.Options.Cancellation).ConfigureAwait(false);
             if (displays.Any(d => d.Width <= 0 || d.Height <= 0 || !double.IsFinite(d.Scale) || d.Scale <= 0)) throw new AbiHostException(AbiErrors.CAPABILITY_UNAVAILABLE);
             return ContentPage(displays.Select(d => new DisplayInfo(new(Token(c, "display:" + d.Id)), d.Width, d.Height, d.Scale)).ToImmutableArray(), new(null, 32));
         }),

@@ -2,8 +2,8 @@
   <PropertyGroup><IsAotCompatible>true</IsAotCompatible></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../PluginSidecar.Packages/PluginSidecar.Packages.csproj" />
-    <PackageReference Include="Nexa.Sidecar.Host.Contracts" Version="[0.1.0-alpha.10]" />
-    <PackageReference Include="Nexa.Sidecar.Protocol" Version="[0.1.0-alpha.10]" />
-    <PackageReference Include="Nexa.Xsr.Renderer.Nxml.Runtime" Version="[0.1.0-alpha.10]" />
+    <PackageReference Include="Nexa.Sidecar.Host.Contracts" Version="[0.1.0-alpha.11]" />
+    <PackageReference Include="Nexa.Sidecar.Protocol" Version="[0.1.0-alpha.11]" />
+    <PackageReference Include="Nexa.Xsr.Renderer.Nxml.Runtime" Version="[0.1.0-alpha.11]" />
   </ItemGroup>
 </Project>

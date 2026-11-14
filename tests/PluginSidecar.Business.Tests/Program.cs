@@ -49,6 +49,11 @@ internal static class BusinessTests
                 (request, _) => { stopped.TrySetResult(request.SessionId); return ValueTask.FromResult(XsrResult.Success()); });
             business.BindEffects(commands.Build(observer), queries.Build(observer));
             business.BindConfirmation(confirm);
+            using var shell = new ShellFixture(observer);
+            Check((await shell.Client.DiscoverAsync()).IsSuccess);
+            business.BindShell(shell.Client);
+            business.BindPlatform(new((_, _, _, _) => Task.FromResult<string?>(root),
+                _ => Task.FromResult<(string?, byte[]?)>((null, null)), (_, _, _) => Task.CompletedTask));
             await using var app = new PluginApplication(root, (_, _) => throw new InvalidOperationException("Test sources use their own bootstrap factory"),
                 business.Routes, confirm, (_, _) => { }, (_, _) => { }, _ => { });
             business.BindApplication(app); business.Bind(app.Runtime.Services);
@@ -61,6 +66,18 @@ internal static class BusinessTests
             Check(!(await other.Accounts.ReadPublic(new(account.Id), Options())).Success);
             var power = Ok(await api.Platform.QueryPower(new(), Options()));
             Check(power.OnBattery && power.ChargePercent == 60);
+            var picked = Ok(await api.Platform.PickFile(new(new("Directory", []), FilePickKind.Directory, []), Options()));
+            Check(!(await other.Platform.RevealFile(picked, Options())).Success && shell.Reveals == 0);
+            Check((await api.Platform.RevealFile(picked, Options())).Success && shell.Reveals == 1 && shell.DirectoryPath == root);
+            var displays = Ok(await api.Platform.QueryDisplay(new(), Options()));
+            Check(displays.Items.Length == 1 && displays.Items[0].Scale == 1.25);
+            Check(!(await api.Platform.OpenUri(new("http://example.com"), Options())).Success && shell.Opens == 0);
+            var opening = api.Platform.OpenUri(new("https://example.com"), Options()).AsTask();
+            await shell.Entered.Task.WaitAsync(TimeSpan.FromSeconds(5)); Check(!opening.IsCompleted);
+            shell.Release.TrySetResult(); Check((await opening).Success && shell.Opens == 1);
+            shell.Reject = true;
+            Check(!(await api.Platform.OpenUri(new("https://example.com/fail"), Options())).Success && shell.Opens == 2);
+            shell.Reject = false;
             var session = Ok(await api.Minecraft.Processes.ListSessions(new(null, 32), Options())).Items.Single();
             var watch = Ok(await api.Minecraft.Processes.WatchSession(new(session.Id, null, Abi100Schemas.GameSession), Options()));
             _ = Ok(await api.Resources.ReadSubscription(new(watch, 32), Options()));
@@ -90,7 +107,7 @@ internal static class BusinessTests
         finally { await state.DisposeAsync(); if (Directory.Exists(root)) Directory.Delete(root, true); }
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(assembly => assembly.GetName().Name?.StartsWith("Nexa.Services", StringComparison.Ordinal) == true));
         await StopCancelsPendingHostQuery();
-        Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, revision fencing, lost-state recovery and retirement.");
+        Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, acknowledged shell effects, file-grant isolation, revision fencing, lost-state recovery and retirement.");
     }
     private static async Task StopCancelsPendingHostQuery()
     {
@@ -131,7 +148,7 @@ internal static class BusinessTests
     private sealed class Entry(string id) : IPluginBootstrapV1
     {
         internal ABIContext? Context;
-        private static readonly ImmutableArray<string> Permissions = ["nexa.accounts.read", "nexa.minecraft.processes.read", "nexa.minecraft.processes.write", "nexa.platform.read", "nexa.tasks.read", "nexa.tasks.write", "nexa.resources.read", "nexa.resources.write"];
+        private static readonly ImmutableArray<string> Permissions = ["nexa.accounts.read", "nexa.minecraft.processes.read", "nexa.minecraft.processes.write", "nexa.platform.read", "nexa.platform.write", "nexa.tasks.read", "nexa.tasks.write", "nexa.resources.read", "nexa.resources.write"];
         internal PluginLoadSource Source() => new(new(1, id, "1.0.0", 1, new("test", "test"), new([], [], "fixture"), [100], [], [], [], Permissions, []),
             Permissions, _ => ValueTask.FromResult<IPluginBootstrapV1>(this), () => ValueTask.CompletedTask);
         public async ValueTask<AbiReply<PreInitResult>> OnPreInitialize(PreInitContext context)

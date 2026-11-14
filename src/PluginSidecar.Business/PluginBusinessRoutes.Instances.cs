@@ -14,8 +14,8 @@ public sealed partial class PluginBusinessRoutes
             bool running = Sessions().Items.Any(p => p.InstanceDirectory == item.Instance.DirectoryPath && p.State is MinecraftProcessState.Running or MinecraftProcessState.Created);
             return ValueTask.FromResult(new InstanceDetails(item.Summary, Application.Files.GrantPath(c.Identity, item.Instance.DirectoryPath), running, item.Instance.Metadata.Tags.Select(tag => new QualifiedId("nexa:instance-tags/" + Token(c, "tag:" + tag))).ToImmutableArray()));
         }),
-        HostRoutes.Typed<EntityRequest, Empty>("Minecraft.Instances", "OpenDirectory", (c, v) =>
-        { Platform.Reveal(FindInstance(c, v.Id).Instance.DirectoryPath); return ValueTask.FromResult(new Empty()); }),
+        HostRoutes.Typed<EntityRequest, Empty>("Minecraft.Instances", "OpenDirectory", async (c, v) =>
+        { await Shell.Reveal(FindInstance(c, v.Id).Instance.DirectoryPath, c.Options.Cancellation).ConfigureAwait(false); c.Options.Cancellation.ThrowIfCancellationRequested(); return new Empty(); }),
         HostRoutes.Typed<RootRegistration, RootRegistration>("Minecraft.Instances", "AddRoot", async (c, v) =>
         {
             string path = Application.Files.Resolve(c.Identity, new(v.Root.Token, v.Root.LoadInstanceId, "selected-write"), true);

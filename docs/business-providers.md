@@ -40,3 +40,19 @@ alpha.9 新增业务 Provider 回调信封及集合 schema，已有 ABI 保持�
 回调接收 `BusinessProviderCall`，按指定 schema 解码输入并直接返回类型化结果。
 注册在激活后可见，退出时取消在途调用。查询回调不能执行宿主修改操作。
 并发、排队和超时均有上限；重试及替换等待任务策略暂不接受。
+
+### Shell operations during the process-boundary migration
+
+The private business adapter now binds a separately discovered `SidecarShellClient`
+with `PluginBusinessRoutes.BindShell(client)`. Its catalog covers HTTPS navigation,
+directory reveal and display enumeration. Both navigation methods await the Host
+reply and propagate cancellation; they cannot use synchronous IPC or return success
+while a request is still pending. This is independent of the pending file-picker
+and clipboard binding. Existing guest permission checks, confirmation, scoped file
+handles and instance lookup still run in the Sidecar before the Host request.
+
+The business tests invoke guest-facing operations through a frozen binary Host
+fixture, checking pending completion, rejected replies, display projection and
+local rejection of non-HTTPS links. Host tests separately exercise authenticated
+catalog dispatch and binding cancellation. This does not yet switch the production
+worker away from its existing execution mode.

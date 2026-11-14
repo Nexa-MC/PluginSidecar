@@ -8,11 +8,8 @@ namespace PluginSidecar.Business;
 
 public sealed record PluginPlatformEffects(
     Func<string, int, string[], CancellationToken, Task<string?>> Pick,
-    Action<string> Reveal,
-    Action<Uri> OpenUri,
     Func<CancellationToken, Task<(string? Text, byte[]? Image)>> ReadClipboard,
-    Func<string?, byte[]?, CancellationToken, Task> WriteClipboard,
-    Func<CancellationToken, Task<(string Id, int Width, int Height, double Scale)[]>> Displays);
+    Func<string?, byte[]?, CancellationToken, Task> WriteClipboard);
 
 public sealed partial class PluginBusinessRoutes
 {
@@ -86,13 +83,13 @@ public sealed partial class PluginBusinessRoutes
             }
         }),
         HostRoutes.Typed<FilePick, FileRef>("Platform", "PickFile", PickFile),
-        HostRoutes.Typed<FileRef, Empty>("Platform", "RevealFile", (c, v) =>
-        { string path = Application.Files.Resolve(c.Identity, v); Platform.Reveal(Directory.Exists(path) ? path : Path.GetDirectoryName(path)!); return ValueTask.FromResult(new Empty()); }),
+        HostRoutes.Typed<FileRef, Empty>("Platform", "RevealFile", async (c, v) =>
+        { string path = Application.Files.Resolve(c.Identity, v); await Shell.Reveal(Directory.Exists(path) ? path : Path.GetDirectoryName(path)!, c.Options.Cancellation).ConfigureAwait(false); c.Options.Cancellation.ThrowIfCancellationRequested(); return new Empty(); }),
         HostRoutes.Typed<UriRef, Empty>("Platform", "OpenUri", async (c, v) =>
         {
             if (!Uri.TryCreate(v.Value, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.UserInfo.Length != 0) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
             await Confirm(c, "platform/open-uri", "Open " + uri.Host, UriRef.Write(v), c.Options.Cancellation).ConfigureAwait(false);
-            Platform.OpenUri(uri); return new Empty();
+            await Shell.OpenUri(uri, c.Options.Cancellation).ConfigureAwait(false); c.Options.Cancellation.ThrowIfCancellationRequested(); return new Empty();
         }),
         HostRoutes.Typed<Empty, ClipboardContent>("Platform", "ReadClipboard", async (c, _) =>
         {
