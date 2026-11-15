@@ -2,7 +2,8 @@
 
 English | [简体中文](README.zh-CN.md)
 
-NexaCL plugin contracts and SDK for derivative developers and contributors.
+The independent NexaCL plugin runtime, for runtime developers and contributors.
+Plugin authors use the [public SDK](https://github.com/Nexa-MC/NexaCL-Plugin-SDK).
 The current design is [Plugin ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md).
 
 ## SDK 0.2.0-alpha.13
@@ -16,10 +17,12 @@ The current design is [Plugin ABI v0.2](docs/specifications/plugin-abi-v0.2.prop
 - `PluginSidecar.RuntimeAdapter`: **trusted development only** CoreCLR memory loading. This is not the controlled execution environment required by v0.2.
 
 The typed catalog is shared with the public [NexaCL Plugin SDK](https://github.com/Nexa-MC/NexaCL-Plugin-SDK).
-The public `contracts/host-support.json` pins the verified Desktop implementation.
+The public `contracts/host-support.json` records the implementation revision used
+for its support evidence; it does not prove that a newer Worker has been released.
 Host transport continues to use
 the existing NexaCL binary Sidecar ABI; catalog numbers are local dispatch slots,
-not new transport opcodes. The CLI is not yet an installable `.nsc`.
+not new transport opcodes. The Worker is packaged separately from the launcher;
+signed distribution remains subject to the release checks in the roadmap.
 Packages are development artifacts, not published on NuGet.org.
 
 Rebuild plugins from earlier previews: `OnActivated` is now explicit, negotiation
@@ -30,11 +33,13 @@ binaries compatible. See [loading and migration](docs/loading-contract.md).
 
 Runtime behavior and remaining limits are documented in [runtime services](docs/runtime-services.md) and [acceptance status](docs/roadmap.md).
 
-The standalone migration now has Sidecar-owned application, business and guest
-presentation modules. [Guest presentation ownership](docs/presentation-migration.md)
-explains page validation, scoped inputs, action translation, ordinary-page publication and Host confirmation. The business module also calls the general Host Shell catalog for asynchronous HTTPS navigation, directory reveal and display queries. Theme configuration save/reset/import also have a typed Host adapter; import documents are parsed inside Sidecar. These modules are
-tested independently of launcher service assemblies; the production worker still
-uses its existing execution entry, and SDK Beta remains pending the full cutover.
+The executable now selects the standalone owner for admission, business adapters,
+offline management and guest presentation. It uses the pinned generic Host ABI,
+including the Host-configured HTTP transport, without loading launcher services
+or UI assemblies. The coordinated Host change removes its embedded plugin owner
+and fixed plugin navigation. See [Worker composition](docs/worker-composition.md)
+for startup order, cleanup, real-process tests and deployment limits. Market
+acquisition and signed release validation remain prerequisites for SDK Beta.
 
 After `dotnet pack PluginSidecar.slnx -c Release -o artifacts/packages` and
 `python eng/package_sdk.py`, run `python eng/verify_packages.py` to restore and

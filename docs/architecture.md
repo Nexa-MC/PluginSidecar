@@ -1,6 +1,6 @@
 # Loading contracts and SDK
 
-## Beta ownership target
+## Ownership boundary
 
 PluginSidecar owns plugin admission, SDK negotiation, grants, lifecycle, offline
 installation records, business adapters and management UI. NexaCL exposes general
@@ -9,7 +9,10 @@ failed. Plugin-specific state and dispatch must not remain in the launcher.
 `PluginSidecar.Packages/Application` now contains the portable application,
 resource and presentation owner. Its encrypted catalog takes an asynchronous key
 protection port, with no dependency on launcher account implementation classes.
-Migration of business and UI adapters must complete before the Beta release.
+Business and UI adapters are composed by the production source entry. Signed
+distribution and production Market integration still need release verification.
+In guest ABI sections, “Host” means the trusted plugin authority inside this
+Sidecar. “Native Host” and “launcher” mean NexaCL; neither owns guest policy.
 
 `PluginSidecar.Presentation` owns guest NXML policy and translation. It uses the
 canonical NXML compiler from the versioned public shared packages, without
@@ -906,12 +909,11 @@ cleanup path. Navigation is bounded and checked against the active load again
 at dispatch. Offline restoration follows the current developer-mode policy and
 retains the existing catalog path, `plugins/storage.installed`.
 
-The standalone runtime requires an explicit native HTTP client factory; its
-caller owns binding the committed Host network policy before activation. It must
-not silently fall back to a different proxy, PAC, DNS or provider policy. The
-production executable continues remote execution until that factory, Market
-ownership and the Host controller removal are completed together. The staged
-runtime is not a second deployed startup or restoration owner.
+The production executable selects this runtime. Its default HTTP handler binds
+the committed Host network policy through the generic HTTP catalog, without a
+socket fallback. The coordinated Host cutover removes the embedded controller;
+only the Sidecar owns startup and restoration. The injected HTTP factory is a
+test seam. Market acquisition and signed deployment remain separate release work.
 
 ## Host-configured HTTP client ownership
 
@@ -928,3 +930,14 @@ and never buffer complete downloads. Each response owns one native exchange;
 synchronous disposal schedules cancellation and bounded independent cleanup, and
 runtime retirement awaits the handler's asynchronous drain. An uncertain send or
 read closes its exchange without replay. No guest ABI operation or EXP_ID changes.
+
+## Production standalone entry
+
+The executable activates `StandalonePluginRuntime` after the authenticated general
+Sidecar handshake. It no longer accepts remote guest-execution requests from a
+Host-side plugin kernel. Guest admission, business adapters, offline management
+and UI publication have exactly one owner in this process. The Host counterpart
+removes embedded SDK dependencies and its fixed plugin navigation in the same
+cutover. Real-process tests exercise bootstrap authentication, catalog discovery,
+Wasm import/action/disable and graceful shutdown; codec-level legacy transport
+tests remain local compatibility tests, not the production deployment model.

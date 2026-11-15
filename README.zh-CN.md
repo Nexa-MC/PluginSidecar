@@ -2,7 +2,8 @@
 
 [English](README.md) | 简体中文
 
-面向衍生开发者和贡献者的 NexaCL 插件契约与 SDK。当前设计依据为
+面向运行时开发者和贡献者的独立 NexaCL 插件运行时。插件作者使用
+[公共 SDK](https://github.com/Nexa-MC/NexaCL-Plugin-SDK)。当前设计依据为
 [插件 ABI v0.2](docs/specifications/plugin-abi-v0.2.proposal.zh-CN.md)。
 
 ## SDK 0.2.0-alpha.13
@@ -24,22 +25,22 @@ NexaCL 二进制 Sidecar ABI，目录编号不是新的传输消息编号。SDK 
 
 运行时行为、恢复规则与剩余限制见 [运行时说明](docs/runtime-services.md) 和 [验收进度](docs/roadmap.md)。
 
-独立化迁移已建立 Sidecar 拥有的应用、业务和插件页面编译模块。
-[页面迁移说明](docs/presentation-migration.md) 介绍页面校验、输入隔离、动作翻译、普通页面发布与宿主确认交互。
-业务模块还通过通用 Host Shell 目录异步打开 HTTPS 链接、显示目录和查询显示器。
-主题配置保存、重置和导入已增加类型化宿主适配；导入文档由 Sidecar 解析。
-这些模块已脱离宿主服务程序集进行验证；生产 Worker 仍使用原执行入口，SDK Beta
-需要在完整切换和发布验证完成后发布。
+生产源码入口现已选择独立运行时，负责准入、业务适配、离线管理和插件界面。
+它使用锁定版本的通用宿主 ABI，包括继承宿主网络配置的 HTTP 通道，不加载宿主服务
+或 UI 程序集。对应宿主改动移除旧内嵌插件所有者和固定插件导航。
+启动顺序、清理规则、真实进程验证及部署限制见 [Worker 组合说明](docs/worker-composition.md)。
+Market 获取链路和签名发布验证仍是 SDK Beta 的发布前置条件。
 
 ## 构建与验证
 
-需要 .NET 10 与 Python 3.12+：
+需要 .NET 10、Python 3.12+，以及支持 Wasm 的 Clang/LLD。以下使用 POSIX shell 语法：
 
 ```sh
 python eng/generate_abi100.py --verify
+python eng/build_wasm_sample.py --clang /path/to/clang
 python eng/prepare_host_reference.py
 dotnet build PluginSidecar.slnx -c Release
-dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
+NEXA_PLUGIN_WORKER=src/PluginSidecar/bin/Release/net10.0/PluginSidecar.dll NEXA_WASM_SAMPLE=artifacts/wasm-sample/plugin.zip NEXA_WASM_CONFORMANCE=artifacts/wasm-sample/conformance.wasm NEXA_WASM_CALLBACK=artifacts/wasm-sample/callback.wasm NEXA_WASM_CODEC=artifacts/wasm-sample/codec.wasm dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
 dotnet pack src/Nexa.Plugin.Bootstrap.V1 -c Release -o artifacts/packages
 dotnet pack src/Nexa.Plugin.Sdk.Abi100 -c Release -o artifacts/packages
 ```

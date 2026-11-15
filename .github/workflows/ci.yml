@@ -93,5 +93,5 @@ jobs:
         run: |
           $env:NEXA_PLUGIN_WORKER = if ($IsWindows) { './artifacts/${{ matrix.rid }}/PluginSidecar.exe' } else { './artifacts/${{ matrix.rid }}/PluginSidecar' }
           $test = if ($IsWindows) { './artifacts/aot-smoke/PluginSidecar.AotSmoke.exe' } else { './artifacts/aot-smoke/PluginSidecar.AotSmoke' }
-          & $test --remote-only
+          & $test --process-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

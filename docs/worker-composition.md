@@ -1,9 +1,13 @@
 # Standalone Worker composition
 
-`StandalonePluginRuntime` is the staged owner of a complete plugin session. The
-production executable still selects `RemoteExecutionRuntime`; switching that
-entry also requires removing the Desktop plugin owner, connecting Market delivery. Do not run both application
-owners against the same installation catalog.
+The executable selects `StandalonePluginRuntime` after the authenticated Sidecar
+handshake. This process owns the plugin session, including application admission,
+business adapters, offline management and presentation. Deploy it with a Host
+that exposes the pinned generic catalogs and has removed its embedded plugin
+owner. Running two owners against one installation catalog is unsupported.
+
+Source cutover and process tests do not establish signed release availability or
+production Market delivery; see [deployment status](roadmap.md).
 
 ## Startup order
 
@@ -82,7 +86,12 @@ action, disable, stale callback rejection, readiness cancellation and failed
 activation. It also checks that no Desktop, Avalonia or `Nexa.Services` assembly
 is loaded. The same tests are included in `PluginSidecar.AotSmoke`.
 
+The production-process fixture starts the actual executable, performs bootstrap
+authentication, admits its registrations and exercises real Wasm import, a
+confirmed action, disable, stale callback rejection and graceful shutdown through
+the native binary session. CI runs it against both managed and NativeAOT workers.
+
 Socket peer tests establish that background failure wakes the reader and that
 retirement remains bounded. Native Host tests separately establish the display,
 input and resource contracts. These checks do not establish deployed Market
-service compatibility, real OS key-store availability or production cutover.
+service compatibility, real OS key-store availability or signed release availability.
