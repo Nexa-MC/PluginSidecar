@@ -17,7 +17,7 @@ namespace PluginSidecar;
 
 /// <summary>One native session owns the application, all guest effects and all presentation.</summary>
 internal sealed class StandalonePluginRuntime(
-    Func<SidecarBusinessClient, CancellationToken, ValueTask<HttpClient>> network,
+    Func<SidecarBusinessClient, CancellationToken, ValueTask<HttpClient>>? network,
     Action<string> report) : IPluginWorkerRuntime, IPluginWorkerBackground
 {
     private readonly CancellationTokenSource _stop = new();
@@ -29,6 +29,8 @@ internal sealed class StandalonePluginRuntime(
     private CancellationTokenSource? _active;
     private PluginApplication? _application;
     private PluginBusinessRoutes? _business;
+    private SidecarHttpHandler? _http;
+    internal StandalonePluginRuntime(Action<string> report) : this(null, report) { }
     private SidecarBusinessState? _state;
     private PluginPagePublisher? _publisher;
     private PluginManagementController? _management;
@@ -92,7 +94,12 @@ internal sealed class StandalonePluginRuntime(
         _business.BindContentImport(client.Commands);
         _business.BindAccounts(client.Queries);
         _business.BindConfirmation(confirmation);
-        _business.BindNetworkHttp(await network(client, token).ConfigureAwait(false));
+        if (network is not null) _business.BindNetworkHttp(await network(client, token).ConfigureAwait(false));
+        else
+        {
+            _http = await SidecarHttpHandler.CreateAsync(requests, observer, report, token).ConfigureAwait(false);
+            _business.BindNetworkHttp(new HttpClient(_http) { Timeout = TimeSpan.FromSeconds(60) });
+        }
         token.ThrowIfCancellationRequested();
         string storage = Path.Combine(facts.DataRoot, "plugins", "storage");
         _application = new(storage, (bytes, cancellation) =>
@@ -178,6 +185,7 @@ internal sealed class StandalonePluginRuntime(
         if (_application is not null) await Drain(() => _application.DisposeAsync().AsTask()).ConfigureAwait(false);
         if (_business is not null) await Drain(() => _business.DisposeAsync().AsTask()).ConfigureAwait(false);
         else if (_state is not null) await Drain(() => _state.DisposeAsync().AsTask()).ConfigureAwait(false);
+        if (_http is not null) await Drain(() => _http.DisposeAsync().AsTask()).ConfigureAwait(false);
         if (_rasters is not null) await Drain(() => _rasters.DisposeAsync().AsTask()).ConfigureAwait(false);
         await Drain(() => { _catalog?.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
         await Drain(() => { _keys?.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);

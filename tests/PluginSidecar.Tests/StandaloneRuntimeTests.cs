@@ -16,37 +16,41 @@ internal static partial class StandaloneRuntimeTests
         Directory.CreateDirectory(root);
         try
         {
-            using var host = new NativeHost(root, package);
-            var http = new TrackingHttp();
-            int networks = 0;
-            var runtime = new StandalonePluginRuntime((_, token) =>
-            { token.ThrowIfCancellationRequested(); networks++; return ValueTask.FromResult(new HttpClient(http)); }, _ => { });
-            try
+            foreach (bool nativeHttp in new[] { false, true })
             {
-                Check(runtime.Registrations.Select(item => item.SemanticId).SequenceEqual(new[]
-                { PluginViewCompiler.ActionCommand, PluginPagePublisher.ManagementCommand, PluginViewCompiler.DrawingInputCommand }));
-                await runtime.ActivateAsync(host.Requests, default);
-                await Until(() => host.Button("加载开发包") is not null, runtime);
-                Check(networks == 1 && host.Discoveries.Count == 16);
-                Check(Directory.Exists(Path.Combine(root, "plugins", "storage")));
-                await runtime.ExecuteAsync(2, Form(host.Button("加载开发包")!), default);
-                await Until(() => host.Views.Any(view => view.Document.EntryPoint != "manager.nxml"
-                    && view.Document.Operation == SidecarNxmlOperation.Page), runtime);
-                var guest = host.Views.Single(view => view.Document.EntryPoint != "manager.nxml" && view.Document.Operation == SidecarNxmlOperation.Page);
-                var action = Nodes(Compile(guest).Root.Root).Single(node => node.Command?.Value == PluginViewCompiler.ActionCommand);
-                byte[] actionForm = SidecarUiForms.Encode(action.Argument!, new Dictionary<string, string>());
-                await runtime.ExecuteAsync(1, new(SidecarWireCodecs.GeneratedDto, actionForm), default);
-                await Until(() => host.Confirmations >= 3, runtime); // Two import choices, then the real guest action's confirmation.
-                await Until(() => host.Button("停用") is not null, runtime);
-                await runtime.ExecuteAsync(2, Form(host.Button("停用")!), default);
-                await Until(() => host.Views.Count(view => view.Document.Operation == SidecarNxmlOperation.Page) == 1, runtime);
-                await Rejected(() => runtime.ExecuteAsync(1, new(SidecarWireCodecs.GeneratedDto, actionForm), default).AsTask());
-                await Rejected(() => runtime.ExecuteAsync(99, new(SidecarWireCodecs.GeneratedDto, []), default).AsTask());
-                Check(!http.Disposed && host.Picks == 1 && host.Confirmations == 3);
+                string sessionRoot = Path.Combine(root, nativeHttp ? "native" : "injected"); Directory.CreateDirectory(sessionRoot);
+                using var host = new NativeHost(sessionRoot, package);
+                var http = new TrackingHttp();
+                int networks = 0;
+                var runtime = nativeHttp ? new StandalonePluginRuntime(_ => { }) : new StandalonePluginRuntime((_, token) =>
+                { token.ThrowIfCancellationRequested(); networks++; return ValueTask.FromResult(new HttpClient(http)); }, _ => { });
+                try
+                {
+                    Check(runtime.Registrations.Select(item => item.SemanticId).SequenceEqual(new[]
+                    { PluginViewCompiler.ActionCommand, PluginPagePublisher.ManagementCommand, PluginViewCompiler.DrawingInputCommand }));
+                    await runtime.ActivateAsync(host.Requests, default);
+                    await Until(() => host.Button("加载开发包") is not null, runtime);
+                    Check(networks == (nativeHttp ? 0 : 1) && host.Discoveries.Count == (nativeHttp ? 17 : 16));
+                    Check(Directory.Exists(Path.Combine(sessionRoot, "plugins", "storage")));
+                    await runtime.ExecuteAsync(2, Form(host.Button("加载开发包")!), default);
+                    await Until(() => host.Views.Any(view => view.Document.EntryPoint != "manager.nxml"
+                        && view.Document.Operation == SidecarNxmlOperation.Page), runtime);
+                    var guest = host.Views.Single(view => view.Document.EntryPoint != "manager.nxml" && view.Document.Operation == SidecarNxmlOperation.Page);
+                    var action = Nodes(Compile(guest).Root.Root).Single(node => node.Command?.Value == PluginViewCompiler.ActionCommand);
+                    byte[] actionForm = SidecarUiForms.Encode(action.Argument!, new Dictionary<string, string>());
+                    await runtime.ExecuteAsync(1, new(SidecarWireCodecs.GeneratedDto, actionForm), default);
+                    await Until(() => host.Confirmations >= 3, runtime); // Two import choices, then the real guest action's confirmation.
+                    await Until(() => host.Button("停用") is not null, runtime);
+                    await runtime.ExecuteAsync(2, Form(host.Button("停用")!), default);
+                    await Until(() => host.Views.Count(view => view.Document.Operation == SidecarNxmlOperation.Page) == 1, runtime);
+                    await Rejected(() => runtime.ExecuteAsync(1, new(SidecarWireCodecs.GeneratedDto, actionForm), default).AsTask());
+                    await Rejected(() => runtime.ExecuteAsync(99, new(SidecarWireCodecs.GeneratedDto, []), default).AsTask());
+                    Check(!http.Disposed && host.Picks == 1 && host.Confirmations == 3);
+                }
+                finally { await Task.WhenAll(runtime.DisposeAsync().AsTask(), runtime.DisposeAsync().AsTask()); }
+                Check(http.Disposed == !nativeHttp && runtime.Completion.IsCompletedSuccessfully);
+                await Rejected(() => runtime.ExecuteAsync(2, Form("retired"), default).AsTask());
             }
-            finally { await Task.WhenAll(runtime.DisposeAsync().AsTask(), runtime.DisposeAsync().AsTask()); }
-            Check(http.Disposed && runtime.Completion.IsCompletedSuccessfully);
-            await Rejected(() => runtime.ExecuteAsync(2, Form("retired"), default).AsTask());
 
             // No admission or storage owner is created when native readiness is cancelled.
             using var waitingHost = new NativeHost(root, package) { Ready = false };

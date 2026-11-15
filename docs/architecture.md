@@ -868,7 +868,7 @@ available and delegates with `gap = false`.
 ## Native raster transport ownership
 
 `SidecarRasterHost` discovers the independent generic RasterControl catalog from
-shared packages `0.1.0-alpha.21`. It copies caller pixel buffers before awaiting,
+shared packages `0.1.0-alpha.22`. It copies caller pixel buffers before awaiting,
 uploads SHA-256 verified images in sequential chunks of at most 64 KiB, seals
 them, and replaces the complete session-owned binding set at an acknowledged
 source revision. The Host owns native image decoding, display and input routing;
@@ -912,3 +912,19 @@ not silently fall back to a different proxy, PAC, DNS or provider policy. The
 production executable continues remote execution until that factory, Market
 ownership and the Host controller removal are completed together. The staged
 runtime is not a second deployed startup or restoration owner.
+
+## Host-configured HTTP client ownership
+
+The standalone runtime's default HTTP handler discovers the generic native HTTP
+catalog. Guest HTTP calls and downloads use this handler through their existing
+HttpClient boundary, inheriting the Host's committed network policy without
+importing Host services or copying proxy credentials into guest projections.
+An injected HTTP factory remains a test seam; absence of a factory now selects
+the native bridge, never a default socket transport.
+
+Known-length request bodies stream in bounded chunks. Unknown-length bodies use
+one bounded temporary buffer at a time. Responses expose an asynchronous stream
+and never buffer complete downloads. Each response owns one native exchange;
+synchronous disposal schedules cancellation and bounded independent cleanup, and
+runtime retirement awaits the handler's asynchronous drain. An uncertain send or
+read closes its exchange without replay. No guest ABI operation or EXP_ID changes.

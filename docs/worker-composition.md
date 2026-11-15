@@ -2,8 +2,7 @@
 
 `StandalonePluginRuntime` is the staged owner of a complete plugin session. The
 production executable still selects `RemoteExecutionRuntime`; switching that
-entry also requires removing the Desktop plugin owner, supplying the committed
-network policy and connecting Market delivery. Do not run both application
+entry also requires removing the Desktop plugin owner, connecting Market delivery. Do not run both application
 owners against the same installation catalog.
 
 ## Startup order
@@ -16,6 +15,8 @@ owners against the same installation catalog.
 3. Discover the business, effects, shell, theme, clipboard, picker, confirmation,
    notification and presentation catalogs. The exact shared package pin defines
    their independent wire fingerprints. Missing discovery fails activation.
+   The current package pin is `0.1.0-alpha.22`, built from Host commit
+   `68bfa038dbe8bacae4a3fc51e258ea5bd125ce06`.
 4. Bind every effect and the required native HTTP client, then create one
    application at `plugins/storage`. Its business adapters own the HTTP client
    and dispose it during retirement.
@@ -23,11 +24,20 @@ owners against the same installation catalog.
    protector. Create one management controller and one publisher, then start the
    supervised presentation loop.
 
-The HTTP factory is mandatory. Returning a default `HttpClient` in production
-would bypass launcher proxy, PAC, DNS and provider settings. Tests inject an
-owned client to verify construction and disposal; that is not a network-policy
-implementation. Safe mode must prevent activation of the plugin Sidecar at the
-Host session boundary.
+The default HTTP handler discovers the generic Host HTTP catalog. Requests run
+through `FoundationHost.CreateHttpClient(allowAutoRedirect: false)`, inheriting
+the launcher network policy. It never creates a direct-network fallback. Tests
+also inject an owned client to verify construction and disposal. Safe mode must
+prevent activation of the plugin Sidecar at the Host session boundary.
+
+Uploads are limited to 16 MiB. Known lengths stream in chunks; unknown lengths
+use one bounded buffer at a time. Responses stream in chunks of at most 60 KiB,
+so large downloads do not require a full response buffer or large DTO support.
+Each exchange belongs to the authenticated Sidecar session. Request cancellation,
+response disposal and Worker retirement release it; native retirement and idle
+expiry cover a lost channel. A failed Send or Read is never automatically retried,
+because the native effect may already have occurred. Synchronous response reads
+are unsupported; consumers must use asynchronous reads.
 
 ## Admission and publication
 
@@ -52,7 +62,7 @@ This runtime does not automatically replay uncertain guest effects.
 
 Retirement seals incoming commands and cancels admitted work. Disposal drains
 activation and the publication loop, then disposes management, presentation,
-the application, business effects, raster transport, the installation catalog
+the application, business effects, HTTP and raster transport, the installation catalog
 and key protection. Cleanup continues after an individual disposal failure and
 reports aggregate failure. Cancellation callbacks that throw cannot skip the
 remaining cleanup. Concurrent disposal calls share one completion.
@@ -65,8 +75,9 @@ new cleanup requests.
 
 ## Evidence and limits
 
-The frozen binary fixture in `StandaloneRuntimeTests` exercises 16 independently
-discovered catalogs, real Wasm import, two-stage consent, a confirmed guest
+The frozen binary fixture in `StandaloneRuntimeTests` exercises 17 independently
+discovered catalogs with the default native HTTP handler (16 with an injected
+client), real Wasm import, two-stage consent, a confirmed guest
 action, disable, stale callback rejection, readiness cancellation and failed
 activation. It also checks that no Desktop, Avalonia or `Nexa.Services` assembly
 is loaded. The same tests are included in `PluginSidecar.AotSmoke`.

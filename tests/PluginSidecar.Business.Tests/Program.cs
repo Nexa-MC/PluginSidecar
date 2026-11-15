@@ -149,6 +149,7 @@ internal static class BusinessTests
         await ContextFixture.AdapterChecks(observer);
         await FilePickerFixture.AdapterChecks(observer);
         await ClipboardFixture.AdapterChecks(observer);
+        await HttpHandlerTests.Run(observer);
         await ThemeOptionsTests.Run(observer);
         await ThemeActivationTests.Run(observer);
         Console.WriteLine("PASS: independent Sidecar business projections, credential-free eligibility, owner isolation, process cancellation, acknowledged shell effects, typed theme configuration and local document validation, file-grant isolation, revision fencing, lost-state recovery and retirement.");
