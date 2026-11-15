@@ -12,6 +12,7 @@ internal static class WorkerPeerTests
         await CancelledCommand();
         await ShutdownWithoutReply();
         await FailureWithoutAnotherFrame();
+        await BackgroundCompletion();
         await RejectAfterRetirement();
         await DrainDeadline();
         Console.WriteLine("PASS: worker single reader, bidirectional activation/retirement, cancellation, shutdown without reply, background failure, sealed admission and bounded single disposal.");
@@ -131,10 +132,29 @@ internal static class WorkerPeerTests
         await runtime.Disposed.Task.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
-    private sealed class Runtime : IPluginWorkerRuntime
+    private static async Task BackgroundCompletion()
+    {
+        foreach (bool fail in new[] { false, true })
+        {
+            var runtime = new Runtime();
+            await WithPeer(runtime, async (host, run, token) =>
+            {
+                await runtime.Activated.Task.WaitAsync(token);
+                await Ping(host, token);
+                if (fail) runtime.Background.TrySetException(new IOException("Publication failed without another frame."));
+                else runtime.Background.TrySetResult();
+                await Reject<Exception>(run.WaitAsync(token));
+                Check(runtime.DisposeCount == 1);
+            });
+        }
+    }
+
+    private sealed class Runtime : IPluginWorkerRuntime, IPluginWorkerBackground
     {
         internal bool QueryDuringActivation, QueryDuringDisposal, FailActivation, DisposalDisconnected;
         internal int DisposeCount, Executions;
+        internal readonly TaskCompletionSource Background = Signal();
+        public Task Completion => Background.Task;
         internal Action? BeforeDisposal;
         internal readonly TaskCompletionSource Activated = Signal(), Disposing = Signal(), Disposed = Signal();
         private SidecarHostRequestClient? _requests;

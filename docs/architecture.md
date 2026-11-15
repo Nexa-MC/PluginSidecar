@@ -886,3 +886,29 @@ Native input adds an optional `gap` Boolean to the existing observation fields.
 The publisher validates it and carries loss into the existing guest event field.
 ABI 100 signatures and operation IDs are unchanged; this native-only extension
 does not require an EXP_ID. Production Worker composition remains the next step.
+
+## Standalone Worker composition and supervision
+
+The standalone runtime composes the existing generic Host clients after
+authentication and native-window readiness. One application owns guest loads; one
+management controller owns consent, installation records and offline restoration;
+one publisher owns pages, dialogs, shortcuts and raster surfaces. Every effect
+port is bound before guest admission. Callback registrations are ordinary
+GeneratedDto commands, with session-local numeric IDs derived from registration
+order. No guest SDK type crosses the Host transport.
+
+The frame reader supervises the runtime's background completion as well as
+activation and commands. A failed publication loop must end its session even
+when no further Host frame arrives. Retirement seals command admission, cancels
+the loop and admitted work, then drains management and guest cleanup before
+releasing business effects and key material. Partial activation uses the same
+cleanup path. Navigation is bounded and checked against the active load again
+at dispatch. Offline restoration follows the current developer-mode policy and
+retains the existing catalog path, `plugins/storage.installed`.
+
+The standalone runtime requires an explicit native HTTP client factory; its
+caller owns binding the committed Host network policy before activation. It must
+not silently fall back to a different proxy, PAC, DNS or provider policy. The
+production executable continues remote execution until that factory, Market
+ownership and the Host controller removal are completed together. The staged
+runtime is not a second deployed startup or restoration owner.

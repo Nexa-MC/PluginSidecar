@@ -13,6 +13,12 @@ internal interface IPluginWorkerRuntime : IAsyncDisposable
     ValueTask<byte[]> ExecuteAsync(uint contract, SidecarBinaryValue input, CancellationToken token);
 }
 
+/// <summary>A session-owned background loop; completion without retirement is a failure.</summary>
+internal interface IPluginWorkerBackground
+{
+    Task Completion { get; }
+}
+
 internal sealed class RemoteExecutionRuntime : IPluginWorkerRuntime
 {
     private readonly GuestExecutionServer _execution = new();

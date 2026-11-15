@@ -47,6 +47,17 @@ internal sealed class PluginExecutionPeer(SidecarFrameTransport wire, IPluginWor
                             try { await runtime.ActivateAsync(requests, active.Token).ConfigureAwait(false); }
                             catch (OperationCanceledException) when (active.IsCancellationRequested) { }
                         });
+                        if (runtime is IPluginWorkerBackground background)
+                            _ = Start(async () =>
+                            {
+                                try
+                                {
+                                    await _activation.ConfigureAwait(false);
+                                    await background.Completion.WaitAsync(active.Token).ConfigureAwait(false);
+                                    if (!active.IsCancellationRequested) throw new IOException("Worker background loop ended before retirement.");
+                                }
+                                catch (OperationCanceledException) when (active.IsCancellationRequested) { }
+                            });
                         break;
                     case SidecarMessageType.Deactivate:
                         _ = Retire(active);

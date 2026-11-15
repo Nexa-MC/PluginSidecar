@@ -5,6 +5,7 @@ using PluginSidecar.RuntimeAdapter;
 
 if (args is ["--catalog-hold-lock", var catalogDirectory]) { await CatalogRevisionTests.HoldLock(catalogDirectory); return; }
 if (args is ["--key-protection-only"]) { await KeyProtectionTests.Run(); return; }
+if (args is ["--standalone-only"]) { await StandaloneRuntimeTests.Run(); return; }
 if (args is ["--worker-only"]) { await WorkerPeerTests.Run(); return; }
 if (args is ["--remote-only"]) { await RemoteExecutionTests.Run(); return; }
 if (args is ["--application-only"]) { await KeyProtectionTests.Run(); await ApplicationTests.Run(); return; }
@@ -31,6 +32,7 @@ await ContentRuntimeTests.Run();
 await ResourceRuntimeTests.Run();
 await WasmWorkflowTests.Run();
 await WorkerPeerTests.Run();
+await StandaloneRuntimeTests.Run();
 await RemoteExecutionTests.Run();
 await GuestSdkTests.Run();
 await GuestConformanceTests.Run();
