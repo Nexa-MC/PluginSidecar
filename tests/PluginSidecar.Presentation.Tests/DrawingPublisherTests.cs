@@ -53,9 +53,11 @@ internal static partial class PresentationTests
             int sets = rasters.Sets;
             await publisher.SynchronizeAsync(); Check(rasters.Sets == sets);
             await RejectedAsync(() => publisher.InvokeActionAsync(Input(initial)).AsTask());
-            foreach (var pair in new[] { ("kind", "0"), ("kind", "Unknown"), ("x", "NaN"), ("y", "Infinity"), ("draft", "private"), ("phase", new string('x', 65)), ("text", new string('x', 4097)) })
+            foreach (var pair in new[] { ("kind", "0"), ("kind", "Unknown"), ("gap", "1"), ("x", "NaN"), ("y", "Infinity"), ("draft", "private"), ("phase", new string('x', 65)), ("text", new string('x', 4097)) })
                 await RejectedAsync(() => publisher.ForwardDrawingInputAsync(Input(initial, pair.Item1, pair.Item2)).AsTask());
             Check(app.Runtime.Services.ReadSubscription(load.Identity, subscription).Items.Length == 0);
+            await publisher.ForwardDrawingInputAsync(Input(initial, "gap", "true"));
+            Check(app.Runtime.Services.ReadSubscription(load.Identity, subscription).Items.Length == 1);
             var frame2 = ordinarySurface with { Revision = new("frame2") };
             await Ui("SubmitDrawCommands", DrawSubmission.Write(new(frame2, [new(DrawCommandKind.Rectangle, [0, 0, 16, 16], "#FF0000", null, null)], ordinarySurface.Revision)));
             await publisher.SynchronizeAsync();

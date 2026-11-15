@@ -24,4 +24,4 @@
     <None Include="../../contracts/abi100.json" Link="fixtures/abi100.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../contracts/abi100-legacy.json" Link="fixtures/abi100-legacy.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
-<ItemGroup><PackageReference Include="Nexa.Xsr.Runtime" Version="[0.1.0-alpha.20]" /></ItemGroup><ItemGroup><ProjectReference Include="../../src/PluginSidecar/PluginSidecar.csproj" /></ItemGroup><ItemGroup><Compile Include="../PluginSidecar.Tests/WorkerPeerTests.cs" Link="WorkerPeerTests.cs" /></ItemGroup></Project>
+<ItemGroup><PackageReference Include="Nexa.Xsr.Runtime" Version="[0.1.0-alpha.21]" /></ItemGroup><ItemGroup><ProjectReference Include="../../src/PluginSidecar/PluginSidecar.csproj" /></ItemGroup><ItemGroup><Compile Include="../PluginSidecar.Tests/WorkerPeerTests.cs" Link="WorkerPeerTests.cs" /></ItemGroup></Project>

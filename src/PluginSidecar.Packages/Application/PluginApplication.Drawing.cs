@@ -133,6 +133,9 @@ public sealed partial class PluginApplication
         })
     ];
     public void DrawingInput(EntityId surface, InputEventKind kind, string phase, double x, double y, string? text)
+        => DrawingInput(surface, kind, phase, x, y, text, false);
+
+    public void DrawingInput(EntityId surface, InputEventKind kind, string phase, double x, double y, string? text, bool gap)
     {
         if (!double.IsFinite(x) || !double.IsFinite(y) || phase.Length > 64) return;
         bool truncated = text is { Length: > 4096 }; if (truncated) text = text![..4096];
@@ -142,7 +145,7 @@ public sealed partial class PluginApplication
                 var value = DataCodec.Map(("kind", new AbiValue.Utf8String(kind.ToString())), ("phase", new AbiValue.Utf8String(phase)),
                     ("x", new AbiValue.Float64(x)), ("y", new AbiValue.Float64(y)), ("text", new AbiValue.Utf8String(text ?? "")));
                 if (!Runtime.Services.PublishHostSubscription(binding.Owner, binding.Subscription, value)) { _drawingInputs.Remove(binding.Subscription.Token); continue; }
-                binding.Gap |= binding.Latest is not null || truncated; binding.Latest = value;
+                binding.Gap |= gap || binding.Latest is not null || truncated; binding.Latest = value;
                 if (binding.Running) continue;
                 binding.Running = true; _ = Task.Run(() => DispatchInput(binding));
             }

@@ -85,8 +85,10 @@ public sealed partial class PluginPagePublisher
                 || !_application.Drawings().Any(drawing => drawing.Owner == input.View.Owner && drawing.Surface.Id == input.Surface.Id
                     && drawing.Surface.ViewScope == input.Surface.ViewScope))
                 throw new AbiHostException(AbiErrors.HANDLE_INVALID);
-            if (form.Fields.Length != 5) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
+            if (form.Fields.Length is not (5 or 6)) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
             var fields = form.Fields.ToDictionary(field => field.Key, field => new UTF8Encoding(false, true).GetString(field.Utf8Value), StringComparer.Ordinal);
+            if (fields.Count == 6 && (!fields.TryGetValue("gap", out var gapText) || gapText is not ("true" or "false")))
+                throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
             if (!fields.TryGetValue("kind", out var kindText) || !Enum.TryParse<InputEventKind>(kindText, out var kind)
                 || !Enum.IsDefined(kind) || kind.ToString() != kindText
                 || !fields.TryGetValue("phase", out var phase) || phase.Length > 64
@@ -95,7 +97,7 @@ public sealed partial class PluginPagePublisher
                 || !fields.TryGetValue("text", out var text) || text.Length > 4096)
                 throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
             stop.Token.ThrowIfCancellationRequested();
-            _application.DrawingInput(input.Surface.Id, kind, phase, x, y, text);
+            _application.DrawingInput(input.Surface.Id, kind, phase, x, y, text, fields.GetValueOrDefault("gap") == "true");
         }
         finally { _serial.Release(); }
     }

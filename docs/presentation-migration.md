@@ -62,7 +62,7 @@ management controls and isolated workspace extensions. The management controller
 and native interaction adapter now implement import, consent, offline restoration
 and disable. The same publisher now owns guest dialogs when supplied with the
 modal-control port and publishes scoped shortcuts through the shortcut-control
-port. Production Worker composition and drawing remain to be completed. Production end-to-end verification is still
+port. Production Worker composition remains to be completed. Production end-to-end verification is still
 required before removing the old Desktop controller or publishing SDK Beta.
 
 ## Owning publication
@@ -76,7 +76,7 @@ before sending it. It composes active, same-load content contributions locally.
 Workspace composition is enabled with the management options described below;
 modal publication is enabled with the separate control port described below.
 Shortcut callbacks use the separate shortcut-control port described below.
-Drawing remains separate migration work.
+Drawing uses the native raster port described below.
 
 The publisher distinguishes source reconciliation from model updates. With
 `IPluginRetainedPresentationHost`, each ordinary page and workspace has its own
@@ -625,7 +625,7 @@ update retains both image and input identity when the source and slot survive.
 Register `PluginViewCompiler.DrawingInputCommand` as a separate generated-DTO
 callback and forward its payload to `ForwardDrawingInputAsync`. The payload uses
 the general `SidecarUiForms` envelope: the argument is the binding's opaque token,
-and the fields are exactly:
+and the observation fields are:
 
 | Field | Meaning and bounds |
 | --- | --- |
@@ -633,6 +633,7 @@ and the fields are exactly:
 | `phase` | Native observation phase, at most 64 characters. |
 | `x`, `y` | Finite coordinates formatted with invariant culture. |
 | `text` | Observation text, at most 4,096 characters; use an empty value when absent. |
+| `gap` | Optional `true` or `false`; reports coalesced or truncated native input. Omission means `false`. |
 
 These fields describe a native observation, not the surrounding page's draft
 inputs. The native owner must send only events from the visible, enabled owned
@@ -652,6 +653,38 @@ serialization gate.
 
 `DrawingPublisherChecks` tests these rules with a real Wasm application and an
 in-memory raster port, including native-reply loss and cancellation. This test
-establishes Sidecar policy and ownership. The chunked native raster adapter and
-Host-side visible-surface event routing still require their own integration tests
-before the production Worker can use this path.
+establishes Sidecar policy and ownership. The native adapter now discovers the independent Host catalog;
+binary fixture tests cover chunking, deduplication, exact callback registration,
+uncertain acknowledgements, explicit recovery and cancellation cleanup. Native
+Host tests separately verify actual PNG decoding, atomic binding replacement,
+visible-surface input routing and session retirement. Production Worker
+composition is still required before switching the deployed drawing owner.
+
+## Connecting the native raster port
+
+Create the adapter after Host activation and keep it alive for the publisher's
+lifetime:
+
+```csharp
+await using var rasters = await SidecarRasterHost.CreateAsync(requests, observer, token);
+// Pass rasters: rasters to PluginPagePublisher, together with the native page,
+// dialog and shortcut ports. Register PluginViewCompiler.DrawingInputCommand
+// as a GeneratedDto callback and negotiate Nxml, BinaryPayloads and UiForms.
+```
+
+Each synchronization sends an absolute binding set for the acknowledged source
+revision. Pixel buffers are copied before asynchronous work; identical PNG
+content shares one upload. Each chunk is at most 64 KiB. SHA-256 verification
+and full image decoding occur before the Host admits the sealed image.
+
+If any reply is lost, the adapter discards its trusted upload cache. It does not
+retry the mutation: the publisher disables input until the next explicit
+synchronization. Cleanup uses an independent three-second deadline, including
+after caller cancellation. Bound images cannot be released; the next
+acknowledged replacement releases obsolete IDs, and session retirement removes
+all remaining resources. An expired cached resource can cause one rejected
+replacement; the following explicit synchronization uploads fresh content.
+
+Dispose the publisher before the raster port. Local disposal drains pending
+publication; native session retirement owns final remote cleanup. Do not reuse
+the adapter across Host sessions or attempt to use its IDs as guest blob handles.

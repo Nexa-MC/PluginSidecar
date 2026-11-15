@@ -2,9 +2,9 @@
   <PropertyGroup><IsAotCompatible>true</IsAotCompatible></PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../PluginSidecar.Packages/PluginSidecar.Packages.csproj" />
-    <PackageReference Include="Nexa.Sidecar.Host.Contracts" Version="[0.1.0-alpha.20]" />
-    <PackageReference Include="Nexa.Sidecar.Protocol" Version="[0.1.0-alpha.20]" />
-    <PackageReference Include="Nexa.Xsr.Renderer.Nxml.Runtime" Version="[0.1.0-alpha.20]" />
+    <PackageReference Include="Nexa.Sidecar.Host.Contracts" Version="[0.1.0-alpha.21]" />
+    <PackageReference Include="Nexa.Sidecar.Protocol" Version="[0.1.0-alpha.21]" />
+    <PackageReference Include="Nexa.Xsr.Renderer.Nxml.Runtime" Version="[0.1.0-alpha.21]" />
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.4" />
   </ItemGroup>

@@ -857,3 +857,32 @@ The renderer cache is per publisher and keeps only the current eligible surfaces
 Disposal clears cached pixels and seals callbacks; session retirement remains the
 native owner's responsibility. Native upload and input transport are still a
 separate integration step.
+
+Native raster input may include an optional Boolean `gap` field alongside the
+five observation fields. The publisher accepts both forms and propagates the
+marker into the application's existing coalesced input callback envelope. This is
+a private native-transport extension; it does not change the guest callback schema
+or allocate a guest experiment ID. The existing application input method remains
+available and delegates with `gap = false`.
+
+## Native raster transport ownership
+
+`SidecarRasterHost` discovers the independent generic RasterControl catalog from
+shared packages `0.1.0-alpha.21`. It copies caller pixel buffers before awaiting,
+uploads SHA-256 verified images in sequential chunks of at most 64 KiB, seals
+them, and replaces the complete session-owned binding set at an acknowledged
+source revision. The Host owns native image decoding, display and input routing;
+only the Sidecar interprets guest drawing commands and resolves guest identities.
+
+Uploads are reused only after an acknowledged replacement. An uncertain reply
+clears the trusted cache and never replays a mutation automatically. Independent,
+bounded cleanup releases unbound uploads even after caller cancellation; images
+that may still be bound remain tracked until a later acknowledged replacement.
+The Host refuses release of bound images and retires all resources with the
+session. Local disposal cancels and drains publications before discarding state.
+The adapter bounds both candidate buffers and uncertain resource history.
+
+Native input adds an optional `gap` Boolean to the existing observation fields.
+The publisher validates it and carries loss into the existing guest event field.
+ABI 100 signatures and operation IDs are unchanged; this native-only extension
+does not require an EXP_ID. Production Worker composition remains the next step.
