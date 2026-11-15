@@ -1,12 +1,16 @@
 using Nexa.Sidecar.Transport;
 using PluginSidecar;
 if (args is ["--version"]) { Console.WriteLine("PluginSidecar 0.2.0-alpha.13"); return 0; }
-if (args is not ["--nexa-sidecar", "--endpoint", var endpoint])
+bool probe = args is ["--native-runtime-smoke"];
+string? endpoint = args is ["--nexa-sidecar", "--endpoint", var value] ? value : null;
+if (!probe && endpoint is null)
 { Console.Error.WriteLine("Usage: PluginSidecar --nexa-sidecar --endpoint <host-endpoint>"); return 2; }
 try
 {
+    using var native = NativeWorkerLibraries.Activate();
+    if (probe) { NativeWorkerLibraries.Probe(); Console.WriteLine("Native Worker libraries ready."); return 0; }
     using var connect = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-    await using var stream = await SidecarBootstrap.ConnectAsync(endpoint, Console.OpenStandardInput(), connect.Token);
+    await using var stream = await SidecarBootstrap.ConnectAsync(endpoint!, Console.OpenStandardInput(), connect.Token);
     using var wire = new SidecarFrameTransport(stream);
     await new PluginExecutionPeer(wire, new StandalonePluginRuntime(code => Console.Error.WriteLine(code))).RunAsync(default);
     return 0;

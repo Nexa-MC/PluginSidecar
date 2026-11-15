@@ -73,7 +73,13 @@ internal static partial class StandaloneRuntimeTests
                 while (!ready())
                 {
                     token.ThrowIfCancellationRequested();
-                    if (receive.IsCompleted) { await receive; throw new IOException("Standalone channel closed early."); }
+                    if (receive.IsCompleted)
+                    {
+                        await receive;
+                        try { await process.WaitForExitAsync(token).WaitAsync(TimeSpan.FromSeconds(6), token); }
+                        catch (TimeoutException) { throw new IOException("Standalone channel closed while Worker remained alive."); }
+                        throw new IOException("Standalone channel closed early, exit " + process.ExitCode + ": " + await errors);
+                    }
                     if (process.HasExited) throw new IOException("Standalone process exited early: " + await errors);
                     await Task.Delay(20, token);
                 }

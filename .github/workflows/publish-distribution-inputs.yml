@@ -1,0 +1,68 @@
+name: Publish reviewed Sidecar inputs
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        required: true
+        type: string
+      expected_sha:
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SOURCE_RUN: ${{ inputs.source_run }}
+      EXPECTED_SHA: ${{ inputs.expected_sha }}
+    steps:
+      - name: Verify source run and download
+        run: |
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          run, sha = os.environ['SOURCE_RUN'], os.environ['EXPECTED_SHA']
+          if not re.fullmatch(r'[0-9]+', run) or not re.fullmatch(r'[0-9a-f]{40}', sha):
+              raise SystemExit('Invalid source identity')
+          data = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GH_REPO"]}/actions/runs/{run}']))
+          if (data['head_sha'] != sha or data['conclusion'] != 'success'
+                  or data['path'] != '.github/workflows/distribution-build.yml'
+                  or data['repository']['full_name'] != os.environ['GH_REPO']):
+              raise SystemExit('Source run is not the reviewed successful distribution build')
+          PY
+          gh run download "$SOURCE_RUN" --pattern 'plugin-*' --dir inputs
+      - name: Validate complete input set and record provenance
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          rids = ('win-x64','win-arm64','linux-x64','linux-arm64','osx-x64','osx-arm64')
+          root = Path('inputs')
+          expected = {root/f'plugin-{rid}'/f'Nexa.Plugin.Sidecar-{rid}.nsc' for rid in rids}
+          if {p for p in root.rglob('*') if p.is_file()} != expected:
+              raise SystemExit('Unexpected artifact set')
+          artifacts = {}
+          for rid in rids:
+              path = root/f'plugin-{rid}'/f'Nexa.Plugin.Sidecar-{rid}.nsc'
+              if path.is_symlink() or not 64 <= path.stat().st_size <= 512*1024**2:
+                  raise SystemExit('Invalid artifact')
+              artifacts[rid] = dict(size=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest())
+          Path('provenance.json').write_text(json.dumps(dict(repository=os.environ['GH_REPO'],
+              commit=os.environ['EXPECTED_SHA'], buildRun=int(os.environ['SOURCE_RUN']), artifacts=artifacts), indent=2)+'\n')
+          PY
+      - name: Publish immutable build inputs
+        run: |
+          set -euo pipefail
+          tag="plugin-inputs-${EXPECTED_SHA:0:12}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo 'Input release already exists; refusing to overwrite'
+            exit 1
+          fi
+          gh release create "$tag" inputs/plugin-*/*.nsc provenance.json \
+            --target "$EXPECTED_SHA" --prerelease --latest=false \
+            --title "Reviewed Plugin Sidecar inputs · ${EXPECTED_SHA:0:12}" \
+            --notes "Build inputs from verified distribution run $SOURCE_RUN at $EXPECTED_SHA. These are unsigned publisher inputs; the NexaCL release pipeline pins their hashes and adds the formal release signatures."

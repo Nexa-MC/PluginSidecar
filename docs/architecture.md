@@ -941,3 +941,26 @@ removes embedded SDK dependencies and its fixed plugin navigation in the same
 cutover. Real-process tests exercise bootstrap authentication, catalog discovery,
 Wasm import/action/disable and graceful shutdown; codec-level legacy transport
 tests remain local compatibility tests, not the production deployment model.
+
+## Single-image native Worker distribution
+
+A NativeAOT Worker embeds its RID-specific Wasmtime and Skia libraries in the
+signed executable. It extracts only these known resources into a private,
+uniquely created temporary directory, verifies the copied bytes and installs
+assembly-specific native-library resolvers before either library is used. It
+never writes native libraries into the launcher directory or changes its search
+path. The existing signed single-image Sidecar admission and update flow remains
+unchanged.
+
+An exclusive lease protects each live extraction. Cleanup removes only inactive
+directories bearing the exact marker and known file set; it never recursively
+deletes unknown entries or follows a directory link. Windows may retain loaded
+DLLs until process exit, so a later launch also attempts bounded stale cleanup.
+Managed development builds continue to use their ordinary NuGet runtime assets.
+A NativeAOT image missing its embedded resources fails before activation.
+
+The Presentation assembly also embeds the default NXML components and stylesheet
+from its exact pinned shared compiler package. Every private NXML compilation
+receives that immutable library explicitly; it does not read or replace the
+Host's `Ui` directory. The guest-provided documents still undergo the same
+capability, source-size, key-scoping and expanded-node validation.

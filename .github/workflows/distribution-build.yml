@@ -1,0 +1,92 @@
+name: Build Plugin Sidecar distribution
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  guest:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify reviewed source
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$GITHUB_SHA" = "$EXPECTED_SHA"
+      - run: sudo apt-get update && sudo apt-get install -y clang lld
+      - run: python3 eng/build_wasm_sample.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: distribution-guest-fixtures
+          path: artifacts/wasm-sample/*
+  build:
+    needs: guest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {rid: win-x64, os: windows-2025}
+          - {rid: win-arm64, os: windows-11-arm}
+          - {rid: linux-x64, os: ubuntu-24.04}
+          - {rid: linux-arm64, os: ubuntu-24.04-arm}
+          - {rid: osx-x64, os: macos-15-intel}
+          - {rid: osx-arm64, os: macos-15}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    env:
+      NEXA_WASM_SAMPLE: artifacts/wasm-sample/plugin.zip
+      NEXA_WASM_CONFORMANCE: artifacts/wasm-sample/conformance.wasm
+      NEXA_WASM_CALLBACK: artifacts/wasm-sample/callback.wasm
+      NEXA_WASM_CODEC: artifacts/wasm-sample/codec.wasm
+      NEXA_PLUGIN_WORKER: src/PluginSidecar/bin/Release/net10.0/PluginSidecar.dll
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify reviewed source
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$GITHUB_SHA" = "$EXPECTED_SHA"
+      - uses: actions/download-artifact@v4
+        with:
+          name: distribution-guest-fixtures
+          path: artifacts/wasm-sample
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '10.0.403'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - run: python eng/test_host_references.py
+      - run: python eng/prepare_host_reference.py
+      - run: python eng/generate_abi100.py --verify
+      - run: dotnet build PluginSidecar.slnx -c Release -m:1 -nodeReuse:false
+      - run: dotnet run --project tests/PluginSidecar.Tests -c Release --no-build
+      - run: dotnet run --project tests/PluginSidecar.Business.Tests -c Release --no-build
+      - run: dotnet run --project tests/PluginSidecar.Presentation.Tests -c Release --no-build
+      - run: dotnet publish tests/PluginSidecar.AotSmoke -c Release -r ${{ matrix.rid }} -p:PublishAot=true -m:1 -nodeReuse:false -o artifacts/aot-smoke
+      - run: dotnet publish src/PluginSidecar -c Release -r ${{ matrix.rid }} -p:PublishAot=true -p:StripSymbols=true -m:1 -nodeReuse:false -o artifacts/native-worker
+      - name: Sign macOS executable before recording its digest
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --sign - artifacts/native-worker/PluginSidecar
+          codesign --verify --strict artifacts/native-worker/PluginSidecar
+      - run: python eng/package_worker.py --rid ${{ matrix.rid }} --publish-directory artifacts/native-worker
+      - run: python eng/test_worker_image.py artifacts/worker/${{ matrix.rid }}/Nexa.Plugin.Sidecar.nsc
+      - name: Verify actual native process and export only its image
+        shell: pwsh
+        run: |
+          $env:NEXA_PLUGIN_WORKER = './artifacts/worker/${{ matrix.rid }}/Nexa.Plugin.Sidecar.nsc'
+          $test = if ($IsWindows) { './artifacts/aot-smoke/PluginSidecar.AotSmoke.exe' } else { './artifacts/aot-smoke/PluginSidecar.AotSmoke' }
+          & $test --process-only
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force distribution | Out-Null
+          Copy-Item $env:NEXA_PLUGIN_WORKER 'distribution/Nexa.Plugin.Sidecar-${{ matrix.rid }}.nsc'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.rid }}
+          path: distribution/*.nsc
+          if-no-files-found: error
+          retention-days: 30

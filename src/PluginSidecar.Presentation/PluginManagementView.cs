@@ -97,13 +97,13 @@ internal sealed class PluginManagementView : IPluginHostView
         }
         Document = new("#" + key, SidecarNxmlOperation.Page, "manager.nxml", new Dictionary<string, string> { ["manager.nxml"] = output.ToString() });
         Model = new ReadOnlyDictionary<string, string>(model);
-        _ = new NxmlExtensionProgram(Document.EntryPoint, Document.Files).Compile(model);
+        _ = PluginNxmlAssets.Create(Document.EntryPoint, Document.Files).Compile(model);
         var nav = new SidecarNxmlDocument(options.NavigationAnchor, SidecarNxmlOperation.Before, "navigation.nxml", new Dictionary<string, string>
         {
             ["navigation.nxml"] = "<nxml-dynamic><NavigationItem Key=\"PluginNavigation_" + epoch + "\" Label=\"{data title}\" Content=\"{data title}\" Localize=\"false\" Icon=\"lucide/puzzle\" Command=\"ui.sidecar.page.open\" Argument=\"#" + key + "\" /></nxml-dynamic>"
         });
         var navModel = new ReadOnlyDictionary<string, string>(new Dictionary<string, string> { ["title"] = labels.Title });
-        _ = new NxmlExtensionProgram(nav.EntryPoint, nav.Files).Compile(navModel);
+        _ = PluginNxmlAssets.Create(nav.EntryPoint, nav.Files).Compile(navModel);
         Navigation = new NavigationView(nav, navModel);
     }
 

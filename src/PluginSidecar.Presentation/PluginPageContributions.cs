@@ -104,7 +104,7 @@ internal static class PluginPageContributions
         PluginViewCompiler.ValidatePage(result); // Includes the aggregate 256 KiB source limit.
         return page with { Source = result };
 
-        NxmlPreparedDocument Compile(string source, IReadOnlyDictionary<string, string>? data = null) => new NxmlExtensionProgram("page.nxml",
+        NxmlPreparedDocument Compile(string source, IReadOnlyDictionary<string, string>? data = null) => PluginNxmlAssets.Create("page.nxml",
             new Dictionary<string, string> { ["page.nxml"] = source }).Compile(data ?? model);
     }
 

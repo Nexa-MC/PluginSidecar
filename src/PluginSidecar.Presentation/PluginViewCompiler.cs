@@ -59,7 +59,7 @@ public static class PluginViewCompiler
     {
         ValidatePage(page.Source);
         var model = ReadModel(page.Model);
-        var original = new NxmlExtensionProgram("page.nxml", new Dictionary<string, string> { ["page.nxml"] = page.Source }).Compile(model);
+        var original = PluginNxmlAssets.Create("page.nxml", new Dictionary<string, string> { ["page.nxml"] = page.Source }).Compile(model);
         if (original.Root.Root.Role != XsrUiSemanticRole.Page) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         ValidateCompiled(original.Root.Root, "ui.plugin.action");
         string scope = "Plugin_" + Hash(page.Owner.PluginId + ":" + page.Owner.LoadInstanceId.ToString("N") + ":" + page.Page.Id.Value + ":" + publicationEpoch);
@@ -127,7 +127,7 @@ public static class PluginViewCompiler
         }
         string source = output.ToString();
         var files = new ReadOnlyDictionary<string, string>(new Dictionary<string, string> { ["page.nxml"] = source });
-        var compiled = new NxmlExtensionProgram("page.nxml", files).Compile(model);
+        var compiled = PluginNxmlAssets.Create("page.nxml", files).Compile(model);
         ValidateCompiled(compiled.Root.Root, ActionCommand);
         if (compiled.Root.Root.Key != scope || compiled.Root.Root.Role != XsrUiSemanticRole.Page) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         var document = new SidecarNxmlDocument("#" + scope, SidecarNxmlOperation.Page, "page.nxml", files);

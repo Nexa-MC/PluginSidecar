@@ -6,4 +6,11 @@
     <ProjectReference Include="../PluginSidecar.Presentation/PluginSidecar.Presentation.csproj" />
     <PackageReference Include="Nexa.Sidecar.Transport" Version="[0.1.0-alpha.22]" />
   </ItemGroup>
+  <Target Name="EmbedWorkerNativeLibraries" BeforeTargets="AssignTargetPaths" DependsOnTargets="ResolvePackageAssets"
+          Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != ''">
+    <Error Condition="'@(NativeCopyLocalItems->Count())' != '2'" Text="The Worker requires exactly its reviewed Wasmtime and Skia native libraries." />
+    <ItemGroup>
+      <EmbeddedResource Include="@(NativeCopyLocalItems)" LogicalName="PluginSidecar.Native.%(Filename)%(Extension)" />
+    </ItemGroup>
+  </Target>
 </Project>

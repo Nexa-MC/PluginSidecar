@@ -61,7 +61,7 @@ public static class PluginWorkspaceCompiler
         if (Encoding.UTF8.GetByteCount(source) > 256 * 1024) throw new AbiHostException(AbiErrors.MESSAGE_TOO_LARGE);
         var document = new SidecarNxmlDocument(target, SidecarNxmlOperation.Append, "workspace.nxml",
             new Dictionary<string, string> { ["workspace.nxml"] = source });
-        var compiled = new NxmlExtensionProgram(document.EntryPoint, document.Files).Compile(model);
+        var compiled = PluginNxmlAssets.Create(document.EntryPoint, document.Files).Compile(model);
         PluginViewCompiler.ValidateCompiled(compiled.Root.Root, PluginViewCompiler.ActionCommand);
         return view.AsWorkspace(document, model, actions);
     }

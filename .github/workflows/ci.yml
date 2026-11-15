@@ -89,9 +89,15 @@ jobs:
           $binary = if ($IsWindows) { './artifacts/${{ matrix.rid }}/PluginSidecar.exe' } else { './artifacts/${{ matrix.rid }}/PluginSidecar' }
           & $binary --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run: python eng/package_worker.py --rid ${{ matrix.rid }} --publish-directory artifacts/${{ matrix.rid }}
+      - run: python eng/test_worker_image.py artifacts/worker/${{ matrix.rid }}/Nexa.Plugin.Sidecar.nsc
       - shell: pwsh
         run: |
-          $env:NEXA_PLUGIN_WORKER = if ($IsWindows) { './artifacts/${{ matrix.rid }}/PluginSidecar.exe' } else { './artifacts/${{ matrix.rid }}/PluginSidecar' }
+          $env:NEXA_PLUGIN_WORKER = './artifacts/worker/${{ matrix.rid }}/Nexa.Plugin.Sidecar.nsc'
           $test = if ($IsWindows) { './artifacts/aot-smoke/PluginSidecar.AotSmoke.exe' } else { './artifacts/aot-smoke/PluginSidecar.AotSmoke' }
           & $test --process-only
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-worker-${{ matrix.rid }}
+          path: artifacts/worker/${{ matrix.rid }}/*

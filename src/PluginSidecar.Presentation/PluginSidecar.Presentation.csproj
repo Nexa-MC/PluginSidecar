@@ -4,8 +4,15 @@
     <ProjectReference Include="../PluginSidecar.Packages/PluginSidecar.Packages.csproj" />
     <PackageReference Include="Nexa.Sidecar.Host.Contracts" Version="[0.1.0-alpha.22]" />
     <PackageReference Include="Nexa.Sidecar.Protocol" Version="[0.1.0-alpha.22]" />
+    <PackageReference Include="Nexa.Xsr.Renderer.Nxml.Compiler" Version="[0.1.0-alpha.22]" GeneratePathProperty="true" />
     <PackageReference Include="Nexa.Xsr.Renderer.Nxml.Runtime" Version="[0.1.0-alpha.22]" />
     <PackageReference Include="SkiaSharp" Version="3.119.4" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.119.4" />
   </ItemGroup>
+  <Target Name="EmbedWorkerUiAssets" BeforeTargets="AssignTargetPaths" DependsOnTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <_WorkerUiAsset Include="$(PkgNexa_Xsr_Renderer_Nxml_Compiler)/assets/Ui/Components/*.c.nxml;$(PkgNexa_Xsr_Renderer_Nxml_Compiler)/assets/Ui/Styles/*.nss" />
+      <EmbeddedResource Include="@(_WorkerUiAsset)" LogicalName="PluginSidecar.Ui.%(Filename)%(Extension)" />
+    </ItemGroup>
+  </Target>
 </Project>

@@ -40,9 +40,13 @@ publisher or entitlement verification.
 ## Deployment limits
 
 `eng/package_worker.py --rid <rid> --signing-key <key-id>` builds a NativeAOT
-candidate. Native Wasmtime and Skia dependencies must be deployed with the exact
-worker that uses them, with complete integrity and signature coverage. A lone
-unsigned image or hash inventory is not a production installation. The coordinated
+candidate. The image embeds its RID-specific Wasmtime and Skia libraries and the
+pinned default NXML assets. It extracts native libraries into a private leased
+temporary directory and resolves them only for the corresponding assemblies.
+Do not copy the publish directory's loose libraries or UI files beside the Host.
+`eng/test_worker_image.py <image>` tests a lone image, native execution and safe
+cleanup; the actual process fixture separately verifies plugin activation.
+An unsigned image or hash inventory is not a production installation. The coordinated
 launcher cutover removes its embedded SDK and fixed plugin navigation; signed
 release integration and production Market acquisition are still pending.
 
@@ -52,7 +56,8 @@ release integration and production Market acquisition are still pending.
 通用原生 ABI，组件缺失或失败不影响普通宿主功能。生产源码入口已切换到独立运行时；
 真实进程测试覆盖认证、目录发现、Wasm 导入、确认操作、停用和退出。
 开发包需要开发模式及明确批准，与 Market 的发行者和权益验证是不同流程。
-完整原生依赖的签名打包和生产 Market 获取链路仍需完成发布验证。
+原生库和固定版本 UI 模板已封装进单个 Worker 映像，无需覆盖宿主 DLL 或 UI 文件。
+正式签名发布及生产 Market 获取链路仍需完成发布验证。
 
 ### Theme configuration through the general Host
 
