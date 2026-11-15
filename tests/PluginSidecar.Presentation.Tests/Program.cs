@@ -103,6 +103,7 @@ internal static partial class PresentationTests
         await ManagementChecks();
         await ManagementChecks(retained: true);
         await ManagementControllerChecks();
+        await MarketManagementChecks();
         await DeveloperInteractionChecks();
         await ExactLoadRetirementChecks();
         Check(!AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name is { } name && (name.StartsWith("Nexa.Services.", StringComparison.Ordinal)

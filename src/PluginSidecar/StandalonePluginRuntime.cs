@@ -135,12 +135,9 @@ internal sealed class StandalonePluginRuntime(
             do
             {
                 token.ThrowIfCancellationRequested();
-                if (!_management!.IsBusy || !Policy().CanLoad)
-                {
-                    await _management.SynchronizePolicyAsync(token).ConfigureAwait(false);
-                    if (Policy().CanLoad)
-                        foreach (var issue in await _management.RestoreOfflineAsync(token).ConfigureAwait(false)) report(issue.Code);
-                }
+                await _management!.SynchronizePolicyAsync(token).ConfigureAwait(false);
+                if (!_management.IsBusy && Policy().CanLoadMarket)
+                    foreach (var issue in await _management.RestoreOfflineAsync(token).ConfigureAwait(false)) report(issue.Code);
                 await _publisher!.SynchronizeAsync(token).ConfigureAwait(false);
                 while (_navigation.Reader.TryRead(out var navigation))
                 {

@@ -54,9 +54,11 @@ public sealed class SidecarDeveloperPackageInteraction
     {
         token.ThrowIfCancellationRequested();
         string details = Describe(consent);
-        if (!await AskAsync("加载开发者插件", details, token).ConfigureAwait(false)) return PluginInstallDecision.Declined;
+        if (!await AskAsync(consent.Source == PluginInstallSource.Market ? "安装市场插件" : "加载开发者插件", details, token).ConfigureAwait(false)) return PluginInstallDecision.Declined;
         bool remember = await AskAsync("记住插件加载授权", details +
-            "\n\n是否在以后启动时，以这些权限自动恢复此插件？仅在开发者模式开启且宿主就绪时恢复。\n确认：记住授权；取消：仅在本次会话加载。", token).ConfigureAwait(false);
+            (consent.Source == PluginInstallSource.Market
+                ? "\n\n是否在以后启动时，以这些权限离线恢复此插件？安全模式下不加载插件。\n确认：记住授权；取消：仅在本次会话加载。"
+                : "\n\n是否在以后启动时，以这些权限自动恢复此插件？仅在开发者模式开启且宿主就绪时恢复。\n确认：记住授权；取消：仅在本次会话加载。"), token).ConfigureAwait(false);
         return remember ? PluginInstallDecision.Remember : PluginInstallDecision.SessionOnly;
     }
 
@@ -73,12 +75,14 @@ public sealed class SidecarDeveloperPackageInteraction
 
     private static string Describe(PluginInstallConsent consent)
     {
-        if (consent.Id is null || consent.Version is null || consent.Id.Length is < 1 or > 256 || consent.Version.Length is < 1 or > 128 ||
+        if (!Enum.IsDefined(consent.Source) || consent.Id is null || consent.Version is null || consent.Id.Length is < 1 or > 256 || consent.Version.Length is < 1 or > 128 ||
             consent.Permissions.IsDefault || consent.Permissions.Length > 128 ||
             consent.Permissions.Any(permission => permission is null || permission.Length is < 1 or > 256) ||
             consent.Permissions.Distinct(StringComparer.Ordinal).Count() != consent.Permissions.Length)
             throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
-        var details = new StringBuilder("此开发包未通过插件市场的发布者验证。只加载你信任的插件。\n\n插件：");
+        var details = new StringBuilder(consent.Source == PluginInstallSource.Market
+            ? "此插件的市场签名、设备授权与文件完整性已通过验证。请确认是否授予以下权限。\n\n插件："
+            : "此开发包未通过插件市场的发布者验证。只加载你信任的插件。\n\n插件：");
         details.Append(Quote(consent.Id)).Append("\n版本：").Append(Quote(consent.Version)).Append("\n请求的权限：");
         if (consent.Permissions.IsEmpty) details.Append("\n（无）");
         foreach (string permission in consent.Permissions) details.Append("\n  ").Append(Quote(permission));

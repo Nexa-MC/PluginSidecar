@@ -10,12 +10,14 @@ internal static class WorkerPeerTests
     {
         await DuplexActivationAndRetirement();
         await CancelledCommand();
+        await NativeQuery(false);
+        await NativeQuery(true);
         await ShutdownWithoutReply();
         await FailureWithoutAnotherFrame();
         await BackgroundCompletion();
         await RejectAfterRetirement();
         await DrainDeadline();
-        Console.WriteLine("PASS: worker single reader, bidirectional activation/retirement, cancellation, shutdown without reply, background failure, sealed admission and bounded single disposal.");
+        Console.WriteLine("PASS: worker single reader, independent command/query dispatch, bidirectional activation/retirement, cancellation, shutdown without reply, background failure, sealed admission and bounded single disposal.");
     }
 
     private static async Task DuplexActivationAndRetirement()
@@ -71,6 +73,45 @@ internal static class WorkerPeerTests
             await Send(host, SidecarMessageType.Shutdown, ReadOnlyMemory<byte>.Empty, token);
             await run.WaitAsync(token);
             Check(runtime.Executions == 1 && runtime.DisposeCount == 1);
+        });
+    }
+
+    private static async Task NativeQuery(bool cancel)
+    {
+        var runtime = new Runtime();
+        await WithPeer(runtime, async (host, run, token) =>
+        {
+            await runtime.Activated.Task.WaitAsync(token);
+            var correlation = SidecarCorrelationId.Create();
+            await Send(host, SidecarMessageType.QueryRequest, SidecarDataMessages.EncodeBinaryRequest(1,
+                new(SidecarWireCodecs.GeneratedDto, new byte[] { 9 })), token, correlation);
+            var outbound = await Read(host, SidecarMessageType.QueryRequest, token);
+            await Ping(host, token); // A service awaiting the Host must not block the reader.
+            if (cancel)
+            {
+                await Send(host, SidecarMessageType.Cancel, SidecarControlMessages.EncodeCancel(correlation.Value, "test"), token);
+                var stopped = await Read(host, SidecarMessageType.Cancel, token);
+                Check(SidecarControlMessages.DecodeCancel(stopped.Payload.Span).CorrelationId == outbound.CorrelationId.Value);
+            }
+            else await Reply(host, outbound, true, token);
+            var frame = await Read(host, SidecarMessageType.QueryResult, token);
+            var reply = SidecarDataMessages.DecodeBinaryResultDetails(frame.Payload.Span);
+            Check(frame.CorrelationId == correlation && reply.Success == !cancel);
+            if (cancel)
+            {
+                Check(reply.ErrorCode == "plugin.execution.cancelled");
+                await Reply(host, outbound, true, token);
+            }
+            else Check(reply.Value.ToArray().SequenceEqual(new byte[] { 2 }));
+            Check(runtime.Queries == 1 && runtime.Executions == 0);
+            await Send(host, SidecarMessageType.QueryRequest, SidecarDataMessages.EncodeBinaryRequest(99,
+                new(SidecarWireCodecs.GeneratedDto, new byte[] { 7 })), token);
+            Check(!SidecarDataMessages.DecodeBinaryResultDetails((await Read(host, SidecarMessageType.QueryResult, token)).Payload.Span).Success);
+            Check(runtime.Executions == 0 && runtime.Queries == 1);
+            await Ping(host, token);
+            await Send(host, SidecarMessageType.Shutdown, ReadOnlyMemory<byte>.Empty, token);
+            await run.WaitAsync(token);
+            Check(runtime.DisposeCount == 1);
         });
     }
 
@@ -152,7 +193,7 @@ internal static class WorkerPeerTests
     private sealed class Runtime : IPluginWorkerRuntime, IPluginWorkerBackground
     {
         internal bool QueryDuringActivation, QueryDuringDisposal, FailActivation, DisposalDisconnected;
-        internal int DisposeCount, Executions;
+        internal int DisposeCount, Executions, Queries;
         internal readonly TaskCompletionSource Background = Signal();
         public Task Completion => Background.Task;
         internal Action? BeforeDisposal;
@@ -160,7 +201,8 @@ internal static class WorkerPeerTests
         private SidecarHostRequestClient? _requests;
         public SidecarFeatures Features => SidecarFeatures.BinaryPayloads | SidecarFeatures.HostRequests | SidecarFeatures.Health | SidecarFeatures.Unregistration;
         public IReadOnlyList<SidecarRegistrationItem> Registrations { get; } =
-            [new(SidecarRegistrationKind.Command, "worker.test.invoke", 0, SidecarWireCodecs.GeneratedDto) { ResultCodecId = SidecarWireCodecs.GeneratedDto }];
+            [new(SidecarRegistrationKind.Command, "worker.test.invoke", 0, SidecarWireCodecs.GeneratedDto) { ResultCodecId = SidecarWireCodecs.GeneratedDto },
+             new(SidecarRegistrationKind.Query, "sidecar.service.test.query", 0, SidecarWireCodecs.GeneratedDto) { ResultCodecId = SidecarWireCodecs.GeneratedDto }];
         public async ValueTask ActivateAsync(SidecarHostRequestClient requests, CancellationToken token)
         {
             _requests = requests;
@@ -174,6 +216,14 @@ internal static class WorkerPeerTests
             Check(contract == 1 && input.ToArray().SequenceEqual(new byte[] { 7 }));
             await Query(token);
             return [1];
+        }
+        public async ValueTask<byte[]> QueryAsync(uint contract, SidecarBinaryValue input, CancellationToken token)
+        {
+            if (contract != 1) throw new InvalidDataException("Unknown query.");
+            Interlocked.Increment(ref Queries);
+            Check(input.ToArray().SequenceEqual(new byte[] { 9 }));
+            await Query(token);
+            return [2];
         }
         private ValueTask<SidecarHostReply> Query(CancellationToken token) => _requests!.InvokeAsync(255, true,
             new(SidecarWireCodecs.GeneratedDto, []), SidecarWireCodecs.GeneratedDto, TimeSpan.FromSeconds(20), token);
@@ -211,7 +261,7 @@ internal static class WorkerPeerTests
             var welcome = await Read(host, SidecarMessageType.Welcome, token);
             Check(SidecarHandshake.DecodeWelcomeDetails(welcome.Payload.Span).Features == runtime.Features);
             await Read(host, SidecarMessageType.RegisterBegin, token);
-            await Read(host, SidecarMessageType.RegisterItem, token);
+            foreach (var _ in runtime.Registrations) await Read(host, SidecarMessageType.RegisterItem, token);
             await Read(host, SidecarMessageType.RegisterEnd, token);
             await Read(host, SidecarMessageType.StateSnapshotBegin, token);
             await Read(host, SidecarMessageType.StateSnapshotEnd, token);

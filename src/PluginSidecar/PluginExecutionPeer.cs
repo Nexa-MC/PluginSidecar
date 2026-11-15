@@ -75,6 +75,7 @@ internal sealed class PluginExecutionPeer(SidecarFrameTransport wire, IPluginWor
                         }
                         break;
                     case SidecarMessageType.CommandRequest:
+                    case SidecarMessageType.QueryRequest:
                         if (!_active || !frame.CorrelationId.IsAssigned || _calls.Count >= 32)
                             throw new InvalidDataException("Execution request not admitted.");
                         var stop = CancellationTokenSource.CreateLinkedTokenSource(active.Token);
@@ -208,14 +209,16 @@ internal sealed class PluginExecutionPeer(SidecarFrameTransport wire, IPluginWor
                 if (!input.IsBinary || input.Value.CodecId != SidecarWireCodecs.GeneratedDto
                     || input.Value.Length > SidecarWireCodecs.MaximumValueLength && !_features.HasFlag(SidecarFeatures.LargeGeneratedDtos))
                     throw new InvalidDataException();
-                bytes = await runtime.ExecuteAsync(input.ContractId, input.Value, stop.Token).ConfigureAwait(false);
+                bytes = await (frame.MessageType == SidecarMessageType.QueryRequest
+                    ? runtime.QueryAsync(input.ContractId, input.Value, stop.Token)
+                    : runtime.ExecuteAsync(input.ContractId, input.Value, stop.Token)).ConfigureAwait(false);
                 if (bytes.Length > SidecarWireCodecs.MaximumValueLength && !_features.HasFlag(SidecarFeatures.LargeGeneratedDtos))
                 { bytes = []; throw new InvalidDataException("Large replies were not negotiated."); }
             }
             catch (OperationCanceledException) { error = "plugin.execution.cancelled"; }
             catch (Exception failure) when (failure is not OutOfMemoryException and not AccessViolationException)
             { error = "plugin.execution.failed"; }
-            await Send(SidecarMessageType.CommandResult, SidecarDataMessages.EncodeBinaryResult(error is null,
+            await Send(frame.MessageType == SidecarMessageType.QueryRequest ? SidecarMessageType.QueryResult : SidecarMessageType.CommandResult, SidecarDataMessages.EncodeBinaryResult(error is null,
                 new(SidecarWireCodecs.GeneratedDto, bytes), error), frame.CorrelationId, lifetime).ConfigureAwait(false);
         }
         catch (Exception error) when (lifetime.IsCancellationRequested && error is IOException or OperationCanceledException) { }

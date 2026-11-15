@@ -8,7 +8,8 @@ namespace PluginSidecar.Application;
 
 public sealed record PluginInstallationPolicy(Guid Session, bool DeveloperMode, bool Ready, bool SafeMode)
 {
-    public bool CanLoad => Session != Guid.Empty && DeveloperMode && Ready && !SafeMode;
+    public bool CanLoadMarket => Session != Guid.Empty && Ready && !SafeMode;
+    public bool CanLoad => DeveloperMode && CanLoadMarket;
 }
 
 /// <summary>Native transaction for an explicitly approved package. Does not obtain consent or own startup.</summary>

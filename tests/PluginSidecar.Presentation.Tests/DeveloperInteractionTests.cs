@@ -51,8 +51,8 @@ internal static partial class PresentationTests
                     if (asks == rejectAsk) { writer.Write(false); writer.Write((int)XsrErrorKind.TimedOut); Text("xsr.timed_out"); }
                     else
                     {
-                        Check(title is "加载开发者插件" or "记住插件加载授权");
-                        writer.Write(true); writer.Write(true); writer.Write(title == "加载开发者插件" ? approve : remember);
+                        Check(title is "加载开发者插件" or "安装市场插件" or "记住插件加载授权");
+                        writer.Write(true); writer.Write(true); writer.Write(title is "加载开发者插件" or "安装市场插件" ? approve : remember);
                     }
                     cancelOnAsk?.Cancel();
                     break;
@@ -101,6 +101,14 @@ internal static partial class PresentationTests
         await Expect<AbiHostException>(() => interaction.ConfirmAsync(consent with { Permissions = ["duplicate", "duplicate"] }, default).AsTask());
         await Expect<AbiHostException>(() => interaction.ConfirmAsync(consent with { Id = new string('x', 257) }, default).AsTask());
         Check(asks == unchanged);
+
+        Check(await interaction.ConfirmAsync(consent with { Source = PluginInstallSource.Market }, default) == PluginInstallDecision.Remember);
+        Check(dialogs[^2].Title == "安装市场插件");
+        Check(dialogs[^2].Details.Contains("市场签名", StringComparison.Ordinal));
+        Check(!dialogs[^2].Details.Contains("未通过", StringComparison.Ordinal));
+        Check(dialogs[^1].Details.Contains("离线恢复", StringComparison.Ordinal));
+        Check(!dialogs[^1].Details.Contains("开发者模式", StringComparison.Ordinal));
+        await Expect<AbiHostException>(() => interaction.ConfirmAsync(consent with { Source = (PluginInstallSource)99 }, default).AsTask());
 
         // Compose the real generic interaction adapter with the sole management owner and a real guest.
         string sample = Environment.GetEnvironmentVariable("NEXA_WASM_SAMPLE") ?? throw new InvalidOperationException("Guest fixture required.");

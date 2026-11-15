@@ -1,4 +1,4 @@
-// Frozen binary discovery fixtures from NexaCL 68bfa038dbe8bacae4a3fc51e258ea5bd125ce06.
+// Frozen binary discovery fixtures from NexaCL 42ad7a1a3c7279d1cbc093d765e87c98f3878fff.
 // Changes require a verified shared-package pin; these are not runtime dispatch metadata.
 internal static partial class StandaloneRuntimeTests
 {

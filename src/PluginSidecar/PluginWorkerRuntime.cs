@@ -11,6 +11,8 @@ internal interface IPluginWorkerRuntime : IAsyncDisposable
     IReadOnlyList<SidecarRegistrationItem> Registrations { get; }
     ValueTask ActivateAsync(SidecarHostRequestClient requests, CancellationToken token);
     ValueTask<byte[]> ExecuteAsync(uint contract, SidecarBinaryValue input, CancellationToken token);
+    ValueTask<byte[]> QueryAsync(uint contract, SidecarBinaryValue input, CancellationToken token)
+        => ValueTask.FromException<byte[]>(new InvalidDataException("Unknown native service query."));
 }
 
 /// <summary>A session-owned background loop; completion without retirement is a failure.</summary>

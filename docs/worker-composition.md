@@ -19,8 +19,8 @@ production Market delivery; see [deployment status](roadmap.md).
 3. Discover the business, effects, shell, theme, clipboard, picker, confirmation,
    notification and presentation catalogs. The exact shared package pin defines
    their independent wire fingerprints. Missing discovery fails activation.
-   The current package pin is `0.1.0-alpha.22`, built from Host commit
-   `68bfa038dbe8bacae4a3fc51e258ea5bd125ce06`.
+   The current package pin is `0.1.0-alpha.23`, built from Host commit
+   `42ad7a1a3c7279d1cbc093d765e87c98f3878fff`.
 4. Bind every effect and the required native HTTP client, then create one
    application at `plugins/storage`. Its business adapters own the HTTP client
    and dispose it during retirement.
@@ -95,3 +95,20 @@ Socket peer tests establish that background failure wakes the reader and that
 retirement remains bounded. Native Host tests separately establish the display,
 input and resource contracts. These checks do not establish deployed Market
 service compatibility, real OS key-store availability or signed release availability.
+
+## Market installation foundation
+
+The native application now has separate, signed Market installation records and
+a normal-mode installer. The management controller accepts an optional Market
+catalog, asks source-specific native consent, restores both origins in dependency
+order, and retires developer loads independently when developer mode turns off.
+Device keys use OS-protected encryption; offline records retain the original
+signature, entitlement and ciphertext and revalidate them on every open. These
+components have managed and Linux NativeAOT verification, including failed-update
+rollback when the previous entitlement has expired.
+
+The production composition still needs the authenticated Market service export,
+the configured publisher public-key pin and device/catalog initialization. The
+Market client must perform the encrypted acquisition and operation-status flow.
+The backend endpoint is implemented but not enabled in production. These native
+components do not publish SDK Beta or add an ABI 100 operation.

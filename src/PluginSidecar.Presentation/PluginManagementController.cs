@@ -10,15 +10,23 @@ using PluginSidecar.Packages;
 namespace PluginSidecar.Presentation;
 
 public enum PluginInstallDecision { Declined, SessionOnly, Remember }
-public sealed record PluginInstallConsent(string Id, string Version, ImmutableArray<string> Permissions);
+public enum PluginInstallSource { Developer, Market }
+public sealed record PluginInstallConsent(string Id, string Version, ImmutableArray<string> Permissions)
+{
+    public PluginInstallSource Source { get; init; }
+}
 public sealed record PluginRestoreIssue(string Id, string Code);
 
-/// <summary>Single native owner for developer management and offline restoration; no automatic startup side effects.</summary>
+/// <summary>Single native owner for developer/Market management and offline restoration; no automatic startup side effects.</summary>
 public sealed partial class PluginManagementController : IPluginManagementActions, IAsyncDisposable
 {
     private readonly PluginApplication _application;
     private readonly PluginOfflineCatalog _catalog;
     private readonly PluginApprovedInstaller _installer;
+    private readonly PluginMarketCatalog? _marketCatalog;
+    private readonly PluginMarketInstaller? _marketInstaller;
+    private readonly HashSet<PluginIdentity> _marketLoads = [];
+    private bool _activeDeveloperMode, _restoredDeveloperMode;
     private readonly Func<PluginInstallationPolicy> _policy;
     private readonly Func<CancellationToken, ValueTask<string?>> _pick;
     private readonly Func<PluginInstallConsent, CancellationToken, ValueTask<PluginInstallDecision>> _confirm;
@@ -36,11 +44,13 @@ public sealed partial class PluginManagementController : IPluginManagementAction
 
     public PluginManagementController(PluginApplication application, PluginOfflineCatalog catalog,
         Func<PluginInstallationPolicy> policy, Func<CancellationToken, ValueTask<string?>> pick,
-        Func<PluginInstallConsent, CancellationToken, ValueTask<PluginInstallDecision>> confirm)
+        Func<PluginInstallConsent, CancellationToken, ValueTask<PluginInstallDecision>> confirm, PluginMarketCatalog? marketCatalog = null)
     {
         if (!application.Runtime.Active.IsEmpty) throw new InvalidOperationException("Management must bind before loading plugins.");
         _application = application; _catalog = catalog; _policy = policy; _pick = pick; _confirm = confirm;
         _installer = new(application, catalog, policy); _lifetime = _stop.Token;
+        _marketCatalog = marketCatalog;
+        if (marketCatalog is not null) _marketInstaller = new(application, marketCatalog, policy);
     }
 
     public ValueTask ImportDeveloperPackageAsync(CancellationToken token) => ExecuteAsync(async stop =>
@@ -77,11 +87,15 @@ public sealed partial class PluginManagementController : IPluginManagementAction
             using (var verified = VerifiedPluginPackage.Parse(bytes, manifest.PluginId, manifest.PluginVersion))
                 manifest = verified.Manifest;
             RequirePolicy(stop, policy.Session);
+            if (_marketCatalog is not null && await _marketCatalog.ReadRevisionAsync(manifest.PluginId, stop).ConfigureAwait(false) is not null)
+                throw new IOException("plugin.install.origin-conflict");
             var decision = await _confirm(new(manifest.PluginId, manifest.PluginVersion, manifest.RequestedPermissions), stop).ConfigureAwait(false);
             RequirePolicy(stop, policy.Session);
             if (decision == PluginInstallDecision.Declined) return;
             if (decision is not (PluginInstallDecision.SessionOnly or PluginInstallDecision.Remember))
                 throw new InvalidOperationException("plugin.install.consent-invalid");
+            if (_marketCatalog is not null && await _marketCatalog.ReadRevisionAsync(manifest.PluginId, stop).ConfigureAwait(false) is not null)
+                throw new IOException("plugin.install.origin-conflict");
             var result = await _installer.InstallAsync(bytes, manifest.PluginId, manifest.PluginVersion, manifest.RequestedPermissions,
                 decision == PluginInstallDecision.Remember, policy.Session, stop).ConfigureAwait(false);
             if (result.State != LoadState.Active) throw new AbiHostException(result.Error?.Code ?? "plugin.load.failed");
@@ -94,12 +108,13 @@ public sealed partial class PluginManagementController : IPluginManagementAction
         var policy = _policy();
         CancellationTokenSource? pending;
         lock (_actionGate)
-            pending = !policy.CanLoad || _activeSession != policy.Session ? _activeAction : null;
+            pending = !policy.CanLoadMarket || _activeSession != policy.Session || _activeDeveloperMode != policy.DeveloperMode ? _activeAction : null;
         if (pending is not null)
         {
             try { await pending.CancelAsync().ConfigureAwait(false); }
             catch (ObjectDisposedException) { }
         }
+        if (IsBusy && pending is null) return;
         await ExecuteAsync(_ => ReconcilePolicyCoreAsync(), token).ConfigureAwait(false);
     }
 
@@ -112,7 +127,7 @@ public sealed partial class PluginManagementController : IPluginManagementAction
         {
             ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
             Volatile.Write(ref _busy, 1);
-            lock (_actionGate) { _activeAction = linked; _activeSession = _policy().Session; }
+            lock (_actionGate) { var current = _policy(); _activeAction = linked; _activeSession = current.Session; _activeDeveloperMode = current.DeveloperMode; }
             Exception? failure = null;
             try { await action(linked.Token).ConfigureAwait(false); }
             catch (Exception error) { failure = error; throw; }
@@ -130,11 +145,11 @@ public sealed partial class PluginManagementController : IPluginManagementAction
         }
     }
 
-    private PluginInstallationPolicy RequirePolicy(CancellationToken token, Guid? session = null)
+    private PluginInstallationPolicy RequirePolicy(CancellationToken token, Guid? session = null, bool market = false)
     {
         token.ThrowIfCancellationRequested();
         var policy = _policy();
-        if (!policy.CanLoad || session is not null && policy.Session != session)
+        if (!(market ? policy.CanLoadMarket : policy.CanLoad) || session is not null && policy.Session != session)
             throw new InvalidOperationException("plugin.install.unavailable");
         return policy;
     }
@@ -142,10 +157,25 @@ public sealed partial class PluginManagementController : IPluginManagementAction
     private async Task ReconcilePolicyCoreAsync()
     {
         var policy = _policy();
-        if (policy.CanLoad && (_boundSession == Guid.Empty || _boundSession == policy.Session)) return;
-        _restoreAttempt = Guid.Empty;
-        await RetireAllAsync().ConfigureAwait(false);
-        _boundSession = Guid.Empty;
+        _marketLoads.RemoveWhere(identity => !_application.Runtime.Active.Contains(identity));
+        if (!policy.CanLoadMarket || _boundSession != Guid.Empty && _boundSession != policy.Session)
+        {
+            _restoreAttempt = Guid.Empty;
+            await RetireAllAsync().ConfigureAwait(false);
+            _marketLoads.Clear(); _boundSession = Guid.Empty;
+        }
+        else if (!policy.DeveloperMode)
+        {
+            List<Exception> errors = [];
+            foreach (var identity in _application.Runtime.Active.Where(identity => !_marketLoads.Contains(identity)))
+            {
+                if (!_application.Runtime.Active.Contains(identity)) continue;
+                try { await _application.StopLoadAsync(identity, CancellationToken.None).ConfigureAwait(false); }
+                catch (Exception error) { errors.Add(error); }
+            }
+            _marketLoads.RemoveWhere(identity => !_application.Runtime.Active.Contains(identity));
+            if (errors.Count != 0) throw new AggregateException("plugin.management.retirement-failed", errors);
+        }
     }
 
     private async Task RetireAllAsync()

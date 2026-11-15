@@ -9,12 +9,19 @@ public sealed partial class PluginManagementController
     {
         var before = _application.Runtime.Active;
         if (!before.Contains(exactLoad)) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
-        var revisions = new Dictionary<string, (string? Revision, Exception? Error)>(StringComparer.Ordinal);
+        var revisions = new Dictionary<string, (bool Market, string? Revision, Exception? Error)>(StringComparer.Ordinal);
         foreach (var owner in before)
         {
-            try { revisions.Add(owner.PluginId, (await _catalog.ReadRevisionAsync(owner.PluginId, stop).ConfigureAwait(false), null)); }
+            bool market = _marketLoads.Contains(owner);
+            try
+            {
+                string? revision = market
+                    ? await _marketCatalog!.ReadRevisionAsync(owner.PluginId, stop).ConfigureAwait(false)
+                    : await _catalog.ReadRevisionAsync(owner.PluginId, stop).ConfigureAwait(false);
+                revisions.Add(owner.PluginId, (market, revision, null));
+            }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
-            { revisions.Add(owner.PluginId, (null, error)); }
+            { revisions.Add(owner.PluginId, (market, null, error)); }
         }
         List<Exception> errors = [];
         try { await _application.StopLoadAsync(exactLoad, stop).ConfigureAwait(false); }
@@ -27,9 +34,16 @@ public sealed partial class PluginManagementController
             if (observed.Revision is null) continue;
             try
             {
-                if (!await _catalog.RemoveIfUnchangedAsync(retired.PluginId, observed.Revision, CancellationToken.None).ConfigureAwait(false)
-                    && await _catalog.ReadRevisionAsync(retired.PluginId, CancellationToken.None).ConfigureAwait(false) is not null)
-                    errors.Add(new IOException("plugin.disable.record-changed"));
+                bool removed = observed.Market
+                    ? await _marketCatalog!.RemoveIfUnchangedAsync(retired.PluginId, observed.Revision, CancellationToken.None).ConfigureAwait(false)
+                    : await _catalog.RemoveIfUnchangedAsync(retired.PluginId, observed.Revision, CancellationToken.None).ConfigureAwait(false);
+                if (!removed)
+                {
+                    string? current = observed.Market
+                        ? await _marketCatalog!.ReadRevisionAsync(retired.PluginId, CancellationToken.None).ConfigureAwait(false)
+                        : await _catalog.ReadRevisionAsync(retired.PluginId, CancellationToken.None).ConfigureAwait(false);
+                    if (current is not null) errors.Add(new IOException("plugin.disable.record-changed"));
+                }
             }
             catch (Exception error) { errors.Add(error); }
         }

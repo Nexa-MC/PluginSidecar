@@ -6,6 +6,7 @@ using PluginSidecar.RuntimeAdapter;
 if (args is ["--catalog-hold-lock", var catalogDirectory]) { await CatalogRevisionTests.HoldLock(catalogDirectory); return; }
 if (args is ["--key-protection-only"]) { await KeyProtectionTests.Run(); return; }
 if (args is ["--standalone-only"]) { await StandaloneRuntimeTests.Run(); return; }
+if (args is ["--market-device-only"]) { await MarketDeviceKeyTests.Run(); return; }
 if (args is ["--worker-only"]) { await WorkerPeerTests.Run(); return; }
 if (args is ["--process-only"]) { await StandaloneRuntimeTests.RunProcess(); return; }
 if (args is ["--remote-only"]) { await RemoteExecutionTests.Run(); return; }
@@ -15,6 +16,7 @@ static void Assert(bool value) { if (!value) throw new InvalidOperationException
 Assert(!AbiVersions.IsStable(0) && !AbiVersions.IsStable(101) && !AbiVersions.IsStable(150));
 Assert(AbiVersions.IsStable(100) && AbiVersions.IsStable(200));
 await MarketOfflineTests.Run();
+await MarketDeviceKeyTests.Run();
 await KeyProtectionTests.Run(); await ApplicationTests.Run();
 await ContextTests.Run();
 await SurfaceTests.Run();

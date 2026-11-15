@@ -14,6 +14,8 @@ internal static class ApplicationTests
         string path = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(sample))!, "desktop.zip");
         byte[] bytes = await File.ReadAllBytesAsync(path);
         await CatalogRevisionTests.Run(bytes);
+        await MarketCatalogTests.Run(bytes);
+        await MarketInstallationTests.Run(bytes);
         await ApprovedInstallationTests.Run(bytes);
         string root = Path.Combine(Path.GetTempPath(), "nexa-sidecar-application-" + Guid.NewGuid().ToString("N"));
         using var secrets = new KeyProtectionTests.FakeSecrets();

@@ -4,7 +4,7 @@
     <ProjectReference Include="../PluginSidecar.WasmRuntime/PluginSidecar.WasmRuntime.csproj" />
     <ProjectReference Include="../PluginSidecar.Business/PluginSidecar.Business.csproj" />
     <ProjectReference Include="../PluginSidecar.Presentation/PluginSidecar.Presentation.csproj" />
-    <PackageReference Include="Nexa.Sidecar.Transport" Version="[0.1.0-alpha.22]" />
+    <PackageReference Include="Nexa.Sidecar.Transport" Version="[0.1.0-alpha.23]" />
   </ItemGroup>
   <Target Name="EmbedWorkerNativeLibraries" BeforeTargets="AssignTargetPaths" DependsOnTargets="ResolvePackageAssets"
           Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != ''">

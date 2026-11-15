@@ -88,7 +88,7 @@ Market owns catalog, ownership, encrypted acquisition and issuing signed offline
 
 A successful acquisition persists ciphertext and a signed grant with a device-wrapped content key in one atomic cache file. Offline open has no network or login-session dependency. Perpetual ownership has no invented refresh TTL; a grant may carry the actual entitlement end time. Expiry is checked on load only. Running plugins are not periodically stopped. Offline revocation and adversarial local-clock rollback cannot be guaranteed without a trusted clock/online authority; local wall-clock checking is not DRM proof. Logout does not delete owned encrypted packages; Host must still select the authorized local subject.
 
-The current Market backend disables plugin artifact delivery and has no signed offline-grant endpoint. This change implements the cryptographic delivery/cache component and Market acquisition port, not a live endpoint or an installed launcher route. Existing ownership, account eligibility, artifact security and publisher checks must remain authoritative before grant issuance. No production keys are generated or deployed here.
+The Market backend now implements `POST /api/v1/store/items/:id/plugin-delivery`, explicit validated release mappings and signed device-bound grants. Production delivery remains disabled until migration 0043, a separate RSA signing key, and the matching trusted client public key are deployed together. The native client handoff and normal-mode installation are being integrated; the backend implementation alone is not an installed launcher flow. Ownership, account freshness, artifact security and publisher approval remain authoritative before grant issuance. No production keys are generated or deployed by this source change.
 
 ## 2026-11-11 preview revision: unified ABI context
 
@@ -964,3 +964,58 @@ from its exact pinned shared compiler package. Every private NXML compilation
 receives that immutable library explicitly; it does not read or replace the
 Host's `Ui` directory. The guest-provided documents still undergo the same
 capability, source-size, key-scoping and expanded-node validation.
+
+## Native peer service requests
+
+The execution peer admits native `QueryRequest` frames independently of command
+callbacks. Query contract IDs use the existing query registration namespace; they
+never fall through to the command dispatcher, even when numeric IDs overlap.
+Queries share activation, cancellation, concurrency and drain ownership with
+commands. Unsupported queries return a failed `QueryResult` with the original
+correlation. This adds no guest SDK operation or experimental ABI ID.
+
+## Market device identity custody
+
+PluginSidecar persists one RSA-3072 device identity under its own data directory.
+The PKCS#8 private key is encrypted with a fresh AES-256-GCM key, and that AES key
+is wrapped by `IPluginKeyProtector` (the production OS-backed implementation).
+Only the public SPKI is offered to Market. An exclusive file lease serializes
+creation across processes; atomic replacement is not used to overwrite an existing
+identity. Invalid records or unavailable OS protection fail closed rather than
+silently rotating a key and orphaning existing offline entitlements. Cancellation
+before persistence leaves no device record. Decrypted private-key buffers are
+cleared after import and callers own the returned RSA object's lifetime.
+
+## Approved Market installation records
+
+Market installations use a separate `PluginMarketCatalog`, not the developer
+package catalog. Each atomic record retains the original signed grant, signature,
+ciphertext, exact plugin/version/subject and locally approved permissions. The
+whole record is authenticated and encrypted by an OS-protected local AES key, so
+editing consent or swapping an entitlement cannot grant extra permissions.
+Opening a record rechecks the publisher signature, device/subject binding,
+entitlement time, ciphertext/plaintext hashes and package manifest before use.
+Revision-conditional save and deletion preserve newer concurrent records during
+rollback or disable. No Market connection or bearer token is needed to open an
+already approved record. Device and publisher RSA key lifetimes stay with the
+native composition; the catalog borrows its verifier and key protector.
+
+Market installation requires a ready, non-safe-mode native session, but does not
+require developer mode. Developer imports keep their existing stricter gate. The
+Market installer accepts only deliveries verified against its fixed publisher
+trust and local device key, with native-approved permissions; it cannot load an
+arbitrary plaintext developer package. Installation rollback is conditional on
+the exact record revision written by that attempt. Session retirement after
+activation stops the new load and restores the prior record when still current.
+
+The management controller is the sole installer for both origins. It tracks exact
+Market load identities, restores dependency-ordered records from both catalogs,
+and keeps Market loads when developer mode is turned off. Developer loads retire
+on that transition. Safe mode, readiness loss, session replacement and shutdown
+retire both origins. A policy-mode change cancels an in-progress management action
+before reconciliation. Market consent identifies the source explicitly; developer
+consent retains its unverified-package warning. Cross-origin replacement requires
+removing the existing installation first, preventing an older developer record
+from silently reappearing after a Market installation is disabled.
+
+The native peer catalog is pinned to NexaCL `42ad7a1a3c7279d1cbc093d765e87c98f3878fff` (shared packages `0.1.0-alpha.23`). Existing Host fingerprints and guest ABI 100 remain unchanged.
