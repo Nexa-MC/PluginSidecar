@@ -535,3 +535,66 @@ so the process owner must retire that session when disposing the publisher.
 that registers page and workspace shortcuts plus a duplicate gesture during
 initialization. Publisher tests exercise selection, real command results, empty
 inputs, immediate retirement, uncertain acknowledgements and cancellation.
+
+## Drawing pixels in the Sidecar
+
+`PluginDrawingRenderer` converts an application drawing snapshot into a PNG. It
+runs in the Sidecar and uses the application's blob reader to enforce load and
+resource ownership:
+
+```csharp
+var renderer = new PluginDrawingRenderer(application.CopyBlob);
+foreach (var drawing in application.Drawings())
+{
+    PluginRasterImage image = renderer.Render(drawing, cancellationToken);
+    // The native raster adapter must bind image to this drawing's exact view
+    // and scoped slot after checking that the view is still published.
+}
+```
+
+Construct the renderer once and reuse it. Each call has independent native state;
+clipping, transforms and decoded images do not carry over to the next drawing.
+The caller owns the returned encoded bytes. `Width` and `Height` describe the
+pixel buffer, rounded up from the logical surface dimensions. Preserve the
+original logical dimensions when placing the image in a view.
+
+Commands run in submission order against a transparent surface. Supported kinds
+are line, rectangle, ellipse, path, text, image, clip and affine transform. Line
+width is clamped to 0.1–128 pixels and font size to 1–128 pixels, matching the
+existing drawing behavior. Text uses the platform's default typeface when it contains usable glyphs. If
+the system default cannot be decoded, it selects an installed fallback; a system
+without any usable font reports an error instead of drawing blank text. Exact
+font pixels can differ between operating systems. Image commands decode the first
+frame and preserve alpha; they do not open paths or fetch URLs.
+
+The renderer rejects surfaces outside 1–2048 logical pixels per dimension, more
+than 1,024 commands, malformed command shapes and nonfinite or out-of-range
+coordinates. Images must decode successfully, fit within 4,096 pixels on each
+axis and contain at most 4,194,304 pixels. The per-call decoded-image cache has the
+same pixel budget: it evicts earlier images when necessary and can decode them
+again later. It therefore bounds memory without rejecting a valid sequence that
+uses several large images. Output is limited to 16 MiB of encoded PNG data.
+
+The blob callback must return a private byte array. The renderer clears that array
+on both success and failure, including cancellation, and disposes all decoded
+images at the end of the call. `application.CopyBlob` verifies the full reference
+and load owner; a released blob or stopped load is rejected on the next render.
+No decoded cache survives a call to bypass those checks. The publication owner
+must separately verify that a completed render still belongs to a live view
+before sending it to the Host.
+
+Cancellation is observed before allocation, between commands, after image decode
+and after PNG encoding. A native decode or encode already in progress finishes
+before cancellation is reported. Invalid input throws `InvalidDataException`;
+blob ownership failures retain the application's ABI error. Do not retry a stale
+resource under a different load identity.
+
+The presentation project includes SkiaSharp and its platform native assets. Keep
+the RID-specific `libSkiaSharp.so`, `libSkiaSharp.dylib` or `libSkiaSharp.dll` in the
+published output. `DrawingRendererChecks` exercises actual pixel output, bounded
+image-cache eviction, malformed images, cleared temporary data and resource
+retirement with a real Wasm load, in managed and NativeAOT test binaries.
+
+Native raster upload, scoped slot attachment, input callbacks and production
+Worker composition are not enabled by this renderer alone. The old Desktop
+renderer remains active until those paths have passed integration checks.

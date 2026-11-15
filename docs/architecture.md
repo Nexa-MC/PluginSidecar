@@ -813,3 +813,26 @@ set without replaying a guest action. Source recovery creates fresh view epochs;
 model-only updates retain token identity. Runtime disposal seals local admission;
 the process owner must retire the native session to remove all native bindings.
 This library integration precedes the production Worker composition change.
+
+## Rendering guest drawing commands in the Sidecar
+
+`PluginSidecar.Presentation` owns the interpretation and rasterization of guest
+`DrawCommand` values. Its renderer consumes a drawing snapshot and an owned-blob
+reader; it does not resolve a Host service, renderer backend or filesystem path.
+The output is a bounded PNG plus pixel dimensions. A later native presentation
+adapter will upload those pixels and bind them to the publisher's scoped document
+and slot. The Host must never receive guest drawing instructions or blob handles.
+
+Rendering preserves command order, clipping, affine transforms, transparency,
+paths, text and image placement. Surface dimensions, command shapes, coordinates
+and decoded image dimensions are checked before use. Image decoding must complete
+successfully; truncated images are rejected. Temporary blob copies are cleared on
+success and failure. A per-render decoded-image cache is bounded by four million
+pixels and is disposed with the render, including on cancellation. This bounds
+native memory without restricting the number of otherwise valid image commands.
+
+SkiaSharp is an intentional Sidecar dependency. Its Windows, macOS and Linux native
+assets must accompany the worker for the selected RID. Actual NativeAOT tests
+verify the renderer without loading Desktop, Avalonia or Host service assemblies.
+This renderer alone does not switch the deployed drawing owner; native raster
+transport, scoped input and production composition remain separate required steps.
