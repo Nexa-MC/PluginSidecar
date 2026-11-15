@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using System.Security.Cryptography;
 using Nexa.Plugin.Bootstrap.V1;
 using Nexa.Plugin.Hosting;
 using Nexa.Plugin.Sdk.Abi100.Data;
@@ -18,7 +19,8 @@ namespace PluginSidecar;
 /// <summary>One native session owns the application, all guest effects and all presentation.</summary>
 internal sealed class StandalonePluginRuntime(
     Func<SidecarBusinessClient, CancellationToken, ValueTask<HttpClient>>? network,
-    Action<string> report) : IPluginWorkerRuntime, IPluginWorkerBackground
+    Action<string> report, Func<PluginMarketTrust>? publisherTrust = null,
+    Func<PlatformPluginKeyProtector>? protection = null) : IPluginWorkerRuntime, IPluginWorkerBackground
 {
     private readonly CancellationTokenSource _stop = new();
     private readonly object _lifecycle = new();
@@ -37,12 +39,18 @@ internal sealed class StandalonePluginRuntime(
     private SidecarRasterHost? _rasters;
     private PlatformPluginKeyProtector? _keys;
     private PluginOfflineCatalog? _catalog;
+    private PluginMarketTrust? _marketTrust;
+    private RSA? _deviceKey;
+    private PluginMarketCatalog? _marketCatalog;
+    private PluginMarketService? _marketService;
     private bool _ready;
 
     public SidecarFeatures Features => SidecarFeatures.BinaryPayloads | SidecarFeatures.HostRequests
         | SidecarFeatures.LargeGeneratedDtos | SidecarFeatures.Nxml | SidecarFeatures.UiForms | SidecarFeatures.Health | SidecarFeatures.Unregistration;
     public IReadOnlyList<SidecarRegistrationItem> Registrations { get; } =
-    [Command(PluginViewCompiler.ActionCommand), Command(PluginPagePublisher.ManagementCommand), Command(PluginViewCompiler.DrawingInputCommand)];
+    [Command(PluginViewCompiler.ActionCommand), Command(PluginPagePublisher.ManagementCommand), Command(PluginViewCompiler.DrawingInputCommand),
+        new(SidecarRegistrationKind.Query, PluginMarketWire.Service, 0, SidecarWireCodecs.GeneratedDto)
+        { ResultCodecId = SidecarWireCodecs.GeneratedDto }];
     public Task Completion => _pump;
     private static SidecarRegistrationItem Command(string semantic) => new(SidecarRegistrationKind.Command,
         semantic, 0, SidecarWireCodecs.GeneratedDto)
@@ -112,8 +120,26 @@ internal sealed class StandalonePluginRuntime(
         }, PluginViewCompiler.ValidatePage, PluginViewCompiler.ValidateComponent);
         _business.BindApplication(_application);
         _business.Bind(_application.Runtime.Services);
-        _keys = new(); _catalog = new(storage + ".installed", _keys);
-        _management = new(_application, _catalog, Policy, interaction.PickAsync, interaction.ConfirmAsync);
+        _keys = protection?.Invoke() ?? new(); _catalog = new(storage + ".installed", _keys);
+        _marketTrust = publisherTrust?.Invoke() ?? PluginMarketTrust.Load();
+        if (_marketTrust.Available)
+        {
+            try
+            {
+                _deviceKey = await new PluginMarketDeviceKey(storage + ".device", _keys).OpenAsync(token).ConfigureAwait(false);
+                _marketCatalog = PluginMarketCatalog.CreateWithVerifier(storage + ".market", _keys,
+                    (delivery, id, version, subject) => _marketTrust.Open(_deviceKey, delivery, id, version, subject));
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            { report("plugin.market.device-unavailable"); _deviceKey?.Dispose(); _deviceKey = null; }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or CryptographicException
+                or System.ComponentModel.Win32Exception or PlatformNotSupportedException)
+            { report("plugin.market.device-unavailable"); _deviceKey?.Dispose(); _deviceKey = null; }
+        }
+        else report("plugin.market.publisher-not-configured");
+        _management = new(_application, _catalog, Policy, interaction.PickAsync, interaction.ConfirmAsync, marketCatalog: _marketCatalog);
+        if (_marketCatalog is not null)
+            _marketService = new(_deviceKey!.ExportSubjectPublicKeyInfo(), _management.InstallMarketAsync);
         _publisher = new(_application, views, new(() =>
         {
             var policy = Policy();
@@ -166,6 +192,13 @@ internal sealed class StandalonePluginRuntime(
         return [];
     }
 
+    public ValueTask<byte[]> QueryAsync(uint contract, SidecarBinaryValue input, CancellationToken token)
+    {
+        if (!Policy().CanLoadMarket || contract != 1 || _marketService is null)
+            throw new InvalidOperationException("plugin.market.service-unavailable");
+        return _marketService.InvokeAsync(input, token);
+    }
+
     public ValueTask DisposeAsync() { lock (_lifecycle) return new(_disposal ??= DisposeCoreAsync()); }
     private async Task DisposeCoreAsync()
     {
@@ -177,6 +210,7 @@ internal sealed class StandalonePluginRuntime(
         // Activation failure is reported by the peer, but all already-acquired resources still retire.
         if (_activation is not null) { try { await _activation.ConfigureAwait(false); } catch (Exception error) when (error is not OutOfMemoryException and not AccessViolationException) { } }
         await Drain(() => _pump).ConfigureAwait(false);
+        if (_marketService is not null) await Drain(() => _marketService.DisposeAsync().AsTask()).ConfigureAwait(false);
         if (_management is not null) await Drain(() => _management.DisposeAsync().AsTask()).ConfigureAwait(false);
         if (_publisher is not null) await Drain(() => _publisher.DisposeAsync().AsTask()).ConfigureAwait(false);
         if (_application is not null) await Drain(() => _application.DisposeAsync().AsTask()).ConfigureAwait(false);
@@ -185,6 +219,8 @@ internal sealed class StandalonePluginRuntime(
         if (_http is not null) await Drain(() => _http.DisposeAsync().AsTask()).ConfigureAwait(false);
         if (_rasters is not null) await Drain(() => _rasters.DisposeAsync().AsTask()).ConfigureAwait(false);
         await Drain(() => { _catalog?.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
+        await Drain(() => { _marketCatalog?.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
+        await Drain(() => { _deviceKey?.Dispose(); _marketTrust?.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
         await Drain(() => { _keys?.Dispose(); return Task.CompletedTask; }).ConfigureAwait(false);
         _active?.Dispose(); _stop.Dispose();
         if (failures.Count != 0) throw new AggregateException("Plugin session retirement failed.", failures);

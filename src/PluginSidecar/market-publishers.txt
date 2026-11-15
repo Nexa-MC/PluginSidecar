@@ -1,0 +1,4 @@
+# Reviewed RSA SubjectPublicKeyInfo, one canonical base64 DER public key per line.
+# Production delivery is disabled until its server signing key is provisioned and
+# the matching public pin is reviewed here. Never place a private key in this file.
+# Retain historical pins while their offline entitlements remain supported.

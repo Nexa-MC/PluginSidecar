@@ -1,6 +1,7 @@
 if (args is ["--catalog-hold-lock", var catalogDirectory]) { await CatalogRevisionTests.HoldLock(catalogDirectory); return; }
 if (args is ["--key-protection-only"]) { await KeyProtectionTests.Run(); return; }
 if (args is ["--standalone-only"]) { await StandaloneRuntimeTests.Run(); return; }
+if (args is ["--market-service-only"]) { MarketTrustTests.Run(); await MarketServiceTests.Run(); await MarketServiceInstallationTests.Run(); return; }
 if (args is ["--market-device-only"]) { await MarketDeviceKeyTests.Run(); return; }
 if (args is ["--worker-only"]) { await WorkerPeerTests.Run(); return; }
 if (args is ["--process-only"]) { await StandaloneRuntimeTests.RunProcess(); return; }
@@ -20,6 +21,7 @@ await ContentRuntimeTests.Run();
 await ResourceRuntimeTests.Run();
 await WasmWorkflowTests.Run();
 await WorkerPeerTests.Run();
+MarketTrustTests.Run(); await MarketServiceTests.Run(); await MarketServiceInstallationTests.Run();
 await StandaloneRuntimeTests.Run();
 await StandaloneRuntimeTests.RunProcess();
 await RemoteExecutionTests.Run();

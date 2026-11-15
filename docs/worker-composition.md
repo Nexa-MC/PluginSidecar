@@ -96,7 +96,7 @@ retirement remains bounded. Native Host tests separately establish the display,
 input and resource contracts. These checks do not establish deployed Market
 service compatibility, real OS key-store availability or signed release availability.
 
-## Market installation foundation
+## Market installation and offline restoration
 
 The native application now has separate, signed Market installation records and
 a normal-mode installer. The management controller accepts an optional Market
@@ -107,8 +107,26 @@ signature, entitlement and ciphertext and revalidate them on every open. These
 components have managed and Linux NativeAOT verification, including failed-update
 rollback when the previous entitlement has expired.
 
-The production composition still needs the authenticated Market service export,
-the configured publisher public-key pin and device/catalog initialization. The
-Market client must perform the encrypted acquisition and operation-status flow.
-The backend endpoint is implemented but not enabled in production. These native
-components do not publish SDK Beta or add an ABI 100 operation.
+The production composition exports the authenticated native Market query and
+initializes the device key and signed catalog when reviewed publisher pins exist.
+It owns transfer cancellation, consent, activation and offline restoration. Market
+owns authenticated HTTPS acquisition and progress; it never receives the device
+private key or sends its bearer token across the peer channel. The Host only
+routes generic native peer messages.
+
+Publisher SPKI pins are embedded from `src/PluginSidecar/market-publishers.txt`.
+An empty pin set disables Market acquisition without creating a device identity
+or preventing developer operations. An inaccessible OS key store disables Market
+for that session; an existing identity is never silently replaced. Old reviewed
+pins remain available for offline entitlements after signing-key rotation.
+
+Production deployment is not complete: the server signing secret, matching
+reviewed public pin, database migration and delivery feature flag must be deployed.
+See [Market deployment](market-deployment.md). Neither this native service nor its
+client adds a guest ABI 100 operation or publishes SDK Beta.
+
+The Market service, publisher rotation, real Wasm installation and normal-mode
+offline restart pass in both managed and Linux NativeAOT fixtures. The production
+composition fixture reconstructs the protected device identity and catalog in a
+new session without a Market peer, then disables the restored plugin. Separate
+process tests retain authentication, generic discovery and graceful shutdown.

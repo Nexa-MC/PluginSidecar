@@ -13,10 +13,18 @@ public sealed partial class PluginMarketCatalog : IDisposable
     private static readonly byte[] Magic = "NEXAMC01"u8.ToArray();
     private readonly string _directory;
     private readonly IPluginKeyProtector _protector;
-    private readonly OfflinePluginVerifier _verifier;
+    private readonly Func<EncryptedDelivery, string, string, string, byte[]> _verify;
     private readonly SemaphoreSlim _gate = new(1, 1);
     public PluginMarketCatalog(string directory, IPluginKeyProtector protector, OfflinePluginVerifier verifier)
-    { _directory = Path.GetFullPath(directory); _protector = protector ?? throw new ArgumentNullException(nameof(protector)); _verifier = verifier ?? throw new ArgumentNullException(nameof(verifier)); }
+            : this(directory, protector, (verifier ?? throw new ArgumentNullException(nameof(verifier))).Open) { }
+
+    /// <summary>Native composition may select among reviewed publisher pins. The callback must fully verify and decrypt the delivery.</summary>
+    private PluginMarketCatalog(string directory, IPluginKeyProtector protector,
+        Func<EncryptedDelivery, string, string, string, byte[]> verify)
+    { _directory = Path.GetFullPath(directory); _protector = protector ?? throw new ArgumentNullException(nameof(protector)); _verify = verify ?? throw new ArgumentNullException(nameof(verify)); }
+
+    public static PluginMarketCatalog CreateWithVerifier(string directory, IPluginKeyProtector protector,
+        Func<EncryptedDelivery, string, string, string, byte[]> verify) => new(directory, protector, verify);
 
     public ImmutableArray<string> Records()
     {
@@ -139,7 +147,7 @@ public sealed partial class PluginMarketCatalog : IDisposable
 
     public VerifiedPluginPackage OpenPackage(EncryptedDelivery delivery, string id, string version, string subject)
     {
-        byte[] bytes = _verifier.Open(delivery, id, version, subject);
+        byte[] bytes = _verify(delivery, id, version, subject);
         try { return VerifiedPluginPackage.Parse(bytes, id, version); }
         finally { CryptographicOperations.ZeroMemory(bytes); }
     }

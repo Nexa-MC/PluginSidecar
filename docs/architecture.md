@@ -1019,3 +1019,22 @@ removing the existing installation first, preventing an older developer record
 from silently reappearing after a Market installation is disabled.
 
 The native peer catalog is pinned to NexaCL `42ad7a1a3c7279d1cbc093d765e87c98f3878fff` (shared packages `0.1.0-alpha.23`). Existing Host fingerprints and guest ABI 100 remain unchanged.
+
+## Native Market transfer service
+
+`sidecar.service.plugins.market` is an explicitly exported native query, separate
+from guest ABI 100 and command IDs. Only Host-authenticated callers named
+`Nexa.Cloud.Market.Sidecar` may use it. Transfers are keyed by the caller activation
+and a client-chosen operation GUID. Begin returns only the device's public SPKI;
+Append accepts bounded sequential encrypted chunks. Finish starts one native
+consent/install task and returns immediately; Status reports the result. No bearer
+token or private key appears in this contract.
+
+The service admits at most two unfinished transfers, one installation and sixteen
+retained operation records. It caps a complete delivery at the existing v1 packet
+limit (25 MiB ciphertext plus bounded grant/signature/header). A timer expires
+operations after two minutes without activity; polling keeps a pending consent
+alive. Abort, expiry and shutdown cancel outside the registry lock and retain
+reservations until admitted work drains. Cancellation cannot undo an already
+committed installation, so the final observed outcome remains authoritative.
+A caller does not automatically replay an uncertain mutation.

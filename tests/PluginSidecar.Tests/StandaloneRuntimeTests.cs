@@ -27,8 +27,15 @@ internal static partial class StandaloneRuntimeTests
                 try
                 {
                     Check(runtime.Registrations.Select(item => item.SemanticId).SequenceEqual(new[]
-                    { PluginViewCompiler.ActionCommand, PluginPagePublisher.ManagementCommand, PluginViewCompiler.DrawingInputCommand }));
+                    { PluginViewCompiler.ActionCommand, PluginPagePublisher.ManagementCommand, PluginViewCompiler.DrawingInputCommand, PluginMarketWire.Service }));
                     await runtime.ActivateAsync(host.Requests, default);
+                    // An unprovisioned publisher never creates a device key or enables Market, while the Worker remains usable.
+                    using (var configured = PluginMarketTrust.Load())
+                        if (!configured.Available)
+                        {
+                            Check(!Directory.Exists(Path.Combine(sessionRoot, "plugins", "storage.device")));
+                            await Rejected(() => runtime.QueryAsync(1, MarketServiceTests.Envelope([], Guid.NewGuid()), default).AsTask());
+                        }
                     await Until(() => host.Button("加载开发包") is not null, runtime);
                     Check(networks == (nativeHttp ? 0 : 1) && host.Discoveries.Count == (nativeHttp ? 17 : 16));
                     Check(Directory.Exists(Path.Combine(sessionRoot, "plugins", "storage")));
@@ -51,6 +58,8 @@ internal static partial class StandaloneRuntimeTests
                 Check(http.Disposed == !nativeHttp && runtime.Completion.IsCompletedSuccessfully);
                 await Rejected(() => runtime.ExecuteAsync(2, Form("retired"), default).AsTask());
             }
+
+            await MarketComposition(root, package);
 
             // No admission or storage owner is created when native readiness is cancelled.
             using var waitingHost = new NativeHost(root, package) { Ready = false };
@@ -120,7 +129,7 @@ internal static partial class StandaloneRuntimeTests
         private readonly string _root, _package;
         private View[] _views = [];
         private long _revision;
-        internal bool Ready = true;
+        internal bool Ready = true, Developer = true, Remember;
         internal int Confirmations, Picks;
         internal readonly HashSet<uint> Discoveries = [];
         internal readonly TaskCompletionSource ContextRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -179,7 +188,7 @@ internal static partial class StandaloneRuntimeTests
                         case 340:
                             for (int i = 0; i < 3; i++) Check(reader.ReadInt32() == -1);
                             writer.Write(true); writer.Write(1L); writer.Write(1);
-                            writer.Write(true); Text("developer.enabled"); writer.Write(true); writer.Write(2); Text("true");
+                            writer.Write(true); Text("developer.enabled"); writer.Write(true); writer.Write(2); Text(Developer ? "true" : "false");
                             writer.Write(0); writer.Write(0); Text(null);
                             writer.Write(true); writer.Write(false); for (int i = 0; i < 4; i++) Text(null);
                             break;
@@ -215,7 +224,7 @@ internal static partial class StandaloneRuntimeTests
                             for (int i = 0; i < extensions; i++) _ = Bytes();
                             Picks++; writer.Write(true); Text(_package); break;
                         case 1536:
-                            _ = Bytes(); _ = Bytes(); Confirmations++; writer.Write(true); writer.Write(Confirmations != 2); break;
+                            _ = Bytes(); _ = Bytes(); Confirmations++; writer.Write(true); writer.Write(Confirmations != 2 || Remember); break;
                         default: throw new InvalidOperationException("Unexpected standalone Host operation: " + request.ContractId);
                     }
                 }
