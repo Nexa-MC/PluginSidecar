@@ -790,3 +790,26 @@ awaiting local cleanup, so a missing Host reply cannot strand disposal. Cleanup
 is invoked once. A five-second local drain limit bounds a broken runtime; failure
 is reported rather than acknowledged as successful retirement. Runtime cleanup
 must be cancellation-aware and must not rely on a live Host after shutdown.
+
+## Publishing scoped guest shortcuts
+
+The sole page publisher owns an optional shortcut port. After acknowledging its
+source/model set, it publishes gesture bindings to exact ordinary-page or owned
+workspace documents. Shortcut and command registration handles, the load identity,
+view scope and publication epoch contribute to an opaque callback token. The Host
+receives only its own document index, gesture, registered Sidecar command and
+token. It never parses UIShortcut or UICommand from the guest SDK.
+
+Action admission checks both live registrations again, even before the next
+publication tick. A shortcut invokes the ordinary asynchronous action pipeline
+with Empty inputs; supplied form fields are rejected. Dialog views never inherit
+ordinary-page shortcuts. Duplicate gestures in one document retain the first
+registration in definition-ID order, matching the existing selection policy.
+Removing a winning registration allows the next registration after synchronization.
+
+A lost shortcut-set reply seals shortcut tokens and preserves the acknowledged
+source revision. Explicit synchronization can re-establish the absolute binding
+set without replaying a guest action. Source recovery creates fresh view epochs;
+model-only updates retain token identity. Runtime disposal seals local admission;
+the process owner must retire the native session to remove all native bindings.
+This library integration precedes the production Worker composition change.

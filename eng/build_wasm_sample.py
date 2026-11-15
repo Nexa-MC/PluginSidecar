@@ -114,6 +114,20 @@ with zipfile.ZipFile(args.out/'modal.zip','w',compression=zipfile.ZIP_DEFLATED) 
         entry=zipfile.ZipInfo(name,date_time=(1980,1,1,0,0,0));entry.external_attr=0o100644<<16;archive.writestr(entry,data)
 print(args.out/'modal.zip')
 
+# Initialization-only registrations for shortcut scope and conflict tests.
+shortcuts = args.out / 'shortcuts.wasm'
+subprocess.run([*advanced_command[:-2], '-DNX_ADVANCED_SHORTCUTS', '-o', str(shortcuts)], check=True)
+shortcut_files = {'shortcuts.wasm': shortcuts.read_bytes(),
+    'page.nxml': (root / 'samples/WasmAdvancedUi/page.nxml').read_bytes(),
+    'component.nxml': (root / 'samples/WasmAdvancedUi/component.nxml').read_bytes()}
+shortcut_manifest = dict(manifest, webAssemblyEntryPath='shortcuts.wasm',
+    payloads=[{'path': name, 'size': len(data), 'sha256': hashlib.sha256(data).hexdigest()} for name,data in shortcut_files.items()])
+shortcut_files['plugin.json'] = json.dumps(shortcut_manifest, sort_keys=True, separators=(',', ':')).encode()
+with zipfile.ZipFile(args.out/'shortcuts.zip','w',compression=zipfile.ZIP_DEFLATED) as archive:
+    for name,data in shortcut_files.items():
+        archive.writestr(name,data)
+print(args.out/'shortcuts.zip')
+
 # Real Wasm page-replacement fixture, exercised through application ownership and publication.
 replacement = args.out / 'replacement.wasm'
 subprocess.run([args.clang, '--target=wasm32-unknown-unknown', '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',

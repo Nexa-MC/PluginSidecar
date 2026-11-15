@@ -61,8 +61,8 @@ whole-view replacement. When explicitly configured, it also publishes Sidecar
 management controls and isolated workspace extensions. The management controller
 and native interaction adapter now implement import, consent, offline restoration
 and disable. The same publisher now owns guest dialogs when supplied with the
-modal-control port. Production Worker composition, shortcuts and drawing remain
-to be completed. Production end-to-end verification is still
+modal-control port and publishes scoped shortcuts through the shortcut-control
+port. Production Worker composition and drawing remain to be completed. Production end-to-end verification is still
 required before removing the old Desktop controller or publishing SDK Beta.
 
 ## Owning publication
@@ -75,7 +75,8 @@ fragments when management is enabled. It validates the complete candidate agains
 before sending it. It composes active, same-load content contributions locally.
 Workspace composition is enabled with the management options described below;
 modal publication is enabled with the separate control port described below.
-Drawing and shortcut input remain separate migration work.
+Shortcut callbacks use the separate shortcut-control port described below.
+Drawing remains separate migration work.
 
 The publisher distinguishes source reconciliation from model updates. With
 `IPluginRetainedPresentationHost`, each ordinary page and workspace has its own
@@ -475,3 +476,62 @@ ordinary/modal form isolation, typed model updates, simultaneous windows,
 native-close races, lost open and mutation replies, malformed state, targeted
 contribution retirement, lifecycle events and cancellation during a state read.
 These tests do not claim that production Worker composition has switched owners.
+
+## Keyboard shortcuts
+
+Register `UICommand` and `UIShortcut` during the plugin's initialization stages.
+The SDK rejects runtime shortcut registration with `STAGE_DENIED`. A shortcut's
+scope must be a page owned by that load or the public workspace view
+`nexa:plugins/content`. Registration alone does not imply a mounted page or an
+available native shortcut service.
+
+The production presentation composition supplies one optional shortcut port to
+the same publisher that owns ordinary pages, workspace content and dialogs:
+
+```csharp
+var shortcuts = await SidecarShortcutHost.CreateAsync(requests, observer, token);
+await using var publisher = new PluginPagePublisher(application, presentation,
+    management, dialogs: dialogPort, shortcuts: shortcuts);
+await publisher.SynchronizeAsync(token);
+```
+
+The port requires the independently discovered ShortcutControl catalog from
+shared Host packages `0.1.0-alpha.20`. An unavailable catalog must be reported by
+the Worker composition; successful local SDK registration cannot stand in for
+native publication. The deployed Worker is still the remote-execution composition
+while the remaining migration is in progress.
+
+After acknowledging the document set, the publisher binds each shortcut to its
+own ordinary page or per-load workspace document. Modal copies of a page do not
+inherit its shortcuts. The native request contains a document index, platform
+gesture, the single registered Sidecar action command and an opaque token. Host
+indices may change after reconciliation; plugin IDs and registration handles stay
+local. Tokens include the load, page, publication epoch and both registration
+handles, and therefore cannot refer to a replacement load or re-registered action.
+
+The callback carries an empty form. The publisher rejects supplied form fields
+and calls `Actions.Invoke` with `Empty` inputs through the ordinary confirmation,
+permission and asynchronous operation pipeline. The action must accept that
+schema. A typed page model or text draft is not a shortcut input. Both the shortcut
+and command must still be registered when the callback arrives; removing either
+invalidates its token before another synchronization tick.
+
+For duplicate gestures within one document, the first shortcut in ordinal
+`DefinitionId` order wins. Matching ignores case and trims surrounding whitespace.
+After that registration is removed, synchronization can publish the next matching
+registration. The complete native set is limited to 64 bindings; an oversized set
+fails instead of silently omitting arbitrary shortcuts. The Host additionally
+checks visible-page scope, text focus and modal/onboarding state, and applies its
+own keyboard handlers first.
+
+Model-only updates retain tokens. Source replacement and uncertain source-update
+recovery create fresh publication epochs. A lost shortcut-set acknowledgement
+clears local shortcut admission while preserving the acknowledged document
+revision. Explicit synchronization can re-establish the absolute binding set; it
+never invokes or replays an action. Native bindings remain tied to the session,
+so the process owner must retire that session when disposing the publisher.
+
+`shortcuts.zip`, produced by `eng/build_wasm_sample.py`, is a real Wasm test guest
+that registers page and workspace shortcuts plus a duplicate gesture during
+initialization. Publisher tests exercise selection, real command results, empty
+inputs, immediate retirement, uncertain acknowledgements and cancellation.

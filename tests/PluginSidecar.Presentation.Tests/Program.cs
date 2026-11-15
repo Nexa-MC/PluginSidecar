@@ -91,6 +91,8 @@ internal static partial class PresentationTests
         await DialogHostPort();
         DialogCompilerChecks();
         await DialogPublisherChecks();
+        await ShortcutPublisherChecks();
+        await ShortcutHostChecks();
         await NotificationPort();
         await RealGuest();
         await RealGuest(retained: true);

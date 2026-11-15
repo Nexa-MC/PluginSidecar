@@ -27,10 +27,10 @@ public sealed partial class PluginPagePublisher : IAsyncDisposable
     private string _epoch = Guid.NewGuid().ToString("N");
     private int _closed;
 
-    public PluginPagePublisher(PluginApplication application, IPluginPresentationHost host, PluginManagementOptions? management = null, IPluginDialogHost? dialogs = null)
+    public PluginPagePublisher(PluginApplication application, IPluginPresentationHost host, PluginManagementOptions? management = null, IPluginDialogHost? dialogs = null, IPluginShortcutHost? shortcuts = null)
     {
         if (dialogs is not null && host is not IPluginRetainedPresentationHost) throw new ArgumentException("Modal publication requires retained presentation.", nameof(host));
-        _application = application; _host = host; _management = management; _lifetime = _stop.Token; _modalHost = dialogs;
+        _application = application; _host = host; _management = management; _lifetime = _stop.Token; _modalHost = dialogs; _shortcutHost = shortcuts;
     }
 
     /// <summary>Publish the current active guest views. Call again explicitly after an uncertain Host outcome.</summary>
@@ -43,6 +43,7 @@ public sealed partial class PluginPagePublisher : IAsyncDisposable
             await ObserveDialogsAsync(stop.Token).ConfigureAwait(false);
             await PublishAsync(stop.Token).ConfigureAwait(false);
             await OpenNewDialogsAsync(stop.Token).ConfigureAwait(false);
+            await SynchronizeShortcutsAsync(stop.Token).ConfigureAwait(false);
         }
         finally { _serial.Release(); }
     }
@@ -136,9 +137,12 @@ public sealed partial class PluginPagePublisher : IAsyncDisposable
         try
         {
             var form = SidecarUiForms.Decode(payload);
-            var view = _published.SingleOrDefault(candidate => candidate.OwnsAction(form.Argument));
-            if (view is null || !IsLive(view)) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
-            owner = view.Owner; request = view.TranslateAction(payload, owner);
+            if (!TryTranslateShortcut(form, out owner, out request))
+            {
+                var view = _published.SingleOrDefault(candidate => candidate.OwnsAction(form.Argument));
+                if (view is null || !IsLive(view)) throw new AbiHostException(AbiErrors.HANDLE_INVALID);
+                owner = view.Owner; request = view.TranslateAction(payload, owner);
+            }
         }
         finally { _serial.Release(); }
         var operation = Abi100Catalog.Operations.Single(operation => operation.Group == "Actions" && operation.Name == "Invoke");
@@ -249,7 +253,7 @@ public sealed partial class PluginPagePublisher : IAsyncDisposable
 
     private sealed record Candidate(PluginPreparedView[] Guests, PluginManagementView? Manager, IPluginHostView[] Documents);
     private void Install(Candidate value) { _published = value.Guests; _manager = value.Manager; _documents = value.Documents; }
-    private void ClearPublished() { _published = []; _documents = []; _manager = null; }
+    private void ClearPublished() { _published = []; _documents = []; _manager = null; _shortcutActions.Clear(); _shortcutBindings = null; }
 
     private void ReportVisible(IEnumerable<PluginPreparedView> views)
     {

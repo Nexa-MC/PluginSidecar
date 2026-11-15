@@ -38,6 +38,14 @@ NX_EXPORT("nexa_resume") nx_u64 nexa_resume(nx_u32 address,nx_u32 size) {
   } else if(step==7) {
    options.idempotency_key="shortcut";step=8;
    nx_UI_RegisterShortcut(&reply,nx_UIShortcut_write(&args,nx_literal("example.advanced:shortcut"),nx_literal("example.advanced:command"),nx_literal("Ctrl+Alt+P"),nx_literal("example.advanced:home")),&options);
+#ifdef NX_ADVANCED_SHORTCUTS
+  } else if(step==8) {
+   options.idempotency_key="workspace-shortcut";step=9;
+   nx_UI_RegisterShortcut(&reply,nx_UIShortcut_write(&args,nx_literal("example.advanced:workspace-shortcut"),nx_literal("example.advanced:command"),nx_literal("Ctrl+Alt+W"),nx_literal("nexa:plugins/content")),&options);
+  } else if(step==9) {
+   options.idempotency_key="winning-shortcut";step=10;
+   nx_UI_RegisterShortcut(&reply,nx_UIShortcut_write(&args,nx_literal("example.advanced:aaa-shortcut"),nx_literal("example.advanced:command"),nx_literal("ctrl+alt+p"),nx_literal("example.advanced:home")),&options);
+#endif
   } else {step=0;nx_complete(&reply,1);}
  } else if(nx_is_string(nx_field(message,"kind"),"handler")) {
   if(nx_handler_id(message)==2) {nx_handler_success(&reply,nx_Empty_write(&args).value);return nx_result(&reply);}
