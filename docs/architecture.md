@@ -836,3 +836,24 @@ assets must accompany the worker for the selected RID. Actual NativeAOT tests
 verify the renderer without loading Desktop, Avalonia or Host service assemblies.
 This renderer alone does not switch the deployed drawing owner; native raster
 transport, scoped input and production composition remain separate required steps.
+
+## Binding drawing surfaces to published views
+
+The sole page publisher also owns raster bindings. Compilation records the mapping
+from guest-local keys to scoped native keys. A drawing is eligible only when its
+owner is active and exactly one published ordinary page or exact-reference dialog
+contains the requested local slot. Workspace and management views are excluded.
+The native port receives an acknowledged document index, scoped key, logical size,
+encoded pixels and an opaque input token; no guest identity or drawing command is
+part of that payload.
+
+The input token binds the load, drawing surface, exact view scope, scoped slot and
+publication epoch. Each callback rechecks the published view and current drawing
+before forwarding the bounded event to the application. Source uncertainty seals
+input admission. Model-only changes preserve source identity; a new source epoch
+invalidates old tokens. A lost raster-set acknowledgement seals input tokens and
+requires explicit synchronization of the complete set, without replaying input.
+The renderer cache is per publisher and keeps only the current eligible surfaces.
+Disposal clears cached pixels and seals callbacks; session retirement remains the
+native owner's responsibility. Native upload and input transport are still a
+separate integration step.

@@ -26,23 +26,25 @@ public sealed class PluginPreparedView : IPluginHostView
     internal PluginPage? ReplacementDependency { get; set; }
     public SidecarNxmlDocument Document { get; }
     public IReadOnlyDictionary<string, string> Model { get; }
+    public IReadOnlyDictionary<string, string> ScopedKeys { get; }
 
     internal PluginPreparedView(PluginPage page, SidecarNxmlDocument document, Dictionary<string, string> model,
-        Dictionary<string, string> inputs, Dictionary<string, string> actions, Dictionary<string, string>? commands = null)
+        Dictionary<string, string> inputs, Dictionary<string, string> actions, Dictionary<string, string>? commands = null, Dictionary<string, string>? keys = null)
     {
         _page = page; Document = document;
         Model = new ReadOnlyDictionary<string, string>(model);
         _inputs = new ReadOnlyDictionary<string, string>(inputs);
         _actions = new ReadOnlyDictionary<string, string>(actions);
         _commands = new ReadOnlyDictionary<string, string>(commands ?? []);
+        ScopedKeys = new ReadOnlyDictionary<string, string>(keys ?? []);
     }
 
     internal PluginPreparedView AsWorkspace(SidecarNxmlDocument document, Dictionary<string, string> model, Dictionary<string, string> commands)
-        => new(_page, document, model, new(_inputs), new(_actions), commands)
+        => new(_page, document, model, new(_inputs), new(_actions), commands, new(ScopedKeys))
         { PublicationEpoch = PublicationEpoch, IsWorkspace = true, ContributionStamp = ContributionStamp, ReplacementDependency = ReplacementDependency };
 
     internal PluginPreparedView AsDialog(UIDialogRef reference, string publicationEpoch)
-        => new(_page, new(Document.Target, SidecarNxmlOperation.Dialog, Document.EntryPoint, Document.Files), new(Model), new(_inputs), new(_actions), new(_commands))
+        => new(_page, new(Document.Target, SidecarNxmlOperation.Dialog, Document.EntryPoint, Document.Files), new(Model), new(_inputs), new(_actions), new(_commands), new(ScopedKeys))
         { DialogReference = reference, PublicationEpoch = publicationEpoch, ContributionStamp = ContributionStamp, ReplacementDependency = ReplacementDependency };
 
     internal bool OwnsAction(string token) => _actions.ContainsKey(token) || _commands.ContainsKey(token);

@@ -27,10 +27,10 @@ public sealed partial class PluginPagePublisher : IAsyncDisposable
     private string _epoch = Guid.NewGuid().ToString("N");
     private int _closed;
 
-    public PluginPagePublisher(PluginApplication application, IPluginPresentationHost host, PluginManagementOptions? management = null, IPluginDialogHost? dialogs = null, IPluginShortcutHost? shortcuts = null)
+    public PluginPagePublisher(PluginApplication application, IPluginPresentationHost host, PluginManagementOptions? management = null, IPluginDialogHost? dialogs = null, IPluginShortcutHost? shortcuts = null, IPluginRasterHost? rasters = null)
     {
         if (dialogs is not null && host is not IPluginRetainedPresentationHost) throw new ArgumentException("Modal publication requires retained presentation.", nameof(host));
-        _application = application; _host = host; _management = management; _lifetime = _stop.Token; _modalHost = dialogs; _shortcutHost = shortcuts;
+        _application = application; _host = host; _management = management; _lifetime = _stop.Token; _modalHost = dialogs; _shortcutHost = shortcuts; _rasterHost = rasters; _drawingRenderer = new(application.CopyBlob);
     }
 
     /// <summary>Publish the current active guest views. Call again explicitly after an uncertain Host outcome.</summary>
@@ -44,6 +44,7 @@ public sealed partial class PluginPagePublisher : IAsyncDisposable
             await PublishAsync(stop.Token).ConfigureAwait(false);
             await OpenNewDialogsAsync(stop.Token).ConfigureAwait(false);
             await SynchronizeShortcutsAsync(stop.Token).ConfigureAwait(false);
+            await SynchronizeDrawingsAsync(stop.Token).ConfigureAwait(false);
         }
         finally { _serial.Release(); }
     }
@@ -253,7 +254,7 @@ public sealed partial class PluginPagePublisher : IAsyncDisposable
 
     private sealed record Candidate(PluginPreparedView[] Guests, PluginManagementView? Manager, IPluginHostView[] Documents);
     private void Install(Candidate value) { _published = value.Guests; _manager = value.Manager; _documents = value.Documents; }
-    private void ClearPublished() { _published = []; _documents = []; _manager = null; _shortcutActions.Clear(); _shortcutBindings = null; }
+    private void ClearPublished() { _published = []; _documents = []; _manager = null; _shortcutActions.Clear(); _shortcutBindings = null; _drawingInputs.Clear(); _rasterBindings = null; }
 
     private void ReportVisible(IEnumerable<PluginPreparedView> views)
     {
@@ -319,7 +320,7 @@ public sealed partial class PluginPagePublisher : IAsyncDisposable
         if (Interlocked.Exchange(ref _closed, 1) != 0) return;
         await _stop.CancelAsync().ConfigureAwait(false);
         await _serial.WaitAsync().ConfigureAwait(false);
-        try { ClearPublished(); _revision = null; ReportVisible([]); }
+        try { ClearPublished(); _renderedDrawings.Clear(); _revision = null; ReportVisible([]); }
         finally { _serial.Release(); }
         _stop.Dispose();
     }

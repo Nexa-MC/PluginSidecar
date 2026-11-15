@@ -598,3 +598,60 @@ retirement with a real Wasm load, in managed and NativeAOT test binaries.
 Native raster upload, scoped slot attachment, input callbacks and production
 Worker composition are not enabled by this renderer alone. The old Desktop
 renderer remains active until those paths have passed integration checks.
+
+## Publishing drawing surfaces and forwarding input
+
+Supply `IPluginRasterHost` as the publisher's `rasters` argument. The publisher
+synchronizes the complete raster set after acknowledging documents, models and
+modal state. A live drawing without this port reports `CAPABILITY_UNAVAILABLE`;
+it is not silently treated as a successfully displayed canvas.
+
+A surface named `example.plugin:canvas` resolves the local key `canvas` in the
+owner's published view. `PluginPreparedView.ScopedKeys` records the native key
+mapping. Ordinary surfaces use the load's view scope; modal surfaces require the
+exact dialog view scope. The publisher omits a surface if no eligible slot exists
+or more than one view matches. It never attaches a guest surface to management or
+workspace controls, or to another plugin's view.
+
+Each `PluginRasterBinding` contains the document index at the acknowledged
+revision, scoped slot key, logical dimensions, encoded image and input token.
+`ReplaceAsync` represents the entire desired set: an empty set clears all
+bindings. The native adapter must validate document ownership and the expected
+revision, bound uploads, and remove resources when the session or document
+retires. The publisher retains raster output while the drawing snapshot is
+unchanged. Updating the drawing revision generates fresh pixels; a model-only
+update retains both image and input identity when the source and slot survive.
+
+Register `PluginViewCompiler.DrawingInputCommand` as a separate generated-DTO
+callback and forward its payload to `ForwardDrawingInputAsync`. The payload uses
+the general `SidecarUiForms` envelope: the argument is the binding's opaque token,
+and the fields are exactly:
+
+| Field | Meaning and bounds |
+| --- | --- |
+| `kind` | Exact `Pointer`, `Key`, `Text` or `Focus` name; numeric enum values are rejected. |
+| `phase` | Native observation phase, at most 64 characters. |
+| `x`, `y` | Finite coordinates formatted with invariant culture. |
+| `text` | Observation text, at most 4,096 characters; use an empty value when absent. |
+
+These fields describe a native observation, not the surrounding page's draft
+inputs. The native owner must send only events from the visible, enabled owned
+surface and respect the current page and modal boundary. The publisher checks the
+live plugin, current published scope and existing surface before forwarding the
+event. Ordinary action callbacks cannot consume drawing tokens. Existing
+application subscriptions retain their permission, bounded queue and callback
+coalescing behavior.
+
+A lost raster-set reply disables local input admission until an explicit next
+synchronization establishes the complete set. It does not discard the acknowledged
+source revision or replay input. A lost source/model reply instead requires source
+recovery, which creates a new publication epoch and rejects old input tokens.
+Closing a dialog or stopping its plugin rejects input immediately, before the next
+synchronization. Disposal cancels an in-flight port call and drains the publisher's
+serialization gate.
+
+`DrawingPublisherChecks` tests these rules with a real Wasm application and an
+in-memory raster port, including native-reply loss and cancellation. This test
+establishes Sidecar policy and ownership. The chunked native raster adapter and
+Host-side visible-surface event routing still require their own integration tests
+before the production Worker can use this path.

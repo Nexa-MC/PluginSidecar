@@ -94,6 +94,7 @@ internal static partial class PresentationTests
         await ShortcutPublisherChecks();
         await ShortcutHostChecks();
         await DrawingRendererChecks();
+        await DrawingPublisherChecks();
         await NotificationPort();
         await RealGuest();
         await RealGuest(retained: true);

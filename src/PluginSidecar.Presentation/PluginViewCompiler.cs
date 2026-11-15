@@ -18,6 +18,7 @@ namespace PluginSidecar.Presentation;
 public static class PluginViewCompiler
 {
     public const string ActionCommand = "nexa.plugins.ui.action";
+    public const string DrawingInputCommand = "nexa.plugins.ui.drawing_input";
     private static readonly UTF8Encoding Utf8 = new(false, true);
     public static void ValidatePage(string source) => ValidateSource(source, "nxml-page");
     public static void ValidateComponent(string source) => ValidateSource(source, "nxml-dynamic");
@@ -65,10 +66,13 @@ public static class PluginViewCompiler
         string aliasPrefix = "nx_" + scope + ".";
         if (model.Keys.Any(key => key.StartsWith(aliasPrefix, StringComparison.Ordinal))) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         Dictionary<string, string> inputs = new(StringComparer.Ordinal), actions = new(StringComparer.Ordinal);
+        Dictionary<string, string> keys = new(StringComparer.Ordinal);
         CollectInputs(original.Root.Root);
         string ScopedKey(string key) => key == original.Root.Root.Key ? scope : "PluginKey_" + Hash(scope + "\0" + key);
         void CollectInputs(NxmlIrNode node)
         {
+            if (!string.IsNullOrEmpty(node.Key) && !keys.TryAdd(node.Key, ScopedKey(node.Key)))
+                throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
             if (node.Recipe == NxmlRuntimeRecipe.TextInput)
             {
                 if (string.IsNullOrWhiteSpace(node.Key) || node.Key.Length > 256 || node.Key.Any(char.IsControl)
@@ -128,7 +132,7 @@ public static class PluginViewCompiler
         if (compiled.Root.Root.Key != scope || compiled.Root.Root.Role != XsrUiSemanticRole.Page) throw new AbiHostException(AbiErrors.SCHEMA_INVALID);
         var document = new SidecarNxmlDocument("#" + scope, SidecarNxmlOperation.Page, "page.nxml", files);
         _ = SidecarNxmlDocument.Encode(document);
-        return new(logicalPage, document, model, inputs, actions) { PublicationEpoch = publicationEpoch };
+        return new(logicalPage, document, model, inputs, actions, keys: keys) { PublicationEpoch = publicationEpoch };
     }
 
     internal static Dictionary<string, string> ReadModel(AbiValue value)
