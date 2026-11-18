@@ -16,7 +16,7 @@ NATIVE = ('wasmtime.dll', 'libSkiaSharp.dll') if os.name == 'nt' else (
 
 def verify(image):
     with tempfile.TemporaryDirectory(prefix='nexa-worker-image-') as temporary:
-        root = Path(temporary)
+        root = Path(temporary).resolve()
         image_directory = root / 'image'
         image_directory.mkdir()
         worker = image_directory / 'Nexa.Plugin.Sidecar.nsc'
@@ -44,8 +44,10 @@ def verify(image):
         target.mkdir()
         (target / 'sentinel').write_bytes(b'preserve')
         link = scratch / (PREFIX + 'link')
+        link_created = False
         try:
             link.symlink_to(target, target_is_directory=True)
+            link_created = True
         except OSError as error:
             if os.name != 'nt' or getattr(error, 'winerror', None) != 1314:
                 raise
@@ -62,7 +64,8 @@ def verify(image):
         assert (unknown / 'user-data').read_bytes() == b'preserve'
         assert (invalid / NATIVE[0]).exists()
         assert (target / 'sentinel').read_bytes() == b'preserve'
-        if link.is_symlink():
+        if link_created:
+            assert link.is_symlink(), 'cleanup removed the reparse-point fixture'
             assert link.resolve() == target
 
         before = set(scratch.iterdir())
