@@ -9,9 +9,23 @@
   <ItemGroup><EmbeddedResource Include="market-publishers.txt" LogicalName="PluginSidecar.MarketPublishers" /></ItemGroup>
   <Target Name="EmbedWorkerNativeLibraries" BeforeTargets="AssignTargetPaths" DependsOnTargets="ResolvePackageAssets"
           Condition="'$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != ''">
-    <Error Condition="'@(NativeCopyLocalItems->Count())' != '2'" Text="The Worker requires exactly its reviewed Wasmtime and Skia native libraries." />
+    <PropertyGroup>
+      <_WorkerWasmtimeFile Condition="$(RuntimeIdentifier.StartsWith('win-'))">wasmtime.dll</_WorkerWasmtimeFile>
+      <_WorkerNativeExtension Condition="$(RuntimeIdentifier.StartsWith('win-'))">.dll</_WorkerNativeExtension>
+      <_WorkerNativeExtension Condition="$(RuntimeIdentifier.StartsWith('linux-'))">.so</_WorkerNativeExtension>
+      <_WorkerNativeExtension Condition="$(RuntimeIdentifier.StartsWith('osx-'))">.dylib</_WorkerNativeExtension>
+      <_WorkerWasmtimeFile Condition="'$(_WorkerWasmtimeFile)' == ''">libwasmtime$(_WorkerNativeExtension)</_WorkerWasmtimeFile>
+    </PropertyGroup>
     <ItemGroup>
-      <EmbeddedResource Include="@(NativeCopyLocalItems)" LogicalName="PluginSidecar.Native.%(Filename)%(Extension)" />
+      <_WorkerWasmtime Include="@(NativeCopyLocalItems)"
+                       Condition="'%(NativeCopyLocalItems.NuGetPackageId)' == 'Wasmtime' and '%(NativeCopyLocalItems.Filename)%(NativeCopyLocalItems.Extension)' == '$(_WorkerWasmtimeFile)'" />
+      <_WorkerSkia Include="@(NativeCopyLocalItems)"
+                   Condition="'%(NativeCopyLocalItems.Filename)%(NativeCopyLocalItems.Extension)' == 'libSkiaSharp$(_WorkerNativeExtension)'" />
+    </ItemGroup>
+    <Error Condition="'$(_WorkerNativeExtension)' == '' or '@(_WorkerWasmtime->Count())' != '1' or '@(_WorkerSkia->Count())' != '1'"
+           Text="The Worker requires one Wasmtime image and one Skia image for $(RuntimeIdentifier)." />
+    <ItemGroup>
+      <EmbeddedResource Include="@(_WorkerWasmtime);@(_WorkerSkia)" LogicalName="PluginSidecar.Native.%(Filename)%(Extension)" />
     </ItemGroup>
   </Target>
 </Project>

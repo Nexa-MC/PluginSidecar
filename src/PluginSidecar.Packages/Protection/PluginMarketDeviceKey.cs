@@ -95,7 +95,8 @@ public sealed class PluginMarketDeviceKey(string directory, IPluginKeyProtector 
         {
             token.ThrowIfCancellationRequested();
             try { return new(Path.Combine(_directory, ".market-device.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
-            catch (IOException error) when ((error.HResult & 0xffff) is 11 or 32 or 33)
+            catch (IOException error) when ((error.HResult & 0xffff) is 11 or 32 or 33
+                || (OperatingSystem.IsMacOS() && (error.HResult & 0xffff) == 35))
             {
                 if (Stopwatch.GetElapsedTime(started) >= TimeSpan.FromSeconds(5)) throw new IOException("plugin.device.busy", error);
                 await Task.Delay(25, token).ConfigureAwait(false);

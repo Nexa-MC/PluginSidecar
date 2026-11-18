@@ -97,7 +97,8 @@ public sealed partial class PluginMarketCatalog
                 return new FileStream(Path.Combine(_directory, ".market.lock"), FileMode.OpenOrCreate,
                     FileAccess.ReadWrite, FileShare.None, 1, FileOptions.None);
             }
-            catch (IOException error) when ((error.HResult & 0xffff) is 11 or 32 or 33)
+            catch (IOException error) when ((error.HResult & 0xffff) is 11 or 32 or 33
+                || (OperatingSystem.IsMacOS() && (error.HResult & 0xffff) == 35))
             {
                 if (Stopwatch.GetElapsedTime(started) >= TimeSpan.FromSeconds(5)) throw new IOException("plugin.market.busy", error);
                 await Task.Delay(25, token).ConfigureAwait(false);
